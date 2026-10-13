@@ -53,7 +53,7 @@ final class Stripe: NSObject {
     let dot = Dot()
     let connButton = NSButton(title: "…", target: nil, action: nil)
     let speed = label(165)
-    let ping = label(76)
+    let ping = NSButton(title: "ping —", target: nil, action: nil)
     let checked = label(190)
     let failover = label(130)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
@@ -65,6 +65,7 @@ final class Stripe: NSObject {
     var state: KeeperState?
     var settings: SettingsWindow?
     var here: String?
+    var pingHeld = Date.distantPast             // the answer of a pressed ping stays on the stripe until then
 
     override init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 30),
@@ -99,6 +100,15 @@ final class Stripe: NSObject {
         connButton.alignment = .left
         connButton.widthAnchor.constraint(equalToConstant: 130).isActive = true
         connButton.toolTip = "Switch the connection"
+        ping.isBordered = false
+        ping.target = self
+        ping.action = #selector(pingNow)
+        ping.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        ping.contentTintColor = Ink.text
+        ping.alignment = .left
+        ping.translatesAutoresizingMaskIntoConstraints = false
+        ping.widthAnchor.constraint(equalToConstant: 76).isActive = true
+        ping.toolTip = "Press: ping now and say on the stripe whether the internet is alive"
         gear.action = #selector(openSettings)
         gear.font = .systemFont(ofSize: 15)
         gear.toolTip = "Settings: the connections and their order"
@@ -154,9 +164,11 @@ final class Stripe: NSObject {
         let current = alive ? state?.current : here
         connButton.title = (current ?? "no network") + " ▾"
 
+        if Date() < pingHeld { return }            // a pressed ping's answer is being shown
+
         if let s = state, alive {
             let check = s.lastCheck
-            ping.stringValue = check?.latencyMs.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+            ping.title = check?.latencyMs.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
             if s.phase == "ok" || s.phase == "checking" {
                 checked.stringValue = "checked \(ago(check?.at)) \(check?.online == false ? "✗" : "✓")"
                 checked.textColor = check?.online == false ? Ink.red : Ink.text
@@ -169,7 +181,7 @@ final class Stripe: NSObject {
             dot.color = !s.healthy ? (check?.online == false ? Ink.red : Ink.amber) : (s.dryRun || cfg.dryRun ? Ink.amber : Ink.green)
             dot.toolTip = s.dryRun ? "keeper running in dry run: it only logs" : "keeper running, pid \(s.pid)"
         } else {
-            ping.stringValue = "ping —"
+            ping.title = "ping —"
             checked.stringValue = "keeper not running"
             checked.textColor = Ink.dim
             failover.stringValue = state?.lastFailover == nil ? "no failover" : "failover \(ago(state?.lastFailover))"
@@ -235,9 +247,46 @@ final class Stripe: NSObject {
             let p = Net.probe(pingHost: cfg.pingHost, httpURL: cfg.httpProbe)
             DispatchQueue.main.async {
                 switch p {
-                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.stringValue = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.title = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
                 case .captive: self.checked.stringValue = "captive portal ✗"
                 case .offline: self.checked.stringValue = "offline now ✗"
+                }
+            }
+        }
+    }
+
+    // THE PING BUTTON (Marko, 13.10.2026: "I want to press the ping and then it pings and tells me if my
+    // connection is alive or not ... exactly on the status line"). The stripe pings by itself, keeper or
+    // not, and the answer stands on the stripe for 20 s before the usual reading comes back.
+    @objc func pingNow() {
+        let cfg = Config.load()
+        pingHeld = Date().addingTimeInterval(60)
+        ping.title = "pinging…"
+        ping.contentTintColor = Ink.amber
+        checked.stringValue = "pinging \(cfg.pingHost)…"
+        checked.textColor = Ink.amber
+        dot.color = Ink.amber
+        DispatchQueue.global().async {
+            let p = Net.probe(pingHost: cfg.pingHost, httpURL: cfg.httpProbe)
+            DispatchQueue.main.async {
+                let at = Date().formatted(date: .omitted, time: .standard)
+                switch p {
+                case .online(_, let ms):
+                    self.ping.title = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+                    self.checked.stringValue = ms != nil ? "ALIVE ✓  \(at)" : "ALIVE ✓  web only (ping blocked)"
+                    self.ping.contentTintColor = Ink.green; self.checked.textColor = Ink.green; self.dot.color = Ink.green
+                case .captive:
+                    self.ping.title = "ping ✗"
+                    self.checked.stringValue = "NOT ALIVE ✗  captive portal  \(at)"
+                    self.ping.contentTintColor = Ink.red; self.checked.textColor = Ink.red; self.dot.color = Ink.red
+                case .offline:
+                    self.ping.title = "ping ✗"
+                    self.checked.stringValue = "NOT ALIVE ✗  no answer  \(at)"
+                    self.ping.contentTintColor = Ink.red; self.checked.textColor = Ink.red; self.dot.color = Ink.red
+                }
+                self.pingHeld = Date().addingTimeInterval(20)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 20.5) {
+                    if Date() >= self.pingHeld { self.ping.contentTintColor = Ink.text; self.refresh() }
                 }
             }
         }

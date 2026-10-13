@@ -1,7 +1,7 @@
 // Shared by the keeper (daemon) and the stripe (app): the version, the paths, the config, the state.
 import Foundation
 
-let CKVersion = 2
+let CKVersion = 3
 let CKReleaseURL = "https://github.com/markoboskoauroville/connection-keeper/releases/latest"
 let CKAgentLabel = "com.mantra.connectionkeeper"
 
