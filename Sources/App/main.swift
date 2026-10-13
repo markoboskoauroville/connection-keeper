@@ -1,0 +1,258 @@
+// Connection Keeper (Mantra): one floating stripe that shows the connection, its speed and the
+// keeper's last word, with a drop-down to switch by hand and a gear for the list of connections.
+import AppKit
+
+let appName = "Connection Keeper (Mantra)"
+
+// TRAIL-like ground: dark, colour only for state. Green on, amber holding / working, red down,
+// grey present but not available.
+enum Ink {
+    static let ground = NSColor(calibratedWhite: 0.08, alpha: 0.94)
+    static let text = NSColor(calibratedWhite: 0.88, alpha: 1)
+    static let dim = NSColor(calibratedWhite: 0.55, alpha: 1)
+    static let green = NSColor(calibratedRed: 0.30, green: 0.82, blue: 0.45, alpha: 1)
+    static let amber = NSColor(calibratedRed: 0.98, green: 0.72, blue: 0.20, alpha: 1)
+    static let red = NSColor(calibratedRed: 0.95, green: 0.33, blue: 0.30, alpha: 1)
+    static let grey = NSColor(calibratedWhite: 0.40, alpha: 1)
+}
+
+func label(_ width: CGFloat, align: NSTextAlignment = .left) -> NSTextField {
+    let l = NSTextField(labelWithString: "")
+    l.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+    l.textColor = Ink.text
+    l.alignment = align
+    l.lineBreakMode = .byTruncatingTail
+    l.translatesAutoresizingMaskIntoConstraints = false
+    l.widthAnchor.constraint(equalToConstant: width).isActive = true
+    return l
+}
+
+func rate(_ bytesPerSecond: Double) -> String {
+    let b = max(0, bytesPerSecond)
+    if b >= 1_000_000 { return String(format: "%.1f MB/s", b / 1_000_000) }
+    if b >= 1_000 { return String(format: "%.0f kB/s", b / 1_000) }
+    return String(format: "%.0f B/s", b)
+}
+
+func ago(_ d: Date?) -> String {
+    guard let d else { return "never" }
+    let s = Int(Date().timeIntervalSince(d))
+    if s < 60 { return "\(max(s, 0)) s ago" }
+    if s < 3600 { return "\(s / 60) min ago" }
+    if s < 86400 { return "\(s / 3600) h ago" }
+    return "\(s / 86400) d ago"
+}
+
+final class Dot: NSView {
+    var color = Ink.grey { didSet { needsDisplay = true } }
+    override func draw(_ r: NSRect) { color.setFill(); NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)).fill() }
+}
+
+final class Stripe: NSObject {
+    let panel: NSPanel
+    let dot = Dot()
+    let connButton = NSButton(title: "…", target: nil, action: nil)
+    let speed = label(165)
+    let ping = label(76)
+    let checked = label(190)
+    let failover = label(130)
+    let gear = NSButton(title: "⚙", target: nil, action: nil)
+
+    var iface: String?
+    var lastCounters: (rx: UInt32, tx: UInt32)?
+    var lastSample = Date()
+    var tick = 0
+    var state: KeeperState?
+    var settings: SettingsWindow?
+    var here: String?
+
+    override init() {
+        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 30),
+                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        super.init()
+        panel.level = .floating
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        panel.isMovableByWindowBackground = true
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = true
+        panel.hidesOnDeactivate = false
+
+        let root = NSView()
+        root.wantsLayer = true
+        root.layer?.backgroundColor = Ink.ground.cgColor
+        root.layer?.cornerRadius = 8
+        panel.contentView = root
+
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        dot.widthAnchor.constraint(equalToConstant: 12).isActive = true
+        dot.heightAnchor.constraint(equalToConstant: 12).isActive = true
+
+        for b in [connButton, gear] {
+            b.isBordered = false
+            b.target = self
+            b.font = .systemFont(ofSize: 12, weight: .semibold)
+            b.contentTintColor = Ink.text
+            b.translatesAutoresizingMaskIntoConstraints = false
+        }
+        connButton.action = #selector(showConnections)
+        connButton.alignment = .left
+        connButton.widthAnchor.constraint(equalToConstant: 130).isActive = true
+        connButton.toolTip = "Switch the connection"
+        gear.action = #selector(openSettings)
+        gear.font = .systemFont(ofSize: 15)
+        gear.toolTip = "Settings: the connections and their order"
+
+        let row = NSStackView(views: [dot, connButton, speed, ping, checked, failover, gear])
+        row.orientation = .horizontal
+        row.spacing = 10
+        row.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            row.centerYAnchor.constraint(equalTo: root.centerYAnchor),
+        ])
+        panel.setContentSize(NSSize(width: row.fittingSize.width, height: 30))
+
+        panel.setFrameAutosaveName("ConnectionKeeperStripe")
+        if !panel.setFrameUsingName("ConnectionKeeperStripe"), let screen = NSScreen.main {
+            let f = screen.visibleFrame
+            panel.setFrameOrigin(NSPoint(x: f.midX - panel.frame.width / 2, y: f.maxY - 40))
+        }
+        panel.orderFrontRegardless()
+
+        refresh()
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
+    }
+
+    func refresh() {
+        if tick % 5 == 0 {
+            let now = Net.defaultRouteInterface()
+            if now != iface { iface = now; lastCounters = nil }
+            if !(state?.isFresh ?? false) { here = currentNow() }
+        }
+        tick += 1
+
+        // Speed of the interface that carries the default route, sampled every second.
+        if let iface, let c = Traffic.counters(iface) {
+            let dt = Date().timeIntervalSince(lastSample)
+            if let last = lastCounters, dt > 0 {
+                let down = Double(c.rx &- last.rx) / dt, up = Double(c.tx &- last.tx) / dt
+                speed.stringValue = "↓ \(rate(down))   ↑ \(rate(up))"
+            }
+            lastCounters = c
+            lastSample = Date()
+        } else {
+            speed.stringValue = "↓ —   ↑ —"
+        }
+
+        state = KeeperState.load()
+        let alive = state?.isFresh ?? false
+        let cfg = Config.load()
+        let current = alive ? state?.current : here
+        connButton.title = (current ?? "no network") + " ▾"
+
+        if let s = state, alive {
+            let check = s.lastCheck
+            ping.stringValue = check?.latencyMs.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+            if s.phase == "ok" || s.phase == "checking" {
+                checked.stringValue = "checked \(ago(check?.at)) \(check?.online == false ? "✗" : "✓")"
+                checked.textColor = check?.online == false ? Ink.red : Ink.text
+            } else {
+                checked.stringValue = s.phase
+                checked.textColor = Ink.amber
+            }
+            failover.stringValue = s.lastFailover == nil ? "no failover" : "failover \(ago(s.lastFailover))"
+            failover.toolTip = s.lastFailover == nil ? nil : "\(s.lastFailoverFrom ?? "?") → \(s.lastFailoverTo ?? "?")"
+            dot.color = !s.healthy ? (check?.online == false ? Ink.red : Ink.amber) : (s.dryRun || cfg.dryRun ? Ink.amber : Ink.green)
+            dot.toolTip = s.dryRun ? "keeper running in dry run: it only logs" : "keeper running, pid \(s.pid)"
+        } else {
+            ping.stringValue = "ping —"
+            checked.stringValue = "keeper not running"
+            checked.textColor = Ink.dim
+            failover.stringValue = state?.lastFailover == nil ? "no failover" : "failover \(ago(state?.lastFailover))"
+            dot.color = Ink.grey
+            dot.toolTip = "the keeper (LaunchAgent \(CKAgentLabel)) is not running"
+        }
+    }
+
+    func currentNow() -> String? {
+        guard let i = iface else { return nil }
+        if i == Net.wifiInterface() { return Net.currentSSID(i) }
+        return i
+    }
+
+    @objc func showConnections() {
+        let menu = NSMenu()
+        let current = (state?.isFresh ?? false) ? state?.current : here
+        for c in Config.load().connections {
+            let item = NSMenuItem(title: "\(c.name)\(c.kind == "wifi" ? "" : "  (\(c.kind))")", action: #selector(pick(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = c.name
+            item.state = c.name == current ? .on : .off
+            item.isEnabled = c.enabled && c.kind == "wifi"
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        let check = NSMenuItem(title: "Check now", action: #selector(checkNow), keyEquivalent: "")
+        check.target = self
+        menu.addItem(check)
+        let log = NSMenuItem(title: "Open the log", action: #selector(openLog), keyEquivalent: "")
+        log.target = self
+        menu.addItem(log)
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "Quit the stripe", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        menu.addItem(quit)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: connButton.bounds.height + 4), in: connButton)
+    }
+
+    // With the keeper running, it does the switch (so it knows it was asked for); without it,
+    // the stripe joins the network itself.
+    @objc func pick(_ item: NSMenuItem) {
+        guard let name = item.representedObject as? String else { return }
+        if state?.isFresh ?? false {
+            KeeperCommand(action: "switch", target: name).send()
+            checked.stringValue = "switching to \(name)…"
+            checked.textColor = Ink.amber
+            return
+        }
+        if Config.load().dryRun { checked.stringValue = "dry run: would join \(name)"; return }
+        checked.stringValue = "joining \(name)…"
+        checked.textColor = Ink.amber
+        DispatchQueue.global().async {
+            let r = Net.join(name, Net.wifiInterface() ?? "en0")
+            DispatchQueue.main.async { self.checked.stringValue = r.ok ? "joined \(name)" : "join failed: \(r.detail)" }
+        }
+    }
+
+    @objc func checkNow() {
+        if state?.isFresh ?? false { KeeperCommand(action: "check").send(); return }
+        checked.stringValue = "checking…"
+        let cfg = Config.load()
+        DispatchQueue.global().async {
+            let p = Net.probe(pingHost: cfg.pingHost, httpURL: cfg.httpProbe)
+            DispatchQueue.main.async {
+                switch p {
+                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.stringValue = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+                case .captive: self.checked.stringValue = "captive portal ✗"
+                case .offline: self.checked.stringValue = "offline now ✗"
+                }
+            }
+        }
+    }
+
+    @objc func openLog() { NSWorkspace.shared.open(Paths.log) }
+
+    @objc func openSettings() {
+        if settings == nil { settings = SettingsWindow() }
+        settings?.show()
+    }
+}
+
+let app = NSApplication.shared
+app.setActivationPolicy(.accessory)
+let stripe = Stripe()
+if CommandLine.arguments.contains("--settings") { stripe.openSettings() }
+app.run()
