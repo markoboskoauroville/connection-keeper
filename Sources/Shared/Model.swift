@@ -1,7 +1,7 @@
 // Shared by the keeper (daemon) and the stripe (app): the version, the paths, the config, the state.
 import Foundation
 
-let CKVersion = 1
+let CKVersion = 2
 let CKReleaseURL = "https://github.com/markoboskoauroville/connection-keeper/releases/latest"
 let CKAgentLabel = "com.mantra.connectionkeeper"
 
@@ -12,6 +12,7 @@ enum Paths {
     static let state = support.appendingPathComponent("state.json")
     static let command = support.appendingPathComponent("command.json")
     static let lock = support.appendingPathComponent("keeper.lock")
+    static let speedLock = support.appendingPathComponent("speedtest.hold")
     static let log = home.appendingPathComponent("Library/Logs/connection-keeper.log")
 }
 

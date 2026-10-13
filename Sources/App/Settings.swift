@@ -10,9 +10,12 @@ final class SettingsWindow: NSObject {
     let interval = NSTextField(string: "")
     let dry = NSButton(checkboxWithTitle: "Dry run (the keeper only logs what it would do)", target: nil, action: nil)
     var cfg = Config.load()
+    let testAll = NSButton(title: "Speed test all", target: nil, action: nil)
+    let speedStatus = NSTextField(labelWithString: "")
+    var testing = false
 
     override init() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 360),
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400),
                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
         super.init()
         window.title = "\(appName): Settings"
@@ -43,7 +46,13 @@ final class SettingsWindow: NSObject {
         version.font = .systemFont(ofSize: 11)
         version.contentTintColor = .secondaryLabelColor
 
-        let stack = NSStackView(views: [title, rows, addPopup, intervalRow, dry, version])
+        testAll.target = self
+        testAll.action = #selector(speedAll)
+        speedStatus.textColor = .secondaryLabelColor
+        speedStatus.font = .systemFont(ofSize: 11)
+        let speedRow = NSStackView(views: [testAll, speedStatus])
+
+        let stack = NSStackView(views: [title, rows, speedRow, addPopup, intervalRow, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -79,7 +88,11 @@ final class SettingsWindow: NSObject {
             let up = small("▲", #selector(moveUp(_:)), i); up.isEnabled = i > 0
             let down = small("▼", #selector(moveDown(_:)), i); down.isEnabled = i < cfg.connections.count - 1
             let remove = small("✕", #selector(remove(_:)), i)
-            rows.addArrangedSubview(NSStackView(views: [on, kind, up, down, remove]))
+            let speed = small("Speed test", #selector(speedOne(_:)), i); speed.isEnabled = !testing && c.kind == "wifi"
+            let result = NSTextField(labelWithString: Speed.load()[c.name]?.line ?? "")
+            result.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            result.textColor = .secondaryLabelColor
+            rows.addArrangedSubview(NSStackView(views: [on, kind, up, down, remove, speed, result]))
         }
 
         addPopup.removeAllItems()
@@ -120,6 +133,36 @@ final class SettingsWindow: NSObject {
     }
 
     @objc func dryChanged() { cfg.dryRun = dry.state == .on; commit() }
+
+    // SPEED TEST: one connection, or every Wi-Fi in the list in order. Testing one that is not in use switches the Mac
+    // to it for about half a minute and back, so he is told first.
+    @objc func speedOne(_ b: NSButton) { runTests([cfg.connections[b.tag]]) }
+    @objc func speedAll() { runTests(cfg.connections.filter { $0.kind == "wifi" }) }
+
+    func runTests(_ list: [Connection]) {
+        guard !testing, !list.isEmpty else { return }
+        let here = Net.wifiInterface().flatMap { Net.currentSSID($0) }
+        let others = list.filter { $0.name != here }.map { $0.name }
+        if !others.isEmpty {
+            let a = NSAlert()
+            a.messageText = "Switch Wi-Fi to test?"
+            a.informativeText = "To measure \(others.joined(separator: ", ")) the Mac joins it for about half a minute, then goes back to \(here ?? "the network it is on"). The internet drops for a few seconds at each switch."
+            a.addButton(withTitle: "Test"); a.addButton(withTitle: "Cancel")
+            guard a.runModal() == .alertFirstButtonReturn else { return }
+        }
+        testing = true; testAll.isEnabled = false; rebuild()
+        DispatchQueue.global().async {
+            for c in list {
+                let r = Speed.test(c) { msg in DispatchQueue.main.async { self.speedStatus.stringValue = msg } }
+                Speed.save(r)
+                DispatchQueue.main.async { self.rebuild() }
+            }
+            DispatchQueue.main.async {
+                self.testing = false; self.testAll.isEnabled = true
+                self.speedStatus.stringValue = "done"; self.rebuild()
+            }
+        }
+    }
 
     @objc func openRelease() { NSWorkspace.shared.open(URL(string: CKReleaseURL)!) }
 }

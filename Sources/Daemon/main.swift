@@ -193,7 +193,9 @@ final class Keeper {
                 if cmd.action == "switch", let t = cmd.target { manualSwitch(t) }
                 if cmd.action == "check" { log("check asked from the stripe"); state.nextCheck = Date() }
             }
-            if let next = state.nextCheck, Date() >= next {
+            if Speed.held() {                       // a speed test is switching networks on purpose
+                if state.phase != "holding: a speed test runs" { setPhase("holding: a speed test runs", healthy: state.healthy); log("speed test running: checks held") }
+            } else if let next = state.nextCheck, Date() >= next {
                 checkAndHeal()
                 if once { log("--once: done"); return }
             }
