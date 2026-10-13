@@ -19,3 +19,9 @@ Every request from Marko, word for word, before any code. Each item has a Status
 > to the app which keeps connection, please add a speed test button in the settings so I can speed test every connection available there
 
 **Status:** built v2 13.10.2026: a Speed test button on every Wi-Fi row in Settings and Speed test all; macOS networkQuality bound to the Wi-Fi; another network is joined after a warning, measured and left again; the keeper holds its checks meanwhile. The result (↓ ↑ Mbit/s, ms, time) stays beside the row. Marko to try.
+
+## 13.10.2026, request 4 (v3)
+
+> please update the app for keeping my connection alive. There is a ping in the user interface. I want to press the ping and then it pings and tells me if my connection is alive or not. Exactly, there status line exactly on the status line
+
+**Status:** in progress.
