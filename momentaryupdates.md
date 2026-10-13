@@ -13,3 +13,9 @@ Every request from Marko, word for word, before any code. Each item has a Status
 > And this application has a controller as a Swift app. And this Swift app just looks like one stripe. It is kind of status line floating around, which shows the current connection and the traffic speed. And maybe some more of useful data you think are useful. Basically, it's a network monitor, connection monitor, and I can also manually switch to mantra or to Something. There will be drop-down menu from connections and these connections we can expand in the future. So there will be setting gear when I can choose connections.
 
 **Status:** v1 built 13.10.2026: the stripe (connection, speed, ping, last check, failover, drop-down, gear with the list) seen on screen; the manual switch not yet clicked.
+
+## 13.10.2026, request 3 (v2)
+
+> to the app which keeps connection, please add a speed test button in the settings so I can speed test every connection available there
+
+**Status:** saved; not started.
