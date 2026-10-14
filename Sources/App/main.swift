@@ -59,6 +59,8 @@ final class Stripe: NSObject {
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
     var failoverWidth: NSLayoutConstraint!
+    var checkedWidth: NSLayoutConstraint!
+    var noOther = false                         // the keeper says NO OTHER CONNECTION: the status is red
     var red = false                             // the failover alert is on: every word is red
 
     var iface: String?
@@ -123,6 +125,7 @@ final class Stripe: NSObject {
         ok.isHidden = true
         failover.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(acknowledge)))
         failoverWidth = failover.constraints.first { $0.firstAttribute == .width }
+        checkedWidth = checked.constraints.first { $0.firstAttribute == .width }
         gear.action = #selector(openSettings)
         gear.font = .systemFont(ofSize: 15)
         gear.toolTip = "Settings: the connections and their order"
@@ -245,7 +248,22 @@ final class Stripe: NSObject {
         if let s = state, alive {
             let check = s.lastCheck
             ping.title = check?.latencyMs.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
-            if s.phase == "ok" || s.phase == "checking" {
+            // NO OTHER CONNECTION (Marko, 14.10.2026): the connection is dead and none in the list works.
+            // Red and bold on the status line until a connection works again; he has to do something.
+            let none = s.phase.hasPrefix(noOtherPrefix)
+            if none != noOther {
+                noOther = none
+                checkedWidth.constant = none ? 520 : 190
+                checked.font = .monospacedDigitSystemFont(ofSize: 12, weight: none ? .bold : .regular)
+                if !none { checked.toolTip = nil }
+                if !red { connButton.contentTintColor = none ? Ink.red : Ink.text }
+                fit()
+            }
+            if none {
+                checked.stringValue = s.phase
+                checked.textColor = Ink.red
+                checked.toolTip = "The connection in use is dead and no other connection in the list works. The keeper keeps trying; check the access points."
+            } else if s.phase == "ok" || s.phase == "checking" {
                 checked.stringValue = "checked \(ago(check?.at)) \(check?.online == false ? "✗" : "✓")"
                 checked.textColor = check?.online == false ? Ink.red : Ink.text
             } else {
@@ -254,7 +272,7 @@ final class Stripe: NSObject {
             }
             failover.stringValue = s.lastFailover == nil ? "no failover" : "failover \(ago(s.lastFailover))"
             failover.toolTip = s.lastFailover == nil ? nil : "\(s.lastFailoverFrom ?? "?") → \(s.lastFailoverTo ?? "?")"
-            dot.color = !s.healthy ? (check?.online == false ? Ink.red : Ink.amber) : (s.dryRun || cfg.dryRun ? Ink.amber : Ink.green)
+            dot.color = none ? Ink.red : !s.healthy ? (check?.online == false ? Ink.red : Ink.amber) : (s.dryRun || cfg.dryRun ? Ink.amber : Ink.green)
             dot.toolTip = s.dryRun ? "keeper running in dry run: it only logs" : "keeper running, pid \(s.pid)"
         } else {
             ping.title = "ping —"
@@ -296,22 +314,54 @@ final class Stripe: NSObject {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: connButton.bounds.height + 4), in: connButton)
     }
 
-    // With the keeper running, it does the switch (so it knows it was asked for); without it,
-    // the stripe joins the network itself.
+    // THE MANUAL SWITCH (v5, Marko 14.10.2026: "I click on mantra, and then nothing is happening. It's not
+    // switching immediately."). The stripe joins at once itself, keeper or not, holds the keeper's checks
+    // meanwhile, and says on the status line what is happening and how it ended. A switch by hand never turns
+    // the stripe red. Joining goes the road in Join.swift (networksetup, the stored password, Control Centre).
     @objc func pick(_ item: NSMenuItem) {
         guard let name = item.representedObject as? String else { return }
-        if state?.isFresh ?? false {
-            KeeperCommand(action: "switch", target: name).send()
-            checked.stringValue = "switching to \(name)…"
-            checked.textColor = Ink.amber
-            return
-        }
-        if Config.load().dryRun { checked.stringValue = "dry run: would join \(name)"; return }
-        checked.stringValue = "joining \(name)…"
-        checked.textColor = Ink.amber
+        if Config.load().dryRun { show("dry run: would join \(name)", Ink.amber, for: 20); return }
+        let iface = Net.wifiInterface() ?? "en0"
+        show("switching to \(name)…", Ink.amber, for: 180)
+        dot.color = Ink.amber
+        appendLog("\(logStamp()) MANUAL switch to \"\(name)\" from the stripe: joining now")
+        Speed.hold(true)
         DispatchQueue.global().async {
-            let r = Net.join(name, Net.wifiInterface() ?? "en0")
-            DispatchQueue.main.async { self.checked.stringValue = r.ok ? "joined \(name)" : "join failed: \(r.detail)" }
+            let r = Join.wifi(name, iface) { msg in DispatchQueue.main.async { self.show(msg, Ink.amber, for: 180) } }
+            Speed.hold(false)
+            appendLog("\(logStamp()) MANUAL switch to \"\(name)\" " + (r.ok ? "done: \(r.detail)" : "FAILED: \(r.detail)"))
+            DispatchQueue.main.async {
+                let at = Date().formatted(date: .omitted, time: .shortened)
+                if r.ok {
+                    self.show("on \(name) ✓  \(at)", Ink.green, for: 20)
+                    self.dot.color = Ink.green
+                } else {
+                    let why = r.detail.contains("Could not find network") ? "not in range"
+                        : r.detail.contains("no password stored") ? "needs its password (⚙) or Accessibility"
+                        : "see the log"
+                    self.show("✗ \(name): \(why)  \(at)", Ink.red, for: 30, tip: r.detail)
+                    self.dot.color = Ink.red
+                }
+                if self.state?.isFresh ?? false { KeeperCommand(action: "check").send() }
+            }
+        }
+    }
+
+    // A message that stands on the status line for a while (the usual reading waits until then).
+    func show(_ text: String, _ color: NSColor, for seconds: Double, tip: String? = nil) {
+        pingHeld = Date().addingTimeInterval(seconds)
+        if !noOther { checkedWidth.constant = 380; fit() }
+        checked.stringValue = text
+        checked.textColor = color
+        checked.toolTip = tip
+        if seconds < 60 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.5) {
+                if Date() >= self.pingHeld {
+                    self.checked.toolTip = nil
+                    if !self.noOther { self.checkedWidth.constant = 190; self.fit() }
+                    self.refresh()
+                }
+            }
         }
     }
 

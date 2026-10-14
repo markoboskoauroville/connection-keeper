@@ -41,3 +41,14 @@ Try it without touching the network (the test alert stays until OK):
 ```
 "/Applications/Connection Keeper (Mantra).app/Contents/MacOS/connection-keeperd" --simulate-failover mantra Something
 ```
+
+## The switch that really switches, and NO OTHER CONNECTION (v5, 14.10.2026)
+
+Choosing a connection in the drop-down now starts the join at once: the status line says **switching to mantra…**,
+then **on mantra ✓ 10:39** in green, or in red why not (**✗ Something: not in range**). On macOS 15 a program may
+join a password-protected Wi-Fi only with its password, so each Wi-Fi gets its password once in ⚙ → **Password…**
+(kept in the login keychain), or the app gets the Accessibility permission and switches through Control Centre the
+way a hand does. When the connection in use is dead and no other one in the list works, the status line says in
+bold red **NO OTHER CONNECTION — mantra dead, Something not working**, until a connection works again.
+
+![NO OTHER CONNECTION](docs/v5-no-other-connection.png)

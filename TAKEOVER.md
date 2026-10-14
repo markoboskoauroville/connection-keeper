@@ -1,6 +1,6 @@
 # connection-keeper: takeover
 
-**Version v4** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `4-connection-keeper-v4.zip`, tag `v4`
+**Version v5** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `5-connection-keeper-v5.zip`, tag `v5`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
 ## What it is
@@ -32,6 +32,24 @@ the list and is skipped with a log line. A new kind (ethernet, USB, iPhone tethe
 order → Wi-Fi power off 5 s and on → each enabled Wi-Fi again → back off 60, 120, 240 s … up to the interval.
 Every step is logged; a change of network that brings the internet back is logged as `FAILOVER a -> b` and shown
 on the stripe. It does not switch back to the first network while the second works (no flapping).
+
+## Joining a Wi-Fi (v5)
+
+`Join.wifi` in `Sources/Shared/Join.swift` is the only way in, for the keeper's ladder, the drop-down and the speed
+test. In order: `networksetup -setairportnetwork` alone; then with the password from the login keychain (service
+`com.mantra.connectionkeeper.wifi`, account = SSID, set in Settings → Password…, readable by the app and the keeper
+without a prompt); then Control Centre's Wi-Fi list pressed through the accessibility API (identifiers
+`com.apple.menuextra.controlcenter`, `controlcenter-wifi`, `wifi-network-<SSID>`; only when `AXIsProcessTrusted()`).
+Each step is believed only when `ipconfig getsummary` names the SSID and the interface has an address. The detail
+string says which step worked or why each failed. In the keeper the join runs on a second thread so the heartbeat
+keeps beating.
+
+The drop-down joins from the stripe itself, at once, keeper or not, with the keeper's checks held
+(`speedtest.hold`); the keeper looks again as soon as a hold ends. It never raises the red alert.
+
+**NO OTHER CONNECTION:** when the ladder ends with nothing working, the keeper's phase begins with
+`NO OTHER CONNECTION` (`noOtherPrefix`) and the log says so; the stripe shows the phase bold red, wide, dot red, until
+`online()` sets the phase back to `ok`.
 
 ## The red alert (v4)
 
@@ -68,6 +86,7 @@ Settings shows the line in red above the list when it opens.
 |---|---|
 | `Sources/Shared/Model.swift` | version, paths, Config, KeeperState, KeeperCommand |
 | `Sources/Shared/Net.swift` | shell helper, SSID/route/preferred networks, join, power, probe, traffic counters |
+| `Sources/Shared/Join.swift` | v5: the join road (networksetup, stored password, Control Centre), the keychain item |
 | `Sources/Daemon/main.swift` | the keeper: drivers, the ladder, the loop, the lock |
 | `Sources/App/main.swift` | the stripe |
 | `Sources/App/Settings.swift` | the gear's window |
@@ -91,16 +110,20 @@ Test the ladder without touching the network:
 
 ## What has never been proven
 
+- **A join with a stored password and a join through Control Centre from the app have never run.** Marko has not
+  typed the passwords yet and the app has no Accessibility permission (14.10.2026). Proven: networksetup alone fails
+  on macOS 15 (live test, see LESSONS), a pressed Control Centre row switches at once (done by hand through
+  accessibility from the terminal, 10:06), the drop-down answers at once with the reason ("not in range"), the
+  NO OTHER CONNECTION line seen red with `--simulate-offline`.
+
 - **The red alert has never followed a real failover.** Verified 14.10.2026 by `--simulate-failover`: red stripe
   seen (docs/v4-red-after-failover.png), still red after quitting and reopening the stripe, OK pressed through
   accessibility cleared it and logged it, and a non-simulated alert from `mantra` while on mantra cleared itself.
   `raiseAlert` inside the keeper runs only after a real network change.
 
-- **No real failover has happened.** Joining `Something` by `networksetup` with its password from the keychain,
-  without a prompt, on macOS 15, has never been run. If macOS asks for an administrator or the password, the join
-  fails and the log says what networksetup said.
+- **No real failover has happened.** v1 to v4 could not have made one: networksetup without a password does not join
+  on macOS 15 (LESSONS).
 - The Wi-Fi power cycle has never been run.
-- The LaunchAgent has never been loaded; start at login and restart after a crash are untested.
-- The manual switch from the drop-down has never been clicked.
+- The LaunchAgent was loaded on 14.10.2026 and ran; start at login and restart after a crash are untested.
 - A captive portal has only been reasoned about, never met.
 - The stripe's speed was seen moving (5 kB/s → 198 kB/s) but not compared against another meter.

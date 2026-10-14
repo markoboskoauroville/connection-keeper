@@ -41,15 +41,19 @@ struct WifiDriver: Driver {
         guard let iface = c.interface ?? Net.wifiInterface() else { keeper.log("no Wi-Fi interface"); return false }
         if keeper.dryRun { keeper.log("WOULD join Wi-Fi \"\(c.name)\" on \(iface)"); return false }
         if !Net.wifiPowerOn(iface) { _ = Net.setWifiPower(iface, true); keeper.pause(5) }
-        let r = Net.join(c.name, iface)
-        if !r.ok { keeper.log("join \"\(c.name)\" refused: \(r.detail)") }
-        // Whatever networksetup said, believe only the SSID and an address.
-        for _ in 0..<15 {
-            keeper.pause(2)
-            if Net.currentSSID(iface) == c.name, Net.ipAddress(iface) != nil { return true }
+        // The join runs beside the loop so the heartbeat keeps beating (a join can take a minute).
+        var result: (ok: Bool, detail: String)?
+        let lock = NSLock()
+        DispatchQueue.global().async { let r = Join.wifi(c.name, iface); lock.lock(); result = r; lock.unlock() }
+        while true {
+            keeper.pause(1)
+            lock.lock(); let r = result; lock.unlock()
+            if let r {
+                if r.ok { keeper.log("joined \"\(c.name)\": \(r.detail)"); return true }
+                keeper.log("join \"\(c.name)\" failed: \(r.detail)")
+                return false
+            }
         }
-        keeper.log("\"\(c.name)\" did not come up within 30 s")
-        return false
     }
 }
 
@@ -209,8 +213,9 @@ final class Keeper {
         failures += 1
         let delay = min(60 * pow(2, Double(failures - 1)), Double(cfg.intervalSeconds))
         state.nextCheck = Date().addingTimeInterval(delay)
-        setPhase("offline: nothing works, next try in \(Int(delay)) s", healthy: false)
-        log("NO CONNECTION WORKS (round \(failures)); next try in \(Int(delay)) s")
+        let others = enabled.filter { !($0.kind == "wifi" && $0.name == here) }.map { $0.name }
+        setPhase("\(noOtherPrefix) — \(here ?? "the Wi-Fi") dead, \(others.isEmpty ? "none in the list" : others.joined(separator: ", ") + " not working") · next try \(Int(delay)) s", healthy: false)
+        log("NO OTHER CONNECTION: \(here ?? "no network") is dead and \(others.isEmpty ? "the list has no other" : others.joined(separator: ", ") + " did not work") (round \(failures)); next try in \(Int(delay)) s")
     }
 
     func manualSwitch(_ target: String) {
@@ -233,7 +238,10 @@ final class Keeper {
                 if cmd.action == "check" { log("check asked from the stripe"); state.nextCheck = Date() }
             }
             if Speed.held() {                       // a speed test is switching networks on purpose
-                if state.phase != "holding: a speed test runs" { setPhase("holding: a speed test runs", healthy: state.healthy); log("speed test running: checks held") }
+                if state.phase != "holding: a speed test runs" { setPhase("holding: a speed test runs", healthy: state.healthy); log("checks held (a speed test or a switch from the stripe is running)") }
+            } else if state.phase == "holding: a speed test runs" {
+                state.nextCheck = Date()            // the hold is over: look at once, not in 5 minutes
+                checkAndHeal()
             } else if let next = state.nextCheck, Date() >= next {
                 checkAndHeal()
                 if once { log("--once: done"); return }

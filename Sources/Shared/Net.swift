@@ -88,6 +88,11 @@ enum Net {
         return (r.status == 0 && said.isEmpty, said.isEmpty ? "status \(r.status)" : said)
     }
 
+    // A join that is believed only by the SSID and an address afterwards (see Join.swift for the road).
+    static func joinAndConfirm(_ ssid: String, _ iface: String) -> (ok: Bool, detail: String) {
+        Join.wifi(ssid, iface)
+    }
+
     static func setWifiPower(_ iface: String, _ on: Bool) -> Bool {
         shell("/usr/sbin/networksetup", ["-setairportpower", iface, on ? "on" : "off"]).status == 0
     }

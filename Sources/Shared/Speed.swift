@@ -73,18 +73,18 @@ enum Speed {
         hold(true); defer { hold(false) }
         if was != c.name {
             progress("joining \(c.name)…")
-            let j = Net.join(c.name, iface)
+            let j = Net.joinAndConfirm(c.name, iface)
             if !j.ok { return SpeedResult(name: c.name, at: Date(), error: "could not join: \(j.detail)") }
             var up = false
             for _ in 0..<15 { if Net.probe(pingHost: "1.1.1.1", httpURL: "http://captive.apple.com/hotspot-detect.html").isOnline { up = true; break }; sleep(2) }
             if !up {
-                if let was = was { progress("no internet on \(c.name), back to \(was)…"); _ = Net.join(was, iface) }
+                if let was = was { progress("no internet on \(c.name), back to \(was)…"); _ = Net.joinAndConfirm(was, iface) }
                 return SpeedResult(name: c.name, at: Date(), error: "joined, but no internet within 30 s")
             }
         }
         progress("measuring \(c.name) (about 15 s)…")
         let r = measure(c.name, iface: iface)
-        if let was = was, was != c.name { progress("back to \(was)…"); _ = Net.join(was, iface) }
+        if let was = was, was != c.name { progress("back to \(was)…"); _ = Net.joinAndConfirm(was, iface) }
         return r
     }
 }

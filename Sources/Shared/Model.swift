@@ -1,7 +1,10 @@
 // Shared by the keeper (daemon) and the stripe (app): the version, the paths, the config, the state.
 import Foundation
 
-let CKVersion = 4
+let CKVersion = 5
+
+// The phase the keeper writes when the current connection is dead and no other one works (v5).
+let noOtherPrefix = "NO OTHER CONNECTION"
 let CKReleaseURL = "https://github.com/markoboskoauroville/connection-keeper/releases/latest"
 let CKAgentLabel = "com.mantra.connectionkeeper"
 

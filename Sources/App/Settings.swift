@@ -2,6 +2,7 @@
 // Every change is written to ~/.config/connection-keeper.json at once; the keeper reads it on its
 // next round.
 import AppKit
+import Security
 
 final class SettingsWindow: NSObject {
     let window: NSWindow
@@ -102,7 +103,10 @@ final class SettingsWindow: NSObject {
             let result = NSTextField(labelWithString: Speed.load()[c.name]?.line ?? "")
             result.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
             result.textColor = .secondaryLabelColor
-            rows.addArrangedSubview(NSStackView(views: [on, kind, up, down, remove, speed, result]))
+            let pw = small(WifiPassword.has(c.name) ? "Password ✓" : "Password…", #selector(password(_:)), i)
+            pw.isEnabled = c.kind == "wifi"
+            pw.toolTip = "macOS 15 lets the keeper join a Wi-Fi only with its password (or through Control Centre with the Accessibility permission). Kept in your login keychain, nowhere else."
+            rows.addArrangedSubview(NSStackView(views: [on, kind, up, down, remove, pw, speed, result]))
         }
 
         addPopup.removeAllItems()
@@ -140,6 +144,29 @@ final class SettingsWindow: NSObject {
             cfg.intervalSeconds = max(30, Int(m * 60))
         }
         commit()
+    }
+
+    // The Wi-Fi password, once (v5): typed into a secure field, kept in the login keychain for this app and its
+    // keeper only. Empty and Save removes it.
+    @objc func password(_ b: NSButton) {
+        let name = cfg.connections[b.tag].name
+        let a = NSAlert()
+        a.messageText = "Password for \(name)"
+        a.informativeText = "So the keeper can switch to \(name) by itself. It stays in your login keychain; nobody sees it. Leave it empty and Save to remove it."
+        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        a.accessoryView = field
+        a.addButton(withTitle: "Save")
+        a.addButton(withTitle: "Cancel")
+        a.window.initialFirstResponder = field
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        if field.stringValue.isEmpty {
+            WifiPassword.remove(name)
+            appendLog("\(logStamp()) password for \"\(name)\" removed in Settings")
+        } else {
+            let st = WifiPassword.set(name, field.stringValue)
+            appendLog("\(logStamp()) password for \"\(name)\" " + (st == errSecSuccess ? "stored in the keychain" : "NOT stored (keychain error \(st))"))
+        }
+        rebuild()
     }
 
     @objc func dryChanged() { cfg.dryRun = dry.state == .on; commit() }

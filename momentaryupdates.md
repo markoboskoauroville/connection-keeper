@@ -38,4 +38,8 @@ Every request from Marko, word for word, before any code. Each item has a Status
 
 > please switch to Mantra connection and keep it live. I'm taking my phone. If one connection is dead and the app cannot find another connection, it needs to give me a warning. It needs to write on the status that no another connection, and then I know that I need to do something about it. I just try to switch to another connection. There is a name something of the Wi-Fi I click okay. There is mantra another connection. I click on mantra, and then nothing is happening. It's not switching immediately. That's very bad.
 
-**Status:** in work 14.10.2026.
+**Status:** built v5 14.10.2026. The live test found why the click on mantra did nothing: on macOS 15 networksetup
+cannot join a protected Wi-Fi without its password. v5: the drop-down switches at once from the stripe and says
+"switching to …" then "on mantra ✓" or the reason in red; joins go networksetup → the password typed once in ⚙ →
+Control Centre through accessibility; "NO OTHER CONNECTION — mantra dead, Something not working" in bold red when
+nothing works. Waiting for Marko: type both Wi-Fi passwords in ⚙ → Password…, or allow Accessibility for the app.
