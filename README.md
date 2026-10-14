@@ -97,3 +97,12 @@ it never moves. ⚙ → **Speed unit**: Auto in bits (bit/s → kbit/s → Mbit/
 follow it. Settings takes the size its content needs, 20 points from every edge.
 
 ![Settings, v9](docs/v9-settings.png)
+
+## Internet speed only, never the local network (v10, 14.10.2026)
+
+![the stripe during a 150 MB adb push to the phone, v10](docs/v10-stripe-during-adb-2.png)
+
+The speed on the stripe, now labelled **internet**, counts only what goes through the router to the internet: the
+kernel's byte counters of the default route (`nettop -m route`, "default -> en0 -> 192.168.1.1"), TCP and UDP. v1 to
+v9 counted everything on en0, so a transfer to the phone at 192.168.1.103 showed as internet speed. Measured during a
+150 MB adb push to the phone (3.6–3.9 MB/s on the local network): en0 3605–3924 kB/s out, the stripe 0–26 kB/s.

@@ -91,4 +91,4 @@ words (540 instead of 797 points in the normal state; docs/v7-stripe.png). Red a
 
 > Please check what connection keeper is doing. I think it's measuring my local network transfer. It should only show the speed of internet transfer, never local.
 
-**Status:** saved 14.10.2026, building v10.
+**Status:** built v10 14.10.2026. It was so: the stripe counted every byte on en0, the phone included. Now it shows **internet** only, the bytes of the default route through the router (TCP and UDP). During a 150 MB adb push to the phone at 3.6–3.9 MB/s, the stripe showed 0–26 kB/s up (docs/v10-stripe-during-adb-2.png).

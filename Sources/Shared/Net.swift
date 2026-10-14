@@ -158,4 +158,26 @@ struct Traffic {
         }
         return nil
     }
+
+    // INTERNET ONLY (v10, Marko 14.10.2026: "I think it's measuring my local network transfer. It should only show the
+    // speed of internet transfer, never local."). The interface counters above count everything on en0, the adb push
+    // to the phone on 192.168.1.103 included. The kernel also keeps byte counters per route; the default route
+    // ("default -> en0 -> 192.168.1.1") carries only what goes out through the router to the internet, TCP and UDP
+    // (measured: a 20 MB download +20.4 MB, 3 MB of UDP to 1.1.1.1 +3.08 MB, a 24 MB adb push to the phone +0).
+    // `nettop -m route` prints them; IPv4 and IPv6 default routes of the interface are summed.
+    static func internet(_ iface: String) -> (rx: UInt64, tx: UInt64)? {
+        let r = shell("/usr/bin/nettop", ["-x", "-n", "-L", "1", "-m", "route"], timeout: 5)
+        guard r.status == 0 else { return nil }
+        var rx: UInt64 = 0, tx: UInt64 = 0, found = false
+        for line in r.out.split(separator: "\n") {
+            let f = line.split(separator: ",", omittingEmptySubsequences: false)
+            guard f.count > 3 else { continue }
+            let route = f[1].split(separator: " ").map(String.init)      // ["default", "->", "en0", "->", "192.168.1.1"]
+            guard route.count >= 3, route[0] == "default", route[2] == iface else { continue }
+            rx &+= UInt64(f[2]) ?? 0
+            tx &+= UInt64(f[3]) ?? 0
+            found = true
+        }
+        return found ? (rx, tx) : nil
+    }
 }

@@ -63,7 +63,7 @@ func speedSample() -> String {
     let u = SpeedUnit.current
     let digits = (u == .autoBits || u == .autoBytes) ? 5 : 9
     let n = String(repeating: "8", count: digits) + " " + String(repeating: "M", count: u.unitWidth)
-    return "↓ \(n)  ↑ \(n)"
+    return "internet ↓ \(n)  ↑ \(n)"
 }
 
 func ago(_ d: Date?) -> String {
@@ -103,7 +103,8 @@ final class Stripe: NSObject {
     var red = false                             // the failover alert is on: every word is red
 
     var iface: String?
-    var lastCounters: (rx: UInt32, tx: UInt32)?
+    var lastCounters: (rx: UInt64, tx: UInt64)?
+    var sampling = false
     var lastSample = Date()
     var tick = 0
     var state: KeeperState?
@@ -164,6 +165,7 @@ final class Stripe: NSObject {
         ping.font = monoFont
         _ = fixWidth(ping, textWidth("ping 999 ms", monoFont))
         speedWidth = speed.constraints.first { $0.firstAttribute == .width }
+        speed.toolTip = "Internet only: the bytes through the router to the internet (the default route), per second. Traffic inside the local network (the phone, the router, other computers) is not counted."
         connWidth = fixWidth(connButton, connectionWidth())
         NotificationCenter.default.addObserver(forName: SpeedUnit.changed, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
@@ -381,17 +383,28 @@ final class Stripe: NSObject {
         }
         tick += 1
 
-        // Speed of the interface that carries the default route, sampled every second.
-        if let iface, let c = Traffic.counters(iface) {
-            let dt = Date().timeIntervalSince(lastSample)
-            if let last = lastCounters, dt > 0 {
-                let down = Double(c.rx &- last.rx) / dt, up = Double(c.tx &- last.tx) / dt
-                speed.stringValue = "↓ \(rate(down))  ↑ \(rate(up))"
+        // INTERNET speed only (v10): the bytes of the default route through the router, sampled every second off the
+        // main thread. Traffic inside the house (the phone, the router's page, AirPlay) is not counted.
+        if let iface, !sampling {
+            sampling = true
+            DispatchQueue.global().async {
+                let c = Traffic.internet(iface)
+                DispatchQueue.main.async {
+                    self.sampling = false
+                    guard let c else { self.speed.stringValue = "internet ↓     —        ↑     —"; self.lastCounters = nil; return }
+                    let dt = Date().timeIntervalSince(self.lastSample)
+                    if let last = self.lastCounters, dt > 0 {
+                        // a route made again (network change) starts its counters at 0: show nothing for that second
+                        let down = c.rx >= last.rx ? Double(c.rx - last.rx) / dt : 0
+                        let up = c.tx >= last.tx ? Double(c.tx - last.tx) / dt : 0
+                        self.speed.stringValue = "internet ↓ \(rate(down))  ↑ \(rate(up))"
+                    }
+                    self.lastCounters = c
+                    self.lastSample = Date()
+                }
             }
-            lastCounters = c
-            lastSample = Date()
-        } else {
-            speed.stringValue = "↓     —        ↑     —"
+        } else if iface == nil {
+            speed.stringValue = "internet ↓     —        ↑     —"
         }
 
         state = KeeperState.load()

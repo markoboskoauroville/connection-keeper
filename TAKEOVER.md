@@ -1,6 +1,6 @@
 # connection-keeper: takeover
 
-**Version v9** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `9-connection-keeper-v9.zip`, tag `v9`
+**Version v10** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `10-connection-keeper-v10.zip`, tag `v10`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
 ## What it is
@@ -70,6 +70,16 @@ Labels have a maximum width, not a fixed one (`label(max)`, hugging required); a
 `fit()` runs on every refresh and resizes the panel only when the fitting width changed, keeping the left edge.
 `keepOnScreen()` (at start and after every fit) moves the stripe to the top middle of the main screen when less than
 80 points of it are on any screen and logs it.
+
+## Internet speed only (v10)
+
+`Traffic.internet(iface)` (Net.swift) runs `nettop -x -n -L 1 -m route` (about 10 ms) once a second off the main thread
+and sums bytes_in / bytes_out of the routes whose destination is `default` on the interface of the default route
+(IPv4 and IPv6). Those counters carry only traffic to the internet, TCP and UDP; the local subnet has its own route
+("192.168.1/24 -> en0") and the router its host route, neither counted. Measured 14.10.2026: a 20 MB download +20.4 MB
+on the default route, 3 MB of UDP to 1.1.1.1 +3.08 MB, a 150 MB adb push to the phone (3.6–3.9 MB/s on en0) 0–26 kB/s
+on the default route (the rest of the Mac's internet). A route made again after a network change starts at 0: that
+second shows nothing. `Traffic.counters` (all of en0) is no longer used by the stripe.
 
 ## Fixed widths and the speed unit (v9)
 

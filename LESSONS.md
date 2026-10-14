@@ -44,7 +44,17 @@
   line is breathing"). Now the space is fixed per item and ⚙ is at the left end.
 - **Auto speed in bits by default**: Marko asked for "kilobits to megabits"; bytes are a choice in ⚙.
 
+- **Internet speed from the default route's counters, not the interface's** (v10, Marko: "It should only show the
+  speed of internet transfer, never local"). The interface counts the phone, the router's page and every LAN copy;
+  the kernel's per-route counters (`nettop -m route`) separate them exactly, UDP included. Subtracting the LAN route
+  from the interface was rejected: the interface counts headers the route does not (about 3 %), which would show a
+  local copy as phantom internet. The router's own WAN page was rejected for the stripe: a headless browser once a
+  second, and it measures the whole house, not this Mac.
+
 ## The traps
+
+- adb compresses: a pushed file of zeros (`mkfile`) went at "4005 MB/s" and moved nothing over the air; a test of the
+  network needs random bytes.
 
 - NSStackView's `fittingSize` leaves out the right edge inset when one arranged view (the connection rows with their
   speed test results) is wider than the rest: Settings cut the text at the right edge (Marko's screenshot,
