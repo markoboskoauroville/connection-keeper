@@ -80,3 +80,9 @@ words (540 instead of 797 points in the normal state; docs/v7-stripe.png). Red a
 > I want to speed up the process and also the user interface. It means connector keeper can ask the remaining megabytes only through a headless browser through the command in Python or any other command in C++. So it all works behind the scenes
 
 **Status (requests 9 to 12):** built v8 14.10.2026. The stripe shows "28.2 GB left · 13:00" (docs/v8-data-balance.png); a click or ⚙ → Check data runs `router-sms balance --json` behind the scenes (repo router-sms: a headless Firefox of its own sends STANJE to 13880 through the TP-Link and reads Telemach's reply). Two real checks, 12:58 and 13:00: 28837.12 MB left of 102400 MB, 13.6 s and 11.4 s from the click. Automatic check in ⚙, off by default (one SMS each).
+
+## 14.10.2026, request 13 (v9)
+
+> please update the connection keeper. Please see the latest screenshot on the desktop. What's going on here? In the settings, we have cutting text. It's too close to the edge. Also, I want to have in settings the unit of measurement of speed. Different options or automatic, depending on the speed you go from kilobits to megabits. We have megabytes, so any standard practices of measuring measurement, the standard units we need to have in the settings to change. Also, as the numbers are changing on the speed, the whole status line is breathing. So I'm trying to click on the settings icon and it's moving. You should solve this somehow. There should be maybe a fixed number of places for numbers, so the thing doesn't stretch over time
+
+**Status:** saved 14.10.2026, building v9.
