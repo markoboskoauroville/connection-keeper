@@ -43,3 +43,9 @@ cannot join a protected Wi-Fi without its password. v5: the drop-down switches a
 "switching to …" then "on mantra ✓" or the reason in red; joins go networksetup → the password typed once in ⚙ →
 Control Centre through accessibility; "NO OTHER CONNECTION — mantra dead, Something not working" in bold red when
 nothing works. Waiting for Marko: type both Wi-Fi passwords in ⚙ → Password…, or allow Accessibility for the app.
+
+## 14.10.2026, request 7 (v6)
+
+> for connectionkeeper, please keep it always on top, which can be changed in the settings. I want to do both option 1 and option 2. I want to do password there and also allow accessibility.
+
+**Status:** in work 14.10.2026. Marko enabled Accessibility for Connection Keeper the same day.
