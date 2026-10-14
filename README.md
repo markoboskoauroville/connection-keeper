@@ -25,3 +25,19 @@ Stop the keeper:
 ## Press the ping (v3, 13.10.2026)
 
 The "ping" on the stripe is a button. Press it and the stripe pings 1.1.1.1 itself (with the HTTP probe behind it), keeper running or not, and says the answer on the status line: **ALIVE ✓** and the time in green with the ping in ms, or **NOT ALIVE ✗** in red. The answer stays 20 seconds, then the usual reading returns.
+
+## Red after a failover (v4, 14.10.2026)
+
+When the keeper leaves a dead connection by itself (mantra stops answering, the keeper moves to Something), every
+word on the stripe turns red, so it is seen from across the room, and the failover field says which connection died
+and when: **mantra died 09:41 → on Something**. It stays red, through restarts of the stripe, the keeper or the Mac,
+until **OK** on the stripe is pressed (or the red words are clicked), or until the Mac is back on the connection that
+died. A switch made by hand from the drop-down never turns it red. Settings shows the same line in red at the top.
+
+![the stripe after a failover](docs/v4-red-after-failover.png)
+
+Try it without touching the network (the test alert stays until OK):
+
+```
+"/Applications/Connection Keeper (Mantra).app/Contents/MacOS/connection-keeperd" --simulate-failover mantra Something
+```

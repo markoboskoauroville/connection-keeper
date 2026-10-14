@@ -17,6 +17,14 @@
 - **Drivers per kind.** Marko: "it's going to in future find also wired connections". Only the driver is new for
   a new kind; the ladder and the list stay.
 
+- **The red alert is its own file, not a field of state.json** (v4). The keeper rebuilds its state at every start,
+  so a failover recorded there is forgotten by a restart; Marko must still see red when he comes back to the Mac.
+- **Only an automatic failover turns it red.** A switch from the drop-down is his own act and needs no warning;
+  the keeper's `manual` flag tells them apart. The speed test does not go through `attempt()`, so it never does.
+- **The first dead connection is the one remembered.** If mantra dies, then Something, the line still names
+  mantra: that is what he has to go and fix. Coming back to it, by the keeper or by hand, clears the red.
+- **All the words red, not a red dot.** The dot alone was not visible from across the room (Marko, 14.10.2026).
+
 ## The traps
 
 - `networksetup` exits 0 on failure and prints the reason; read the words, then check the SSID and the IP.

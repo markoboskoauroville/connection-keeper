@@ -13,6 +13,7 @@ final class SettingsWindow: NSObject {
     let testAll = NSButton(title: "Speed test all", target: nil, action: nil)
     let speedStatus = NSTextField(labelWithString: "")
     var testing = false
+    let alertLine = NSTextField(labelWithString: "")
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400),
@@ -52,7 +53,7 @@ final class SettingsWindow: NSObject {
         speedStatus.font = .systemFont(ofSize: 11)
         let speedRow = NSStackView(views: [testAll, speedStatus])
 
-        let stack = NSStackView(views: [title, rows, speedRow, addPopup, intervalRow, dry, version])
+        let stack = NSStackView(views: [alertLine, title, rows, speedRow, addPopup, intervalRow, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -69,6 +70,15 @@ final class SettingsWindow: NSObject {
 
     func show() {
         cfg = Config.load()
+        // The failover alert (v4) stands in red above the list, the same words as on the stripe.
+        if let a = FailoverAlert.load() {
+            alertLine.stringValue = "\(a.line). Check what is wrong with \(a.from); OK on the stripe clears it."
+            alertLine.textColor = NSColor(calibratedRed: 0.95, green: 0.33, blue: 0.30, alpha: 1)
+            alertLine.font = .systemFont(ofSize: 13, weight: .bold)
+            alertLine.isHidden = false
+        } else {
+            alertLine.isHidden = true
+        }
         rebuild()
         window.center()
         NSApp.activate(ignoringOtherApps: true)

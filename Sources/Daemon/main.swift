@@ -15,6 +15,21 @@ let dryRunFlag = args.contains("--dry-run") || simulateOffline
 let once = args.contains("--once")
 let fast = args.contains("--fast")
 
+// connection-keeperd --simulate-failover [FROM TO]
+//   writes the red alert as if FROM had died and the keeper had moved to TO, and exits. It touches no
+//   network; the alert is marked simulated, so it stays until OK is pressed on the stripe.
+if let i = CommandLine.arguments.firstIndex(of: "--simulate-failover") {
+    let rest = Array(CommandLine.arguments.dropFirst(i + 1).prefix(2))
+    let names = Config.load().connections.map { $0.name }
+    let from = rest.count == 2 ? rest[0] : (names.first ?? "mantra")
+    let to = rest.count == 2 ? rest[1] : (names.dropFirst().first ?? "Something")
+    let a = FailoverAlert(from: from, to: to, at: Date(), how: "simulated", simulated: true)
+    a.save()
+    appendLog("\(logStamp()) TEST: simulated failover alert written: \(a.line)")
+    print("written \(Paths.alert.path): \(a.line)")
+    exit(0)
+}
+
 // A driver knows how to bring one kind of connection up. v1 has Wi-Fi; a wired or tethered driver
 // is added here and in `drivers` without touching the ladder.
 protocol Driver {
@@ -45,6 +60,8 @@ final class Keeper {
     var state = KeeperState()
     var dryRun: Bool
     var failures = 0
+    var diedAt: Date?                       // when the current trouble began
+    var manual = false                      // a switch Marko asked for: no red alert
     lazy var wifiIface: String? = Net.wifiInterface()
 
     init() {
@@ -59,11 +76,7 @@ final class Keeper {
         print(line); fflush(stdout)
         state.recent.append(line)
         if state.recent.count > 30 { state.recent.removeFirst(state.recent.count - 30) }
-        if let h = try? FileHandle(forWritingTo: Paths.log) {
-            h.seekToEndOfFile(); h.write((line + "\n").data(using: .utf8)!); try? h.close()
-        } else {
-            try? (line + "\n").write(to: Paths.log, atomically: true, encoding: .utf8)
-        }
+        appendLog(line)
         saveState()
     }
 
@@ -111,10 +124,33 @@ final class Keeper {
         if before != state.current {
             state.lastFailover = Date(); state.lastFailoverFrom = before; state.lastFailoverTo = state.current
             log("FAILOVER \(before ?? "nothing") -> \(state.current ?? "?") (\(what))")
+            if !manual, let to = state.current { raiseAlert(from: before, to: to, how: what) }
         } else {
             log("back online on \(state.current ?? "?") after: \(what)")
         }
         return true
+    }
+
+    // The keeper left a dead connection by itself: the stripe turns red until Marko presses OK or the
+    // Mac is back on the connection that died. A second failover keeps the first dead one as `from`.
+    func raiseAlert(from: String?, to: String, how: String) {
+        if var a = FailoverAlert.load(), !a.simulated {
+            if a.from == to { FailoverAlert.clear(); log("ALERT cleared: back on \"\(to)\""); return }
+            a.to = to; a.how = how; a.save()
+            log("ALERT kept: \(a.line)")
+            return
+        }
+        let a = FailoverAlert(from: from ?? "nothing", to: to, at: diedAt ?? Date(), how: how)
+        a.save()
+        log("ALERT raised (the stripe is red): \(a.line)")
+    }
+
+    // Back on the connection that died, by whatever road: the red goes.
+    func clearAlertIfHome() {
+        guard let a = FailoverAlert.load(), !a.simulated, let here = state.current, here == a.from,
+              state.healthy else { return }
+        FailoverAlert.clear()
+        log("ALERT cleared: back on \"\(here)\"")
     }
 
     func bringUp(_ c: Connection) -> Bool {
@@ -126,6 +162,7 @@ final class Keeper {
         failures = 0
         if case .online(let how, let ms) = p {
             setPhase("ok", healthy: true)
+            clearAlertIfHome()
             log("online via \(state.current ?? "?") (\(how)\(ms.map { String(format: ", %.0f ms", $0) } ?? ""))")
         }
         state.nextCheck = Date().addingTimeInterval(Double(cfg.intervalSeconds))
@@ -136,6 +173,7 @@ final class Keeper {
         setPhase("checking", healthy: state.healthy)
         var p = probe(); record(p)
         if p.isOnline { online(p); return }
+        diedAt = Date()
         log("OFFLINE: \(state.lastCheck?.how ?? "?") on \(state.current ?? "no network")")
 
         for i in 1...2 {
@@ -178,6 +216,7 @@ final class Keeper {
     func manualSwitch(_ target: String) {
         guard let c = cfg.connections.first(where: { $0.name == target }) else { log("switch: \"\(target)\" is not in the list"); return }
         log("MANUAL switch to \"\(target)\" asked from the stripe")
+        manual = true; defer { manual = false }
         if bringUp(c) { online(probe()) } else { state.nextCheck = Date().addingTimeInterval(20) }
     }
 

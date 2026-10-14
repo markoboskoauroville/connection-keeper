@@ -1,7 +1,7 @@
 // Shared by the keeper (daemon) and the stripe (app): the version, the paths, the config, the state.
 import Foundation
 
-let CKVersion = 3
+let CKVersion = 4
 let CKReleaseURL = "https://github.com/markoboskoauroville/connection-keeper/releases/latest"
 let CKAgentLabel = "com.mantra.connectionkeeper"
 
@@ -13,6 +13,7 @@ enum Paths {
     static let command = support.appendingPathComponent("command.json")
     static let lock = support.appendingPathComponent("keeper.lock")
     static let speedLock = support.appendingPathComponent("speedtest.hold")
+    static let alert = support.appendingPathComponent("failover-alert.json")
     static let log = home.appendingPathComponent("Library/Logs/connection-keeper.log")
 }
 
@@ -111,6 +112,50 @@ struct KeeperState: Codable {
     }
 
     var isFresh: Bool { Date().timeIntervalSince(heartbeat) < 15 }
+}
+
+// THE RED ALERT (Marko, 14.10.2026: "If it switches connection during its running, please color all font
+// in red ... so I know that connection is changed from distance and I need to check what's wrong with my
+// first connection"). Written by the keeper when IT left a dead connection for another one (never for a
+// switch he made). Kept in its own file, so it survives a restart of the keeper, the stripe or the Mac.
+// It goes away when he presses OK on the stripe, or when the Mac is back on the connection that died.
+struct FailoverAlert: Codable {
+    var from: String          // the connection that died (the first one, if several failovers follow)
+    var to: String            // where the keeper is now
+    var at: Date              // when it died
+    var how: String           // the remedy that worked
+    var simulated = false     // a test: stays until OK, even on `from`
+
+    static func load() -> FailoverAlert? {
+        guard let data = try? Data(contentsOf: Paths.alert) else { return nil }
+        return try? jsonDecoder().decode(FailoverAlert.self, from: data)
+    }
+
+    func save() {
+        try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
+        if let data = try? jsonEncoder().encode(self) { try? data.write(to: Paths.alert, options: .atomic) }
+    }
+
+    static func clear() { try? FileManager.default.removeItem(at: Paths.alert) }
+
+    // "mantra died 09:41 → on Something"
+    var line: String {
+        let f = DateFormatter(); f.dateFormat = "HH:mm"
+        return "\(from) died \(f.string(from: at)) → on \(to)"
+    }
+}
+
+func logStamp() -> String {
+    ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withInternetDateTime])
+}
+
+// One line in the keeper's log, from either program.
+func appendLog(_ line: String) {
+    if let h = try? FileHandle(forWritingTo: Paths.log) {
+        h.seekToEndOfFile(); h.write((line + "\n").data(using: .utf8)!); try? h.close()
+    } else {
+        try? (line + "\n").write(to: Paths.log, atomically: true, encoding: .utf8)
+    }
 }
 
 // What the stripe asks of the keeper. The keeper reads it and deletes it.

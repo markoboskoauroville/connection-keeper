@@ -56,7 +56,10 @@ final class Stripe: NSObject {
     let ping = NSButton(title: "ping —", target: nil, action: nil)
     let checked = label(190)
     let failover = label(130)
+    let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
+    var failoverWidth: NSLayoutConstraint!
+    var red = false                             // the failover alert is on: every word is red
 
     var iface: String?
     var lastCounters: (rx: UInt32, tx: UInt32)?
@@ -109,11 +112,22 @@ final class Stripe: NSObject {
         ping.translatesAutoresizingMaskIntoConstraints = false
         ping.widthAnchor.constraint(equalToConstant: 76).isActive = true
         ping.toolTip = "Press: ping now and say on the stripe whether the internet is alive"
+        // OK: Marko has seen that the first connection died. A click on the red failover words does the same.
+        ok.bezelStyle = .rounded
+        ok.controlSize = .small
+        ok.font = .systemFont(ofSize: 11, weight: .bold)
+        ok.target = self
+        ok.action = #selector(acknowledge)
+        ok.toolTip = "I have seen it: back to the normal colours"
+        ok.translatesAutoresizingMaskIntoConstraints = false
+        ok.isHidden = true
+        failover.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(acknowledge)))
+        failoverWidth = failover.constraints.first { $0.firstAttribute == .width }
         gear.action = #selector(openSettings)
         gear.font = .systemFont(ofSize: 15)
         gear.toolTip = "Settings: the connections and their order"
 
-        let row = NSStackView(views: [dot, connButton, speed, ping, checked, failover, gear])
+        let row = NSStackView(views: [dot, connButton, speed, ping, checked, failover, ok, gear])
         row.orientation = .horizontal
         row.spacing = 10
         row.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
@@ -138,6 +152,68 @@ final class Stripe: NSObject {
     }
 
     func refresh() {
+        reading()
+        applyAlert()
+    }
+
+    // THE RED (Marko, 14.10.2026): after the keeper failed over by itself, every word on the stripe is red
+    // and the failover field says which connection died and when, until OK or until the Mac is back on it.
+    func applyAlert() {
+        var alert = FailoverAlert.load()
+        if let a = alert, !a.simulated {
+            let alive = state?.isFresh ?? false
+            let current = alive ? state?.current : here
+            if current == a.from, !alive || (state?.healthy ?? false) {
+                FailoverAlert.clear(); alert = nil
+                appendLog("\(logStamp()) ALERT cleared by the stripe: back on \"\(a.from)\"")
+            }
+        }
+        guard let a = alert else {
+            if red {
+                red = false
+                for b in [connButton, gear] { b.contentTintColor = Ink.text }
+                if Date() >= pingHeld { ping.contentTintColor = Ink.text }
+                speed.textColor = Ink.text; failover.textColor = Ink.text; failover.font = speed.font
+                ok.isHidden = true
+                failoverWidth.constant = 130
+                fit()
+                reading()
+            }
+            return
+        }
+        if !red {
+            red = true
+            ok.isHidden = false
+            failoverWidth.constant = 260
+            fit()
+        }
+        for b in [connButton, ping, gear] { b.contentTintColor = Ink.red }
+        for l in [speed, checked, failover] { l.textColor = Ink.red }
+        failover.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
+        failover.stringValue = a.line
+        failover.toolTip = "\(a.from) stopped answering at \(a.at.formatted(date: .abbreviated, time: .shortened)); " +
+            "the keeper moved to \(a.to) (\(a.how)). Check what is wrong with \(a.from). Press OK when you have seen it." +
+            (a.simulated ? "  [test]" : "")
+        dot.color = Ink.red
+    }
+
+    @objc func acknowledge() {
+        guard let a = FailoverAlert.load() else { return }
+        FailoverAlert.clear()
+        appendLog("\(logStamp()) ALERT acknowledged on the stripe (OK): \(a.line)")
+        applyAlert()
+    }
+
+    // The stripe keeps its left edge and takes the width its words need.
+    func fit() {
+        guard let row = panel.contentView?.subviews.first else { return }
+        row.layoutSubtreeIfNeeded()
+        let origin = panel.frame.origin
+        panel.setContentSize(NSSize(width: row.fittingSize.width, height: 30))
+        panel.setFrameOrigin(origin)
+    }
+
+    func reading() {
         if tick % 5 == 0 {
             let now = Net.defaultRouteInterface()
             if now != iface { iface = now; lastCounters = nil }
@@ -266,6 +342,7 @@ final class Stripe: NSObject {
         checked.stringValue = "pinging \(cfg.pingHost)…"
         checked.textColor = Ink.amber
         dot.color = Ink.amber
+        applyAlert()
         DispatchQueue.global().async {
             let p = Net.probe(pingHost: cfg.pingHost, httpURL: cfg.httpProbe)
             DispatchQueue.main.async {
@@ -285,6 +362,7 @@ final class Stripe: NSObject {
                     self.ping.contentTintColor = Ink.red; self.checked.textColor = Ink.red; self.dot.color = Ink.red
                 }
                 self.pingHeld = Date().addingTimeInterval(20)
+                self.applyAlert()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 20.5) {
                     if Date() >= self.pingHeld { self.ping.contentTintColor = Ink.text; self.refresh() }
                 }

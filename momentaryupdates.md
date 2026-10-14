@@ -30,4 +30,4 @@ Every request from Marko, word for word, before any code. Each item has a Status
 
 > is in a connection keeper. If it switches connection during its running, please color all font in red. For example, we are now working on my connection called Mantra, and then after 5 min with ping you see wow no connection. He died. His sim card is over. Then you connect to another Wi-Fi which is called something. Then you need to change the color so I know that connection is changed from distance and I need to check what's wrong with my first connection
 
-**Status:** in progress 14.10.2026.
+**Status:** built v4 14.10.2026: after a failover the keeper made by itself, every word on the stripe is red and the failover field says "mantra died 09:41 → on Something" with an OK button; it stays red across restarts until OK (or a click on the red words) or until the Mac is back on the connection that died. A switch by hand never turns it red. Verified with `connection-keeperd --simulate-failover`: red seen on screen, red again after reopening the stripe, OK pressed through accessibility returned the normal colours. A real failover has not happened yet.
