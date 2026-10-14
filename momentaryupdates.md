@@ -70,4 +70,8 @@ words (540 instead of 797 points in the normal state; docs/v7-stripe.png). Red a
 
 > now build the script right inside the connectionkeeper so I don't need AI or anything. It's a fixed script to open the Firefox control, it remotely sends SMS, reads SMS, and writes the data. Write in the status of megabytes for the time we asked
 
-**Status:** saved 14.10.2026, building v8.
+## 14.10.2026, request 11 (v8, change of design)
+
+> can we build a server headless browser for exactly this function? To use this device to connect with SMS and actually send any SMS using the device and read the response. But right now we're just using it for the status of the megabytes in the card itself
+
+**Status:** saved 14.10.2026, building v8: a separate headless server (repo router-sms) does the SMS; the stripe asks it for the balance.
