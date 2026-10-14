@@ -16,6 +16,9 @@ final class SettingsWindow: NSObject {
     let speedStatus = NSTextField(labelWithString: "")
     var testing = false
     let alertLine = NSTextField(labelWithString: "")
+    let dataLine = NSTextField(labelWithString: "")
+    let dataAuto = NSButton(checkboxWithTitle: "Check the data balance by itself every", target: nil, action: nil)
+    let dataHours = NSTextField(string: "")
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400),
@@ -57,7 +60,21 @@ final class SettingsWindow: NSObject {
         speedStatus.font = .systemFont(ofSize: 11)
         let speedRow = NSStackView(views: [testAll, speedStatus])
 
-        let stack = NSStackView(views: [alertLine, title, rows, speedRow, addPopup, intervalRow, onTop, dry, version])
+        // v8: the Telemach data balance. Each check is one SMS (STANJE to 13880), so the automatic one is off by default.
+        let checkData = NSButton(title: "Check data", target: self, action: #selector(checkDataNow))
+        checkData.toolTip = "Send STANJE to 13880 through the router now and show what is left (one SMS)"
+        dataLine.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        dataLine.textColor = .secondaryLabelColor
+        dataAuto.target = self
+        dataAuto.action = #selector(dataAutoChanged)
+        dataHours.alignment = .right
+        dataHours.widthAnchor.constraint(equalToConstant: 40).isActive = true
+        dataHours.target = self
+        dataHours.action = #selector(dataAutoChanged)
+        let dataRow = NSStackView(views: [checkData, dataLine])
+        let dataAutoRow = NSStackView(views: [dataAuto, dataHours, NSTextField(labelWithString: "hours (one SMS each time)")])
+
+        let stack = NSStackView(views: [alertLine, title, rows, speedRow, addPopup, intervalRow, dataRow, dataAutoRow, onTop, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -121,6 +138,20 @@ final class SettingsWindow: NSObject {
         interval.stringValue = String(format: "%g", Double(cfg.intervalSeconds) / 60)
         dry.state = cfg.dryRun ? .on : .off
         onTop.state = OnTop.on ? .on : .off
+        dataLine.stringValue = DataBalance.load().map { "\($0.line)  (Telemach \($0.at))" } ?? "not asked yet"
+        dataAuto.state = DataAuto.hours > 0 ? .on : .off
+        if dataHours.stringValue.isEmpty || DataAuto.hours > 0 { dataHours.stringValue = "\(DataAuto.hours > 0 ? DataAuto.hours : 6)" }
+    }
+
+    @objc func checkDataNow() {
+        NotificationCenter.default.post(name: DataBalanceNote.checkNow, object: nil)
+        dataLine.stringValue = "checking… (the stripe shows the answer)"
+    }
+
+    @objc func dataAutoChanged() {
+        let h = Int(dataHours.stringValue) ?? 6
+        DataAuto.hours = dataAuto.state == .on ? max(1, h) : 0
+        appendLog("\(logStamp()) DATA automatic check " + (DataAuto.hours > 0 ? "every \(DataAuto.hours) h" : "off"))
     }
 
     func small(_ t: String, _ a: Selector, _ tag: Int) -> NSButton {

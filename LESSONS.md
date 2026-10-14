@@ -33,6 +33,12 @@
 - **NO OTHER CONNECTION is a phase, not an alert file.** It is true only while nothing works, and the keeper rewrites
   the phase on every check, so it goes away by itself the moment a connection answers.
 
+- **The data balance is a command, not code inside the app** (v8; Marko: "ask the remaining megabytes only through a
+  headless browser through the command ... So it all works behind the scenes"). The router's page, its login and the
+  SMS belong to router-sms, which can send any SMS; the stripe only runs `router-sms balance --json` and shows the
+  answer. A first plan drove his own Firefox (firefoxctl); he chose a headless browser of its own instead.
+- **The automatic data check is off by default**: each check is one SMS to 13880.
+
 ## The traps
 
 - `networksetup` exits 0 on failure and prints the reason; read the words, then check the SSID and the IP.

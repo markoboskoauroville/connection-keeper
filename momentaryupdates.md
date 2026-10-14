@@ -74,10 +74,9 @@ words (540 instead of 797 points in the normal state; docs/v7-stripe.png). Red a
 
 > can we build a server headless browser for exactly this function? To use this device to connect with SMS and actually send any SMS using the device and read the response. But right now we're just using it for the status of the megabytes in the card itself
 
-**Status:** saved 14.10.2026, building v8: a separate headless server (repo router-sms) does the SMS; the stripe asks it for the balance.
 
 ## 14.10.2026, request 12 (v8, refining)
 
 > I want to speed up the process and also the user interface. It means connector keeper can ask the remaining megabytes only through a headless browser through the command in Python or any other command in C++. So it all works behind the scenes
 
-**Status:** saved 14.10.2026, building v8: the stripe runs the command `router-sms balance --json` in the background.
+**Status (requests 9 to 12):** built v8 14.10.2026. The stripe shows "28.2 GB left · 13:00" (docs/v8-data-balance.png); a click or ⚙ → Check data runs `router-sms balance --json` behind the scenes (repo router-sms: a headless Firefox of its own sends STANJE to 13880 through the TP-Link and reads Telemach's reply). Two real checks, 12:58 and 13:00: 28837.12 MB left of 102400 MB, 13.6 s and 11.4 s from the click. Automatic check in ⚙, off by default (one SMS each).

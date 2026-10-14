@@ -4,6 +4,8 @@ import AppKit
 
 let appName = "Connection Keeper (Mantra)"
 
+enum DataBalanceNote { static let checkNow = Notification.Name("ConnectionKeeperCheckData") }
+
 // ALWAYS ON TOP (v6, Marko 14.10.2026: "please keep it always on top, which can be changed in the settings").
 // A setting of the stripe only, remembered in its defaults; on unless he turns it off in ⚙.
 enum OnTop {
@@ -66,6 +68,9 @@ final class Stripe: NSObject {
     let connButton = NSButton(title: "…", target: nil, action: nil)
     let speed = label(200)
     let ping = NSButton(title: "ping —", target: nil, action: nil)
+    let data = NSButton(title: "data —", target: nil, action: nil)   // v8: the Telemach balance; a click asks now
+    var dataBusy = false
+    var dataHeld = Date.distantPast             // a failed check's words stay until then
     let checked = label(260)
     let failover = label(160)
     let ok = NSButton(title: "OK", target: nil, action: nil)
@@ -124,6 +129,14 @@ final class Stripe: NSObject {
         ping.alignment = .left
         ping.translatesAutoresizingMaskIntoConstraints = false
         ping.toolTip = "Press: ping now and say on the stripe whether the internet is alive"
+        data.isBordered = false
+        data.target = self
+        data.action = #selector(checkData)
+        data.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        data.contentTintColor = Ink.text
+        data.alignment = .left
+        data.translatesAutoresizingMaskIntoConstraints = false
+        data.setContentHuggingPriority(.required, for: .horizontal)
         // OK: Marko has seen that the first connection died. A click on the red failover words does the same.
         ok.bezelStyle = .rounded
         ok.controlSize = .small
@@ -150,7 +163,7 @@ final class Stripe: NSObject {
             return p
         }
         for b in [connButton, ping, gear] { b.setContentHuggingPriority(.required, for: .horizontal) }
-        let row = NSStackView(views: [dot, connButton, pipe(), speed, pipe(), ping, pipe(), checked, pipe(), failover, ok, gear])
+        let row = NSStackView(views: [dot, connButton, pipe(), speed, pipe(), ping, pipe(), data, pipe(), checked, pipe(), failover, ok, gear])
         row.orientation = .horizontal
         row.spacing = 6
         row.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
@@ -171,8 +184,66 @@ final class Stripe: NSObject {
         keepOnScreen()
         panel.orderFrontRegardless()
 
+        showData()
         refresh()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData() }
+        NotificationCenter.default.addObserver(forName: DataBalanceNote.checkNow, object: nil, queue: .main) { [weak self] _ in self?.checkData() }
+    }
+
+    // THE DATA BALANCE (v8): the last answer, "28.6 GB left · 11:57" (GB with one decimal, the time from Telemach's SMS);
+    // amber below 10 GB, red below 2 GB.
+    func showData() {
+        if dataBusy || Date() < dataHeld { return }
+        if let b = DataBalance.load() {
+            data.title = b.line
+            data.contentTintColor = red ? Ink.red : b.color
+            data.toolTip = b.tip
+        } else {
+            data.title = "data ?"
+            data.contentTintColor = red ? Ink.red : Ink.dim
+            data.toolTip = "Click: ask Telemach how much data is left (sends STANJE to 13880 through the router, one SMS)."
+        }
+        fit()
+    }
+
+    // A click on the item, ⚙ → Check data, or the timer: the command runs behind the scenes, the stripe never waits.
+    @objc func checkData() {
+        if dataBusy { return }
+        dataBusy = true
+        data.title = "checking data…"
+        data.contentTintColor = Ink.amber
+        fit()
+        let t0 = Date()
+        appendLog("\(logStamp()) DATA balance asked: router-sms balance (STANJE to 13880)")
+        DispatchQueue.global().async {
+            let r = DataBalance.check()
+            DispatchQueue.main.async {
+                self.dataBusy = false
+                let secs = Date().timeIntervalSince(t0)
+                switch r {
+                case .success(let b):
+                    appendLog(String(format: "%@ DATA %.2f MB left of %.2f MB (used %.2f) at %@ (%.1f s from the click)",
+                                     logStamp(), b.left_mb, b.total_mb, b.used_mb, b.at, secs))
+                    self.showData()
+                case .failure(let e):
+                    appendLog("\(logStamp()) DATA balance FAILED: \(e.localizedDescription)")
+                    self.dataHeld = Date().addingTimeInterval(30)
+                    self.data.title = "data ✗"
+                    self.data.contentTintColor = Ink.red
+                    self.data.toolTip = e.localizedDescription
+                    self.fit()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 30.5) { self.showData() }
+                }
+            }
+        }
+    }
+
+    func autoData() {
+        let h = DataAuto.hours
+        guard h > 0, !dataBusy else { return }
+        let last = (try? DataBalance.file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+        if Date().timeIntervalSince(last) >= Double(h) * 3600 { checkData() }
     }
 
     // On top: above ordinary and floating windows, on every Space, beside full-screen apps. Off: an ordinary window.
@@ -212,6 +283,7 @@ final class Stripe: NSObject {
                 if Date() >= pingHeld { ping.contentTintColor = Ink.text }
                 speed.textColor = Ink.text; failover.textColor = Ink.text; failover.font = speed.font
                 ok.isHidden = true
+                showData()
                 failoverWidth.constant = 160
                 fit()
                 reading()
@@ -224,7 +296,7 @@ final class Stripe: NSObject {
             failoverWidth.constant = 260
             fit()
         }
-        for b in [connButton, ping, gear] { b.contentTintColor = Ink.red }
+        for b in [connButton, ping, data, gear] { b.contentTintColor = Ink.red }
         for l in [speed, checked, failover] { l.textColor = Ink.red }
         failover.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
         failover.stringValue = a.line
@@ -493,4 +565,5 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let stripe = Stripe()
 if CommandLine.arguments.contains("--settings") { stripe.openSettings() }
+if CommandLine.arguments.contains("--check-data") { stripe.checkData() }    // v8: the same as a click on the data item
 app.run()

@@ -70,3 +70,18 @@ open -n "/Applications/Connection Keeper (Mantra).app" --args --check-join    # 
 
 The items sit close with a dim pipe between them and the stripe is only as wide as its words. If its remembered place
 is on no screen, it comes back to the top middle of the main screen.
+
+## How much data is left (v8, 14.10.2026)
+
+![the stripe, v8](docs/v8-data-balance.png)
+
+The stripe shows what is left on the Telemach SIM in the TP-Link router: **28.2 GB left · 13:00** (the time is the
+one in Telemach's SMS), amber below 10 GB, red below 2 GB. A click on it, or ⚙ → **Check data**, asks again: behind
+the scenes the command `router-sms balance --json` (repo [router-sms](https://github.com/markoboskoauroville/router-sms))
+sends STANJE to 13880 through the router with a headless browser and reads the reply; the stripe says
+"checking data…" meanwhile and never waits. Each check is one SMS, so the automatic check (⚙, every N hours) is off
+until he turns it on. Measured: 13.6 s and 11.4 s from the click to the answer.
+
+```
+open -n "/Applications/Connection Keeper (Mantra).app" --args --check-data     # the same as a click
+```

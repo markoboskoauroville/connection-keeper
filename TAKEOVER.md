@@ -1,6 +1,6 @@
 # connection-keeper: takeover
 
-**Version v7** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `7-connection-keeper-v7.zip`, tag `v7`
+**Version v8** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `8-connection-keeper-v8.zip`, tag `v8`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
 ## What it is
@@ -71,6 +71,19 @@ Labels have a maximum width, not a fixed one (`label(max)`, hugging required); a
 `keepOnScreen()` (at start and after every fit) moves the stripe to the top middle of the main screen when less than
 80 points of it are on any screen and logs it.
 
+## The data balance (v8)
+
+`Sources/App/DataBalance.swift`. The stripe's item `data` (between ping and the status) shows
+`…/connection-keeper/data-balance.json` (written at every successful check, read at start): "%.1f GB left · HH:MM",
+the time from Telemach's SMS; amber < 10 GB, red < 2 GB, red with the failover alert. A click (or ⚙ → Check data, or
+`--check-data` at launch) runs `~/.local/bin/router-sms balance --json` on a background thread, timeout 150 s, and
+logs `DATA balance asked` and `DATA … MB left of … (N s from the click)` or `DATA balance FAILED: why` (the item then
+says "data ✗" in red for 30 s, the reason in its tooltip). The automatic check: UserDefaults `dataBalanceEveryHours`,
+0 = off (the default), checked every minute against the file's age. The SMS itself is done by router-sms
+(~/Developer/ROUTER_SMS, its own TAKEOVER): a headless Firefox of its own logs in to the router at 192.168.1.1,
+sends STANJE to 13880 and parses the reply; its warm server (LaunchAgent com.mantra.routersms, 127.0.0.1:8880) keeps
+the login, so a check is the SMS's own time plus a few seconds.
+
 ## The red alert (v4)
 
 When `attempt()` brings the internet back on a different connection and the switch was not asked from the stripe
@@ -110,6 +123,7 @@ Settings shows the line in red above the list when it opens.
 | `Sources/Daemon/main.swift` | the keeper: drivers, the ladder, the loop, the lock |
 | `Sources/App/main.swift` | the stripe |
 | `Sources/App/Settings.swift` | the gear's window |
+| `Sources/App/DataBalance.swift` | v8: the data balance through `router-sms` |
 | `Tools/make_icon.swift` | the icon, drawn in code, version under the symbol |
 | `Resources/Info.plist` | bundle (LSUIElement: no Dock icon) |
 | `launchd/com.mantra.connectionkeeper.plist` | the LaunchAgent template |
@@ -129,6 +143,9 @@ Test the ladder without touching the network:
 ```
 
 ## What has never been proven
+
+- **The automatic data check has never fired** (off by default); amber and red for the data item were never seen
+  (28.2 GB left). Proven 14.10.2026: two real checks from the stripe, 12:58 and 13:00, 28837.12 MB left.
 
 - **A join with a stored password and a join through Control Centre from the app have never run.** Marko has not
   typed the passwords yet and the app had no Accessibility permission (granted later on 14.10.2026; v6's `--check-join` read the Wi-Fi list at 11:19, still never pressed a row from the app). Proven: networksetup alone fails
