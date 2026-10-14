@@ -61,3 +61,13 @@ Waiting for Marko: ⚙ → Password… for mantra and for Something (option 1); 
 words (540 instead of 797 points in the normal state; docs/v7-stripe.png). Red and NO OTHER CONNECTION still fit
 (docs/v7-no-other-connection.png). Found and fixed on the way: the stripe's remembered place was off every screen
 (x = -2247), so it was invisible; it now comes back to the main screen when that happens.
+
+## 14.10.2026, request 9 (v8)
+
+> a new feature for Connection Keeper is to know how much megabytes are left on my account. This is how to get it: by sending SMS to this number, so my TP-Link can do this. You have links you can open my browser Firefox, control it remotely, and get the number. Please check it right now. I send the SMS and I immediately receive the remaining megabytes/gigabytes status and forward this information right to the Connection Keeper. Connection Keeper can also have a way to send SMS through the Firefox when I ask to check the current status of gigabytesb For Telemach Croatia, the text to send is STANJE (the Croatian word for "balance"), to the number 13880.
+
+## 14.10.2026, request 10 (v8)
+
+> now build the script right inside the connectionkeeper so I don't need AI or anything. It's a fixed script to open the Firefox control, it remotely sends SMS, reads SMS, and writes the data. Write in the status of megabytes for the time we asked
+
+**Status:** saved 14.10.2026, building v8.
