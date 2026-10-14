@@ -52,3 +52,9 @@ nothing works. Waiting for Marko: type both Wi-Fi passwords in ⚙ → Password�
 ⚙ → Always on top turns it off and on, remembered (measured: layer 25 on, 0 off). Accessibility is granted and
 survived the rebuild; `--check-join` read Control Centre's Wi-Fi list (mantra, Something) without pressing anything.
 Waiting for Marko: ⚙ → Password… for mantra and for Something (option 1); no prompt of any kind comes from the app.
+
+## 14.10.2026, request 8 (v7)
+
+> please in my connection keeper reduce the space between the text and just put pipes in between. There is too much empty space and this dialogue is taking unnecessary length
+
+**Status:** in work 14.10.2026.
