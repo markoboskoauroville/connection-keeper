@@ -85,3 +85,15 @@ until he turns it on. Measured: 13.6 s and 11.4 s from the click to the answer.
 ```
 open -n "/Applications/Connection Keeper (Mantra).app" --args --check-data     # the same as a click
 ```
+
+## A stripe that holds still, the speed unit, Settings with margins (v9, 14.10.2026)
+
+![the stripe, v9](docs/v9-stripe-1.png)
+
+Every item on the stripe has a fixed width and every number a fixed number of places (four digits, right-aligned,
+monospaced), so the stripe no longer "breathes" as the speed changes; ⚙ sits at the left end, next to the dot, where
+it never moves. ⚙ → **Speed unit**: Auto in bits (bit/s → kbit/s → Mbit/s, the default), Auto in bytes
+(B/s → kB/s → MB/s), or one fixed unit (bit/s, kbit/s, Mbit/s, Gbit/s, B/s, kB/s, MB/s, GB/s); the speed test results
+follow it. Settings takes the size its content needs, 20 points from every edge.
+
+![Settings, v9](docs/v9-settings.png)

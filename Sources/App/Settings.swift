@@ -19,6 +19,8 @@ final class SettingsWindow: NSObject {
     let dataLine = NSTextField(labelWithString: "")
     let dataAuto = NSButton(checkboxWithTitle: "Check the data balance by itself every", target: nil, action: nil)
     let dataHours = NSTextField(string: "")
+    let unitPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    var stackView: NSStackView!
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400),
@@ -74,11 +76,22 @@ final class SettingsWindow: NSObject {
         let dataRow = NSStackView(views: [checkData, dataLine])
         let dataAutoRow = NSStackView(views: [dataAuto, dataHours, NSTextField(labelWithString: "hours (one SMS each time)")])
 
-        let stack = NSStackView(views: [alertLine, title, rows, speedRow, addPopup, intervalRow, dataRow, dataAutoRow, onTop, dry, version])
+        // v9: the speed unit, for the stripe and the speed test results.
+        for u in SpeedUnit.allCases { unitPopup.addItem(withTitle: u.title); unitPopup.lastItem?.representedObject = u.rawValue }
+        unitPopup.target = self
+        unitPopup.action = #selector(unitChanged)
+        let unitRow = NSStackView(views: [NSTextField(labelWithString: "Speed unit"), unitPopup])
+
+        alertLine.lineBreakMode = .byWordWrapping
+        alertLine.maximumNumberOfLines = 0
+        alertLine.preferredMaxLayoutWidth = 560
+
+        let stack = NSStackView(views: [alertLine, title, rows, speedRow, addPopup, intervalRow, unitRow, dataRow, dataAutoRow, onTop, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
-        stack.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
+        stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 20, right: 24)
+        stackView = stack
         stack.translatesAutoresizingMaskIntoConstraints = false
         window.contentView = NSView()
         window.contentView!.addSubview(stack)
@@ -86,6 +99,7 @@ final class SettingsWindow: NSObject {
             stack.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),
             stack.topAnchor.constraint(equalTo: window.contentView!.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor),
         ])
     }
 
@@ -101,6 +115,7 @@ final class SettingsWindow: NSObject {
             alertLine.isHidden = true
         }
         rebuild()
+        sizeToContent()
         window.center()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -138,9 +153,32 @@ final class SettingsWindow: NSObject {
         interval.stringValue = String(format: "%g", Double(cfg.intervalSeconds) / 60)
         dry.state = cfg.dryRun ? .on : .off
         onTop.state = OnTop.on ? .on : .off
+        if let i = SpeedUnit.allCases.firstIndex(of: SpeedUnit.current) { unitPopup.selectItem(at: i) }
+        DispatchQueue.main.async { self.sizeToContent() }
         dataLine.stringValue = DataBalance.load().map { "\($0.line)  (Telemach \($0.at))" } ?? "not asked yet"
         dataAuto.state = DataAuto.hours > 0 ? .on : .off
         if dataHours.stringValue.isEmpty || DataAuto.hours > 0 { dataHours.stringValue = "\(DataAuto.hours > 0 ? DataAuto.hours : 6)" }
+    }
+
+    // v9 (Marko 14.10.2026: "In the settings, we have cutting text. It's too close to the edge"): the window takes the
+    // size its content needs, with 20 points of margin, every time the content changes.
+    func sizeToContent() {
+        guard let stack = stackView else { return }
+        stack.layoutSubtreeIfNeeded()
+        // NSStackView's fittingSize leaves out the right inset when a row is wider than the rest: count it ourselves.
+        let widest = stack.arrangedSubviews.filter { !$0.isHidden }.map { $0.fittingSize.width }.max() ?? 0
+        let width = max(560, widest + stack.edgeInsets.left + stack.edgeInsets.right)
+        let want = stack.fittingSize
+        let origin = window.frame.origin, oldHeight = window.frame.height
+        window.setContentSize(NSSize(width: width, height: want.height))
+        window.setFrameOrigin(NSPoint(x: origin.x, y: origin.y + oldHeight - window.frame.height))   // keep the top
+    }
+
+    @objc func unitChanged() {
+        guard let raw = unitPopup.selectedItem?.representedObject as? String, let u = SpeedUnit(rawValue: raw) else { return }
+        SpeedUnit.current = u
+        appendLog("\(logStamp()) speed unit: \(u.title)")
+        rebuild()
     }
 
     @objc func checkDataNow() {

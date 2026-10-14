@@ -17,8 +17,9 @@ struct SpeedResult: Codable {
     var line: String {
         if let e = error { return "failed: \(e)" }
         let f = DateFormatter(); f.dateFormat = "d.M. HH:mm"
-        let d = downMbps.map { String(format: "↓ %.0f", $0) } ?? "↓ ?"
-        let u = upMbps.map { String(format: "↑ %.0f Mbit/s", $0) } ?? "↑ ?"
+        let unit = SpeedUnit.current                // v9: the unit chosen in ⚙
+        let d = downMbps.map { "↓ " + unit.format(bytesPerSecond: $0 * 125_000).trimmingCharacters(in: .whitespaces) } ?? "↓ ?"
+        let u = upMbps.map { "↑ " + unit.format(bytesPerSecond: $0 * 125_000).trimmingCharacters(in: .whitespaces) } ?? "↑ ?"
         let r = rttMs.map { String(format: " · %.0f ms", $0) } ?? ""
         return "\(d)  \(u)\(r) · \(f.string(from: at))"
     }

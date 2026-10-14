@@ -16,7 +16,7 @@ struct DataBalance: Codable {
     var seconds: Double?        // how long the command took
 
     var leftGB: Double { left_mb / 1024 }
-    var line: String { String(format: "%.1f GB left · %@", leftGB, time) }
+    var line: String { String(format: "%.1f GB left · %@", leftGB, time) }   // the stripe's slot fits "888.8 GB left · 88:88"
     var color: NSColor { leftGB < 2 ? Ink.red : leftGB < 10 ? Ink.amber : Ink.text }
     var tip: String {
         String(format: "Telemach, at %@: %.2f MB used of %.2f MB, %.2f MB left", at, used_mb, total_mb, left_mb)

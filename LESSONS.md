@@ -39,7 +39,16 @@
   answer. A first plan drove his own Firefox (firefoxctl); he chose a headless browser of its own instead.
 - **The automatic data check is off by default**: each check is one SMS to 13880.
 
+- **Fixed widths, not "as wide as the words"** (v9). v7 sized every item to its words to remove empty space; then
+  every change of a number moved everything to its right, ⚙ included, and Marko could not hit it ("the whole status
+  line is breathing"). Now the space is fixed per item and ⚙ is at the left end.
+- **Auto speed in bits by default**: Marko asked for "kilobits to megabits"; bytes are a choice in ⚙.
+
 ## The traps
+
+- NSStackView's `fittingSize` leaves out the right edge inset when one arranged view (the connection rows with their
+  speed test results) is wider than the rest: Settings cut the text at the right edge (Marko's screenshot,
+  14.10.2026 13:12).
 
 - `networksetup` exits 0 on failure and prints the reason; read the words, then check the SSID and the IP.
 - `screencapture -x` of the whole screen captures only the main display; the stripe was on the second one.

@@ -1,6 +1,6 @@
 # connection-keeper: takeover
 
-**Version v8** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `8-connection-keeper-v8.zip`, tag `v8`
+**Version v9** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `9-connection-keeper-v9.zip`, tag `v9`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
 ## What it is
@@ -71,6 +71,19 @@ Labels have a maximum width, not a fixed one (`label(max)`, hugging required); a
 `keepOnScreen()` (at start and after every fit) moves the stripe to the top middle of the main screen when less than
 80 points of it are on any screen and logs it.
 
+## Fixed widths and the speed unit (v9)
+
+The stripe's order is dot · ⚙ · connection ▾ | speed | ping | data | status | failover [OK]. Every item has an
+*equal* width constraint (v7 had a maximum, which let the stripe change width with every number): the connection gets
+the longest name in the list, speed the widest text of the chosen unit (`speedSample()`), ping "ping 999 ms", data
+"888.8 GB left · 88:88", status "checked 59 min ago ✓", failover "failover 59 min ago". The width changes only with
+the state (red alert, NO OTHER CONNECTION, a message on the status line), and the left edge stays, so ⚙ never moves.
+Numbers are in `monospacedSystemFont`, four significant digits in a five-character slot (`SpeedUnit.slot`).
+`Sources/Shared/Units.swift`: `SpeedUnit` (stripe's defaults key `speedUnit`, default `autoBits`), decimal steps of
+1000, the unit padded to the family's widest. Measured 14.10.2026: three shots 3 s apart, 956 points each (bits),
+926 each (bytes). Settings: `sizeToContent()` after every rebuild; NSStackView's fittingSize leaves out the right
+inset when one row is wider than the rest, so the width is the widest row plus both insets.
+
 ## The data balance (v8)
 
 `Sources/App/DataBalance.swift`. The stripe's item `data` (between ping and the status) shows
@@ -123,6 +136,7 @@ Settings shows the line in red above the list when it opens.
 | `Sources/Daemon/main.swift` | the keeper: drivers, the ladder, the loop, the lock |
 | `Sources/App/main.swift` | the stripe |
 | `Sources/App/Settings.swift` | the gear's window |
+| `Sources/Shared/Units.swift` | v9: the speed unit and the fixed number slots |
 | `Sources/App/DataBalance.swift` | v8: the data balance through `router-sms` |
 | `Tools/make_icon.swift` | the icon, drawn in code, version under the symbol |
 | `Resources/Info.plist` | bundle (LSUIElement: no Dock icon) |

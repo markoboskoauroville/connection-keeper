@@ -29,23 +29,41 @@ enum Ink {
     static let grey = NSColor(calibratedWhite: 0.40, alpha: 1)
 }
 
-func label(_ width: CGFloat, align: NSTextAlignment = .left) -> NSTextField {
+// v9 (Marko 14.10.2026: "the whole status line is breathing. So I'm trying to click on the settings icon and it's
+// moving"): every item has a FIXED width, sized for its widest text, so changing numbers never move anything; the
+// stripe changes width only when its state changes (red, NO OTHER CONNECTION, a message), and keeps its left edge.
+let monoFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+
+func textWidth(_ s: String, _ font: NSFont) -> CGFloat {
+    ceil((s as NSString).size(withAttributes: [.font: font]).width) + 6
+}
+
+func label(_ width: CGFloat, align: NSTextAlignment = .left, font: NSFont = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)) -> NSTextField {
     let l = NSTextField(labelWithString: "")
-    l.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+    l.font = font
     l.textColor = Ink.text
     l.alignment = align
     l.lineBreakMode = .byTruncatingTail
     l.translatesAutoresizingMaskIntoConstraints = false
-    l.widthAnchor.constraint(lessThanOrEqualToConstant: width).isActive = true   // v7: a maximum, the words decide
+    l.widthAnchor.constraint(equalToConstant: width).isActive = true
     l.setContentHuggingPriority(.required, for: .horizontal)
     return l
 }
 
-func rate(_ bytesPerSecond: Double) -> String {
-    let b = max(0, bytesPerSecond)
-    if b >= 1_000_000 { return String(format: "%.1f MB/s", b / 1_000_000) }
-    if b >= 1_000 { return String(format: "%.0f kB/s", b / 1_000) }
-    return String(format: "%.0f B/s", b)
+func fixWidth(_ v: NSView, _ width: CGFloat) -> NSLayoutConstraint {
+    let c = v.widthAnchor.constraint(equalToConstant: width)
+    c.isActive = true
+    return c
+}
+
+func rate(_ bytesPerSecond: Double) -> String { SpeedUnit.current.format(bytesPerSecond: bytesPerSecond) }
+
+// The widest speed text of the chosen unit: auto never needs more than five places, a fixed unit up to nine.
+func speedSample() -> String {
+    let u = SpeedUnit.current
+    let digits = (u == .autoBits || u == .autoBytes) ? 5 : 9
+    let n = String(repeating: "8", count: digits) + " " + String(repeating: "M", count: u.unitWidth)
+    return "↓ \(n)  ↑ \(n)"
 }
 
 func ago(_ d: Date?) -> String {
@@ -66,13 +84,17 @@ final class Stripe: NSObject {
     let panel: NSPanel
     let dot = Dot()
     let connButton = NSButton(title: "…", target: nil, action: nil)
-    let speed = label(200)
+    let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
+    var speedWidth: NSLayoutConstraint!
+    var connWidth: NSLayoutConstraint!
     let ping = NSButton(title: "ping —", target: nil, action: nil)
     let data = NSButton(title: "data —", target: nil, action: nil)   // v8: the Telemach balance; a click asks now
     var dataBusy = false
     var dataHeld = Date.distantPast             // a failed check's words stay until then
-    let checked = label(260)
-    let failover = label(160)
+    let checked = label(Stripe.checkedNormal)
+    let failover = label(Stripe.failoverNormal)
+    static let checkedNormal = textWidth("checked 59 min ago ✓", .monospacedDigitSystemFont(ofSize: 12, weight: .regular))
+    static let failoverNormal = textWidth("failover 59 min ago", .monospacedDigitSystemFont(ofSize: 12, weight: .regular))
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
     var failoverWidth: NSLayoutConstraint!
@@ -137,6 +159,18 @@ final class Stripe: NSObject {
         data.alignment = .left
         data.translatesAutoresizingMaskIntoConstraints = false
         data.setContentHuggingPriority(.required, for: .horizontal)
+        _ = fixWidth(data, max(textWidth("888.8 GB left · 88:88", monoFont), textWidth("checking data…", monoFont)))
+        data.font = monoFont
+        ping.font = monoFont
+        _ = fixWidth(ping, textWidth("ping 999 ms", monoFont))
+        speedWidth = speed.constraints.first { $0.firstAttribute == .width }
+        connWidth = fixWidth(connButton, connectionWidth())
+        NotificationCenter.default.addObserver(forName: SpeedUnit.changed, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.speedWidth.constant = textWidth(speedSample(), monoFont)
+            self.lastCounters = nil
+            self.fit()
+        }
         // OK: Marko has seen that the first connection died. A click on the red failover words does the same.
         ok.bezelStyle = .rounded
         ok.controlSize = .small
@@ -163,7 +197,7 @@ final class Stripe: NSObject {
             return p
         }
         for b in [connButton, ping, gear] { b.setContentHuggingPriority(.required, for: .horizontal) }
-        let row = NSStackView(views: [dot, connButton, pipe(), speed, pipe(), ping, pipe(), data, pipe(), checked, pipe(), failover, ok, gear])
+        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, pipe(), checked, pipe(), failover, ok])
         row.orientation = .horizontal
         row.spacing = 6
         row.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
@@ -284,7 +318,7 @@ final class Stripe: NSObject {
                 speed.textColor = Ink.text; failover.textColor = Ink.text; failover.font = speed.font
                 ok.isHidden = true
                 showData()
-                failoverWidth.constant = 160
+                failoverWidth.constant = Stripe.failoverNormal
                 fit()
                 reading()
             }
@@ -352,12 +386,12 @@ final class Stripe: NSObject {
             let dt = Date().timeIntervalSince(lastSample)
             if let last = lastCounters, dt > 0 {
                 let down = Double(c.rx &- last.rx) / dt, up = Double(c.tx &- last.tx) / dt
-                speed.stringValue = "↓ \(rate(down))   ↑ \(rate(up))"
+                speed.stringValue = "↓ \(rate(down))  ↑ \(rate(up))"
             }
             lastCounters = c
             lastSample = Date()
         } else {
-            speed.stringValue = "↓ —   ↑ —"
+            speed.stringValue = "↓     —        ↑     —"
         }
 
         state = KeeperState.load()
@@ -370,13 +404,13 @@ final class Stripe: NSObject {
 
         if let s = state, alive {
             let check = s.lastCheck
-            ping.title = check?.latencyMs.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+            ping.title = check?.latencyMs.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
             // NO OTHER CONNECTION (Marko, 14.10.2026): the connection is dead and none in the list works.
             // Red and bold on the status line until a connection works again; he has to do something.
             let none = s.phase.hasPrefix(noOtherPrefix)
             if none != noOther {
                 noOther = none
-                checkedWidth.constant = none ? 520 : 260
+                checkedWidth.constant = none ? 520 : Stripe.checkedNormal
                 checked.font = .monospacedDigitSystemFont(ofSize: 12, weight: none ? .bold : .regular)
                 if !none { checked.toolTip = nil }
                 if !red { connButton.contentTintColor = none ? Ink.red : Ink.text }
@@ -405,6 +439,13 @@ final class Stripe: NSObject {
             dot.color = Ink.grey
             dot.toolTip = "the keeper (LaunchAgent \(CKAgentLabel)) is not running"
         }
+    }
+
+    // The connection's name gets the width of the longest name in the list, so a switch does not move the rest.
+    func connectionWidth() -> CGFloat {
+        let f = NSFont.systemFont(ofSize: 12, weight: .semibold)
+        let names = Config.load().connections.map { $0.name } + ["no network"]
+        return (names.map { textWidth($0 + " ▾", f) }.max() ?? 80) + 8
     }
 
     func currentNow() -> String? {
@@ -481,7 +522,7 @@ final class Stripe: NSObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.5) {
                 if Date() >= self.pingHeld {
                     self.checked.toolTip = nil
-                    if !self.noOther { self.checkedWidth.constant = 260; self.fit() }
+                    if !self.noOther { self.checkedWidth.constant = Stripe.checkedNormal; self.fit() }
                     self.refresh()
                 }
             }
@@ -496,7 +537,7 @@ final class Stripe: NSObject {
             let p = Net.probe(pingHost: cfg.pingHost, httpURL: cfg.httpProbe)
             DispatchQueue.main.async {
                 switch p {
-                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.title = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.title = ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
                 case .captive: self.checked.stringValue = "captive portal ✗"
                 case .offline: self.checked.stringValue = "offline now ✗"
                 }
@@ -522,7 +563,7 @@ final class Stripe: NSObject {
                 let at = Date().formatted(date: .omitted, time: .standard)
                 switch p {
                 case .online(_, let ms):
-                    self.ping.title = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+                    self.ping.title = ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
                     self.checked.stringValue = ms != nil ? "ALIVE ✓  \(at)" : "ALIVE ✓  web only (ping blocked)"
                     self.ping.contentTintColor = Ink.green; self.checked.textColor = Ink.green; self.dot.color = Ink.green
                 case .captive:

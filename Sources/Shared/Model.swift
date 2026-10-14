@@ -1,7 +1,7 @@
 // Shared by the keeper (daemon) and the stripe (app): the version, the paths, the config, the state.
 import Foundation
 
-let CKVersion = 8
+let CKVersion = 9
 
 // The phase the keeper writes when the current connection is dead and no other one works (v5).
 let noOtherPrefix = "NO OTHER CONNECTION"
