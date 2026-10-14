@@ -1,6 +1,6 @@
 # connection-keeper: takeover
 
-**Version v6** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `6-connection-keeper-v6.zip`, tag `v6`
+**Version v7** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `7-connection-keeper-v7.zip`, tag `v7`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
 ## What it is
@@ -63,6 +63,13 @@ app that had it. `--check-join` (run with `open -n … --args --check-join` so t
 what counts, not the terminal's) logs `CHECK join path: accessibility granted; Control Centre Wi-Fi list read: mantra,
 Something; stored passwords: …` and presses nothing. The Accessibility permission survived the rebuilds (stable
 "Mantra Apps" signature).
+
+## The stripe's layout (v7)
+
+Labels have a maximum width, not a fixed one (`label(max)`, hugging required); a dim "|" label sits between the items;
+`fit()` runs on every refresh and resizes the panel only when the fitting width changed, keeping the left edge.
+`keepOnScreen()` (at start and after every fit) moves the stripe to the top middle of the main screen when less than
+80 points of it are on any screen and logs it.
 
 ## The red alert (v4)
 

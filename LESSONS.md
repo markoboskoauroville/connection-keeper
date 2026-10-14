@@ -51,6 +51,8 @@
   `com.apple.menuextra.controlcenter` returned success and nothing opened over full-screen iTerm; with Finder in front
   the panel opened at once. Hence Finder forward for the moment.
 - A permission check run from the terminal answers for the terminal: `--check-join` must be started with `open -n`.
+- **A remembered window place can be on no screen** (14.10.2026: "-2247 185" after a change of displays): the stripe
+  ran, layer 25, and nobody could see it. `keepOnScreen()` since v7.
 - Two keepers (a test beside the agent) would fight; the flock on `keeper.lock` makes the second one leave.
 
 ## Live test, 14.10.2026 (Marko: "switch 5 min each connection a few times")

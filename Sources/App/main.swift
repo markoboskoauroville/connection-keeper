@@ -34,7 +34,8 @@ func label(_ width: CGFloat, align: NSTextAlignment = .left) -> NSTextField {
     l.alignment = align
     l.lineBreakMode = .byTruncatingTail
     l.translatesAutoresizingMaskIntoConstraints = false
-    l.widthAnchor.constraint(equalToConstant: width).isActive = true
+    l.widthAnchor.constraint(lessThanOrEqualToConstant: width).isActive = true   // v7: a maximum, the words decide
+    l.setContentHuggingPriority(.required, for: .horizontal)
     return l
 }
 
@@ -63,10 +64,10 @@ final class Stripe: NSObject {
     let panel: NSPanel
     let dot = Dot()
     let connButton = NSButton(title: "…", target: nil, action: nil)
-    let speed = label(165)
+    let speed = label(200)
     let ping = NSButton(title: "ping —", target: nil, action: nil)
-    let checked = label(190)
-    let failover = label(130)
+    let checked = label(260)
+    let failover = label(160)
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
     var failoverWidth: NSLayoutConstraint!
@@ -114,7 +115,6 @@ final class Stripe: NSObject {
         }
         connButton.action = #selector(showConnections)
         connButton.alignment = .left
-        connButton.widthAnchor.constraint(equalToConstant: 130).isActive = true
         connButton.toolTip = "Switch the connection"
         ping.isBordered = false
         ping.target = self
@@ -123,7 +123,6 @@ final class Stripe: NSObject {
         ping.contentTintColor = Ink.text
         ping.alignment = .left
         ping.translatesAutoresizingMaskIntoConstraints = false
-        ping.widthAnchor.constraint(equalToConstant: 76).isActive = true
         ping.toolTip = "Press: ping now and say on the stripe whether the internet is alive"
         // OK: Marko has seen that the first connection died. A click on the red failover words does the same.
         ok.bezelStyle = .rounded
@@ -141,9 +140,19 @@ final class Stripe: NSObject {
         gear.font = .systemFont(ofSize: 15)
         gear.toolTip = "Settings: the connections and their order"
 
-        let row = NSStackView(views: [dot, connButton, speed, ping, checked, failover, ok, gear])
+        // v7 (Marko 14.10.2026: "reduce the space between the text and just put pipes in between"): the items sit
+        // close, a dim pipe between them, and the stripe is as wide as its words.
+        func pipe() -> NSTextField {
+            let p = NSTextField(labelWithString: "|")
+            p.textColor = Ink.grey
+            p.font = .systemFont(ofSize: 12)
+            p.setContentHuggingPriority(.required, for: .horizontal)
+            return p
+        }
+        for b in [connButton, ping, gear] { b.setContentHuggingPriority(.required, for: .horizontal) }
+        let row = NSStackView(views: [dot, connButton, pipe(), speed, pipe(), ping, pipe(), checked, pipe(), failover, ok, gear])
         row.orientation = .horizontal
-        row.spacing = 10
+        row.spacing = 6
         row.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
         row.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(row)
@@ -159,6 +168,7 @@ final class Stripe: NSObject {
             let f = screen.visibleFrame
             panel.setFrameOrigin(NSPoint(x: f.midX - panel.frame.width / 2, y: f.maxY - 40))
         }
+        keepOnScreen()
         panel.orderFrontRegardless()
 
         refresh()
@@ -180,6 +190,7 @@ final class Stripe: NSObject {
     func refresh() {
         reading()
         applyAlert()
+        fit()
     }
 
     // THE RED (Marko, 14.10.2026): after the keeper failed over by itself, every word on the stripe is red
@@ -201,7 +212,7 @@ final class Stripe: NSObject {
                 if Date() >= pingHeld { ping.contentTintColor = Ink.text }
                 speed.textColor = Ink.text; failover.textColor = Ink.text; failover.font = speed.font
                 ok.isHidden = true
-                failoverWidth.constant = 130
+                failoverWidth.constant = 160
                 fit()
                 reading()
             }
@@ -234,9 +245,26 @@ final class Stripe: NSObject {
     func fit() {
         guard let row = panel.contentView?.subviews.first else { return }
         row.layoutSubtreeIfNeeded()
+        if abs(row.fittingSize.width - panel.frame.width) < 1 { return }
         let origin = panel.frame.origin
         panel.setContentSize(NSSize(width: row.fittingSize.width, height: 30))
         panel.setFrameOrigin(origin)
+        keepOnScreen()
+    }
+
+    // Never lost off the screens (14.10.2026 the saved place was x = -2247, on no display: the stripe was invisible).
+    // At least 80 points of it stay on some screen, otherwise it goes to the top middle of the main screen.
+    func keepOnScreen() {
+        let f = panel.frame
+        let visible = NSScreen.screens.contains { s in
+            let i = s.visibleFrame.intersection(f)
+            return !i.isNull && i.width >= min(80, f.width) && i.height >= f.height / 2
+        }
+        if visible { return }
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
+        let v = screen.visibleFrame
+        panel.setFrameOrigin(NSPoint(x: v.midX - f.width / 2, y: v.maxY - 40))
+        appendLog("\(logStamp()) stripe was off every screen (x \(Int(f.minX)), y \(Int(f.minY))); brought back to \(screen.localizedName)")
     }
 
     func reading() {
@@ -276,7 +304,7 @@ final class Stripe: NSObject {
             let none = s.phase.hasPrefix(noOtherPrefix)
             if none != noOther {
                 noOther = none
-                checkedWidth.constant = none ? 520 : 190
+                checkedWidth.constant = none ? 520 : 260
                 checked.font = .monospacedDigitSystemFont(ofSize: 12, weight: none ? .bold : .regular)
                 if !none { checked.toolTip = nil }
                 if !red { connButton.contentTintColor = none ? Ink.red : Ink.text }
@@ -381,7 +409,7 @@ final class Stripe: NSObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.5) {
                 if Date() >= self.pingHeld {
                     self.checked.toolTip = nil
-                    if !self.noOther { self.checkedWidth.constant = 190; self.fit() }
+                    if !self.noOther { self.checkedWidth.constant = 260; self.fit() }
                     self.refresh()
                 }
             }

@@ -57,4 +57,7 @@ Waiting for Marko: ⚙ → Password… for mantra and for Something (option 1); 
 
 > please in my connection keeper reduce the space between the text and just put pipes in between. There is too much empty space and this dialogue is taking unnecessary length
 
-**Status:** in work 14.10.2026.
+**Status:** built v7 14.10.2026: the items sit close with a dim " | " between them and the stripe is as wide as its
+words (540 instead of 797 points in the normal state; docs/v7-stripe.png). Red and NO OTHER CONNECTION still fit
+(docs/v7-no-other-connection.png). Found and fixed on the way: the stripe's remembered place was off every screen
+(x = -2247), so it was invisible; it now comes back to the main screen when that happens.

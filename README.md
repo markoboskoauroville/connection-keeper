@@ -63,3 +63,10 @@ is not there. Check the road without switching:
 ```
 open -n "/Applications/Connection Keeper (Mantra).app" --args --check-join    # one line in the log: CHECK join path …
 ```
+
+## Pipes, not empty space (v7, 14.10.2026)
+
+![the stripe, v7](docs/v7-stripe.png)
+
+The items sit close with a dim pipe between them and the stripe is only as wide as its words. If its remembered place
+is on no screen, it comes back to the top middle of the main screen.
