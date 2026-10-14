@@ -25,3 +25,9 @@ Every request from Marko, word for word, before any code. Each item has a Status
 > please update the app for keeping my connection alive. There is a ping in the user interface. I want to press the ping and then it pings and tells me if my connection is alive or not. Exactly, there status line exactly on the status line
 
 **Status:** built v3 13.10.2026: the "ping" on the stripe is a button; pressed, it says "pinging 1.1.1.1…" in amber, then on the status line "ALIVE ✓ <time>" in green with the ping in ms, or "NOT ALIVE ✗ no answer" / "captive portal" in red; the dot follows. The answer stays 20 s. Verified by pressing it through accessibility: ALIVE ✓ 23:50:50, ping 38 ms.
+
+## 14.10.2026, request 5 (v4)
+
+> is in a connection keeper. If it switches connection during its running, please color all font in red. For example, we are now working on my connection called Mantra, and then after 5 min with ping you see wow no connection. He died. His sim card is over. Then you connect to another Wi-Fi which is called something. Then you need to change the color so I know that connection is changed from distance and I need to check what's wrong with my first connection
+
+**Status:** in progress 14.10.2026.
