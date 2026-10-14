@@ -52,3 +52,14 @@ way a hand does. When the connection in use is dead and no other one in the list
 bold red **NO OTHER CONNECTION — mantra dead, Something not working**, until a connection works again.
 
 ![NO OTHER CONNECTION](docs/v5-no-other-connection.png)
+
+## Always on top, and the switch through Control Centre (v6, 14.10.2026)
+
+The stripe stays above every window, on every Space and beside full-screen apps; ⚙ → **Always on top** turns it into
+an ordinary window and back, and the choice is remembered. With the Accessibility permission (granted 14.10.2026) a
+switch from the drop-down presses the network in Control Centre's Wi-Fi list, as a hand would, when the password way
+is not there. Check the road without switching:
+
+```
+open -n "/Applications/Connection Keeper (Mantra).app" --args --check-join    # one line in the log: CHECK join path …
+```

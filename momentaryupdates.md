@@ -48,4 +48,7 @@ nothing works. Waiting for Marko: type both Wi-Fi passwords in ⚙ → Password�
 
 > for connectionkeeper, please keep it always on top, which can be changed in the settings. I want to do both option 1 and option 2. I want to do password there and also allow accessibility.
 
-**Status:** in work 14.10.2026. Marko enabled Accessibility for Connection Keeper the same day.
+**Status:** built v6 14.10.2026. The stripe is always on top (status-bar level, every Space, beside full-screen apps),
+⚙ → Always on top turns it off and on, remembered (measured: layer 25 on, 0 off). Accessibility is granted and
+survived the rebuild; `--check-join` read Control Centre's Wi-Fi list (mantra, Something) without pressing anything.
+Waiting for Marko: ⚙ → Password… for mantra and for Something (option 1); no prompt of any kind comes from the app.

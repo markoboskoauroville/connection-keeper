@@ -1,6 +1,6 @@
 # connection-keeper: takeover
 
-**Version v5** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `5-connection-keeper-v5.zip`, tag `v5`
+**Version v6** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `6-connection-keeper-v6.zip`, tag `v6`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
 ## What it is
@@ -50,6 +50,19 @@ The drop-down joins from the stripe itself, at once, keeper or not, with the kee
 **NO OTHER CONNECTION:** when the ladder ends with nothing working, the keeper's phase begins with
 `NO OTHER CONNECTION` (`noOtherPrefix`) and the log says so; the stripe shows the phase bold red, wide, dot red, until
 `online()` sets the phase back to `ok`.
+
+## Always on top and the Control Centre road (v6)
+
+`OnTop` (stripe's UserDefaults key `alwaysOnTop`, default true): on = window level `.statusBar` (25) with
+`canJoinAllSpaces, fullScreenAuxiliary, stationary`; off = level `.normal`. ⚙ has the checkbox; a notification applies
+it at once. Measured: layer 25 on, 0 off.
+
+Control Centre does not open over a full-screen app (nothing over full-screen iTerm, the panel at once with Finder in
+front), so `ControlCenterWifi.click`/`list` bring Finder forward, act, close the panel and give the front back to the
+app that had it. `--check-join` (run with `open -n … --args --check-join` so the app's own Accessibility permission is
+what counts, not the terminal's) logs `CHECK join path: accessibility granted; Control Centre Wi-Fi list read: mantra,
+Something; stored passwords: …` and presses nothing. The Accessibility permission survived the rebuilds (stable
+"Mantra Apps" signature).
 
 ## The red alert (v4)
 
@@ -111,7 +124,7 @@ Test the ladder without touching the network:
 ## What has never been proven
 
 - **A join with a stored password and a join through Control Centre from the app have never run.** Marko has not
-  typed the passwords yet and the app has no Accessibility permission (14.10.2026). Proven: networksetup alone fails
+  typed the passwords yet and the app had no Accessibility permission (granted later on 14.10.2026; v6's `--check-join` read the Wi-Fi list at 11:19, still never pressed a row from the app). Proven: networksetup alone fails
   on macOS 15 (live test, see LESSONS), a pressed Control Centre row switches at once (done by hand through
   accessibility from the terminal, 10:06), the drop-down answers at once with the reason ("not in range"), the
   NO OTHER CONNECTION line seen red with `--simulate-offline`.

@@ -4,6 +4,17 @@ import AppKit
 
 let appName = "Connection Keeper (Mantra)"
 
+// ALWAYS ON TOP (v6, Marko 14.10.2026: "please keep it always on top, which can be changed in the settings").
+// A setting of the stripe only, remembered in its defaults; on unless he turns it off in ⚙.
+enum OnTop {
+    static let key = "alwaysOnTop"
+    static let changed = Notification.Name("ConnectionKeeperOnTopChanged")
+    static var on: Bool {
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: key); NotificationCenter.default.post(name: changed, object: nil) }
+    }
+}
+
 // TRAIL-like ground: dark, colour only for state. Green on, amber holding / working, red down,
 // grey present but not available.
 enum Ink {
@@ -76,8 +87,8 @@ final class Stripe: NSObject {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 30),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
-        panel.level = .floating
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        applyOnTop()
+        NotificationCenter.default.addObserver(forName: OnTop.changed, object: nil, queue: .main) { [weak self] _ in self?.applyOnTop() }
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
@@ -152,6 +163,18 @@ final class Stripe: NSObject {
 
         refresh()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
+    }
+
+    // On top: above ordinary and floating windows, on every Space, beside full-screen apps. Off: an ordinary window.
+    func applyOnTop() {
+        if OnTop.on {
+            panel.level = .statusBar
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+            panel.orderFrontRegardless()
+        } else {
+            panel.level = .normal
+            panel.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
+        }
     }
 
     func refresh() {
@@ -426,6 +449,16 @@ final class Stripe: NSObject {
         if settings == nil { settings = SettingsWindow() }
         settings?.show()
     }
+}
+
+// `--check-join`: can this app reach Control Centre's Wi-Fi list (Accessibility granted)? Reads it, presses nothing.
+if CommandLine.arguments.contains("--check-join") {
+    let r = ControlCenterWifi.list()
+    let line = "\(logStamp()) CHECK join path: accessibility \(AXIsProcessTrusted() ? "granted" : "NOT granted"); Control Centre Wi-Fi list " +
+        (r.ok ? "read: \(r.networks.joined(separator: ", "))" : "not read: \(r.detail)") +
+        "; stored passwords: " + Config.load().connections.map { "\($0.name) \(WifiPassword.has($0.name) ? "yes" : "no")" }.joined(separator: ", ")
+    print(line); appendLog(line)
+    exit(r.ok ? 0 : 1)
 }
 
 let app = NSApplication.shared

@@ -125,7 +125,23 @@ enum ControlCenterWifi {
         return nil
     }
 
-    static func click(_ ssid: String) -> (ok: Bool, detail: String) {
+    // Control Centre does not open over a full-screen app (measured 14.10.2026: nothing over full-screen iTerm,
+    // the panel at once with Finder in front). Finder comes forward for the moment; the app before it returns after.
+    static func withFinderInFront<T>(_ body: () -> T) -> T {
+        let before = NSWorkspace.shared.frontmostApplication
+        if let finder = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder").first {
+            finder.activate()
+            usleep(600_000)
+        }
+        let r = body()
+        if let before, before.bundleIdentifier != "com.apple.finder" { usleep(300_000); before.activate() }
+        return r
+    }
+
+    static func click(_ ssid: String) -> (ok: Bool, detail: String) { withFinderInFront { clickNow(ssid) } }
+    static func list() -> (ok: Bool, networks: [String], detail: String) { withFinderInFront { listNow() } }
+
+    static func clickNow(_ ssid: String) -> (ok: Bool, detail: String) {
         guard let cc = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.controlcenter").first else {
             return (false, "Control Centre is not running")
         }
@@ -157,6 +173,41 @@ enum ControlCenterWifi {
         usleep(500_000)
         close(opened)
         return err == .success ? (true, "pressed") : (false, "press failed (\(err.rawValue))")
+    }
+
+    // A dry look (v6): open the Wi-Fi list, read the networks it offers, close it, press nothing.
+    static func listNow() -> (ok: Bool, networks: [String], detail: String) {
+        guard AXIsProcessTrusted() else { return (false, [], "no Accessibility permission") }
+        guard let cc = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.controlcenter").first else {
+            return (false, [], "Control Centre is not running")
+        }
+        let app = AXUIElementCreateApplication(cc.processIdentifier)
+        guard let bar = attr(app, "AXExtrasMenuBar") else { return (false, [], "no menu bar extras") }
+        let barEl = bar as! AXUIElement
+        var opened: AXUIElement?
+        if let wifiItem = children(barEl).first(where: { ident($0) == "com.apple.menuextra.wifi" }) {
+            AXUIElementPerformAction(wifiItem, kAXPressAction as CFString); opened = wifiItem
+        } else if let ccItem = children(barEl).first(where: { ident($0) == "com.apple.menuextra.controlcenter" }) {
+            AXUIElementPerformAction(ccItem, kAXPressAction as CFString); opened = ccItem
+            guard let tile = wait(3, { find(app) { $0 == "controlcenter-wifi" } }) else { close(opened); return (false, [], "no Wi-Fi tile") }
+            var names: CFArray?
+            AXUIElementCopyActionNames(tile, &names)
+            guard let details = (names as? [String])?.first(where: { $0.contains("show details") }) else {
+                close(opened); return (false, [], "the Wi-Fi tile has no details action")
+            }
+            AXUIElementPerformAction(tile, details as CFString)
+        } else {
+            return (false, [], "no Control Centre in the menu bar")
+        }
+        _ = wait(4, { find(app) { $0.hasPrefix("wifi-network-") } })
+        var found: [String] = []
+        func collect(_ e: AXUIElement, _ depth: Int) {
+            if let i = ident(e), i.hasPrefix("wifi-network-") { found.append(String(i.dropFirst("wifi-network-".count))) }
+            if depth < 12 { children(e).forEach { collect($0, depth + 1) } }
+        }
+        collect(app, 0)
+        close(opened)
+        return (!found.isEmpty, found, found.isEmpty ? "the Wi-Fi list showed no networks" : "read the list")
     }
 
     // The panel closes with a second press on its menu bar item.

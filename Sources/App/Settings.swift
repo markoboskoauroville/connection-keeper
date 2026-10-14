@@ -10,6 +10,7 @@ final class SettingsWindow: NSObject {
     let addPopup = NSPopUpButton(frame: .zero, pullsDown: true)
     let interval = NSTextField(string: "")
     let dry = NSButton(checkboxWithTitle: "Dry run (the keeper only logs what it would do)", target: nil, action: nil)
+    let onTop = NSButton(checkboxWithTitle: "Always on top (the stripe stays above every window, on every Space)", target: nil, action: nil)
     var cfg = Config.load()
     let testAll = NSButton(title: "Speed test all", target: nil, action: nil)
     let speedStatus = NSTextField(labelWithString: "")
@@ -41,6 +42,8 @@ final class SettingsWindow: NSObject {
 
         dry.target = self
         dry.action = #selector(dryChanged)
+        onTop.target = self
+        onTop.action = #selector(onTopChanged)
 
         // The version, plain and dim; a click opens the newest release (version-visible.md).
         let version = NSButton(title: "v\(CKVersion)", target: self, action: #selector(openRelease))
@@ -54,7 +57,7 @@ final class SettingsWindow: NSObject {
         speedStatus.font = .systemFont(ofSize: 11)
         let speedRow = NSStackView(views: [testAll, speedStatus])
 
-        let stack = NSStackView(views: [alertLine, title, rows, speedRow, addPopup, intervalRow, dry, version])
+        let stack = NSStackView(views: [alertLine, title, rows, speedRow, addPopup, intervalRow, onTop, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -117,6 +120,7 @@ final class SettingsWindow: NSObject {
         }
         interval.stringValue = String(format: "%g", Double(cfg.intervalSeconds) / 60)
         dry.state = cfg.dryRun ? .on : .off
+        onTop.state = OnTop.on ? .on : .off
     }
 
     func small(_ t: String, _ a: Selector, _ tag: Int) -> NSButton {
@@ -168,6 +172,8 @@ final class SettingsWindow: NSObject {
         }
         rebuild()
     }
+
+    @objc func onTopChanged() { OnTop.on = onTop.state == .on }
 
     @objc func dryChanged() { cfg.dryRun = dry.state == .on; commit() }
 

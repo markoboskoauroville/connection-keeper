@@ -47,6 +47,10 @@
 - Wi-Fi power off and on does not bring back the first preferred network: macOS rejoined the one used last.
 - Control Centre's Wi-Fi list has no "Connect" in System Settings' ⋯ menu; Control Centre → Wi-Fi details →
   the row `wifi-network-<SSID>` is what switches (accessibility press, no mouse).
+- **Control Centre opens only when the front app is not full screen** (14.10.2026, menu bar set to hide): AXPress on
+  `com.apple.menuextra.controlcenter` returned success and nothing opened over full-screen iTerm; with Finder in front
+  the panel opened at once. Hence Finder forward for the moment.
+- A permission check run from the terminal answers for the terminal: `--check-join` must be started with `open -n`.
 - Two keepers (a test beside the agent) would fight; the flock on `keeper.lock` makes the second one leave.
 
 ## Live test, 14.10.2026 (Marko: "switch 5 min each connection a few times")
