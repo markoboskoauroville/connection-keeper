@@ -596,57 +596,65 @@ final class Stripe: NSObject {
     // pinged through itself: usable when it answers, greyed when not. A Wi-Fi not joined cannot be pinged before
     // joining, so "in range" is the most that can be known of it. The one carrying the internet has the tick.
     @objc func showConnections() {
+        // Every row is there from the first moment, saying "checking…", and only its words change when its answer comes:
+        // rows added to an open menu were cut and left a blank highlighted bar (18.10.2026).
         let menu = NSMenu()
         menu.autoenablesItems = false
-        let waiting = NSMenuItem(title: "checking the connections…", action: nil, keyEquivalent: "")
-        waiting.isEnabled = false
-        menu.addItem(waiting)
+        menu.minimumWidth = 460
         let cfg = Config.load()
+        let wifi = Net.wifiInterface()
+        let active = Net.activeInterfaces().filter { $0 != wifi }
+        var rows: [(item: NSMenuItem, kind: String, name: String, dev: String)] = []
+        func row(_ name: String, _ kind: String, _ dev: String) {
+            let item = NSMenuItem(title: "\(name)   checking…", action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            item.target = self
+            menu.addItem(item)
+            rows.append((item, kind, name, dev))
+        }
+        for c in cfg.connections where c.kind == "wifi" { row(c.name, "wifi", wifi ?? "") }
+        for c in cfg.connections where c.kind == "lan" { row(c.name, "lan", Net.lanDevice(c) ?? "") }
+        for i in active where !rows.contains(where: { $0.dev == i && $0.kind == "lan" }) { row(Net.displayName(i), "lan", i) }
         DispatchQueue.global().async {
-            let wifi = Net.wifiInterface()
             let route = Net.defaultRouteInterface()
             let ssid = wifi.flatMap { Net.currentSSID($0) }
             let wifiMs = wifi.flatMap { w in Net.ipAddress(w) != nil ? Net.onlineVia(w, host: cfg.pingHost) : nil }
             let near = Net.wifiInRange()
-            let active = Net.activeInterfaces().filter { $0 != wifi }
-            // his LAN connections (⚙) always, then any other device with an address now
-            var others: [(String, String, Double?)] = cfg.connections.filter { $0.kind == "lan" }.map { c in
-                let dev = Net.lanDevice(c) ?? ""
-                return (dev, c.name, active.contains(dev) ? Net.onlineVia(dev, host: cfg.pingHost) : nil) }
-            for i in active where !others.contains(where: { $0.0 == i }) { others.append((i, Net.displayName(i), Net.onlineVia(i, host: cfg.pingHost))) }
+            var lanMs: [String: Double] = [:]
+            for r in rows where r.kind == "lan" && active.contains(r.dev) { lanMs[r.dev] = Net.onlineVia(r.dev, host: cfg.pingHost) }
             let tests = WebSpeedByConnection.all()
             RunLoop.main.perform(inModes: [.common]) {
-                var at = menu.index(of: waiting)
-                menu.removeItem(waiting)
-                func add(_ title: String, _ ok: Bool, _ on: Bool, _ color: NSColor, _ action: Selector?, _ obj: String) {
-                    let item = NSMenuItem(title: title, action: ok ? action : nil, keyEquivalent: "")
-                    item.target = self
-                    item.representedObject = obj
-                    item.isEnabled = ok
-                    item.state = on ? .on : .off
-                    let t = NSMutableAttributedString(string: title, attributes: [
-                        .foregroundColor: ok ? color : Ink.grey, .font: NSFont.menuFont(ofSize: 0)])
-                    // the last speed test on this connection: download green, upload red (dimmed when not available)
-                    if let w = tests[obj] ?? tests[title.components(separatedBy: "   ").first ?? ""] {
-                        let f = NSFont.menuFont(ofSize: 0)
+                for r in rows {
+                    let live: Bool, ok: Bool, words: String, color: NSColor
+                    if r.kind == "wifi" {
+                        let inUse = r.name == ssid
+                        live = inUse && route == wifi
+                        ok = inUse ? wifiMs != nil : near.contains(r.name)
+                        words = "Wi-Fi · " + (inUse ? (wifiMs.map { String(format: "ping %.0f ms", $0) } ?? "joined, no internet")
+                                              : near.contains(r.name) ? "in range" : "not in range")
+                        color = Ink.green
+                        r.item.action = #selector(self.pick(_:)); r.item.representedObject = r.name
+                    } else {
+                        let ms = lanMs[r.dev]
+                        live = route == r.dev && !r.dev.isEmpty
+                        ok = ms != nil
+                        words = "cable · " + (ms.map { String(format: "ping %.0f ms", $0) } ?? (active.contains(r.dev) ? "no internet" : "not plugged in"))
+                        color = Ink.yellow
+                        r.item.action = #selector(self.pickDevice(_:)); r.item.representedObject = r.dev
+                    }
+                    // v12 (Marko: "add to live connection in parentheses (LIVE) ... this is clearer"): the one carrying the internet
+                    let f = NSFont.menuFont(ofSize: 0)
+                    let t = NSMutableAttributedString(string: "\(r.name)\(live ? " (LIVE)" : "")   \(words)",
+                                                      attributes: [.foregroundColor: ok ? color : Ink.grey, .font: f])
+                    // the last speed test on this connection: download green, upload red (grey when not available)
+                    if let w = tests[r.name] {
                         t.append(NSAttributedString(string: "  · ", attributes: [.foregroundColor: Ink.grey, .font: f]))
                         t.append(NSAttributedString(string: String(format: "%.1f", w.down_mbps), attributes: [.foregroundColor: ok ? Ink.green : Ink.grey, .font: f]))
-                        t.append(NSAttributedString(string: " ", attributes: [.font: f]))
-                        t.append(NSAttributedString(string: String(format: "%.1f Mbit/s", w.up_mbps), attributes: [.foregroundColor: ok ? Ink.red : Ink.grey, .font: f]))
+                        t.append(NSAttributedString(string: String(format: " %.1f Mbit/s", w.up_mbps), attributes: [.foregroundColor: ok ? Ink.red : Ink.grey, .font: f]))
                     }
-                    item.attributedTitle = t
-                    menu.insertItem(item, at: at); at += 1
-                }
-                for c in cfg.connections where c.kind == "wifi" {
-                    let inUse = c.name == ssid
-                    let ok = c.enabled && (inUse ? wifiMs != nil : near.contains(c.name))
-                    let state = inUse ? (wifiMs.map { String(format: "online %.0f ms", $0) } ?? "joined, no internet")
-                        : near.contains(c.name) ? "in range" : "not available"
-                    add("\(c.name)   Wi-Fi · \(state)", ok, inUse && route == wifi, Ink.green, #selector(self.pick(_:)), c.name)
-                }
-                for (i, name, ms) in others {
-                    add("\(name)   LAN · \(ms.map { String(format: "online %.0f ms", $0) } ?? "not available")", ms != nil, route == i,
-                        Ink.yellow, #selector(self.pickDevice(_:)), i)
+                    r.item.attributedTitle = t
+                    r.item.isEnabled = ok
+                    r.item.state = live ? .on : .off
                 }
                 menu.update()
             }

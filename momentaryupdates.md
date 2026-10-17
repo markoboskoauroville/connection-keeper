@@ -203,4 +203,10 @@ the name in System Settings → Network ("AX88179B" for the USB-C LAN on en17).
 
 > open plese add to live connection in parentecis (LIVE) there was some other text not so clear what it menas this is clerar
 
-**Status:** open.
+**Status (request 24, all its parts):** built v12 18.10.2026. The drop-down lists his connections from ⚙ (Wi-Fi and,
+new, LAN cable devices: "Add a LAN (cable) device…") and every other device with an address; each row is there at once
+("checking…") and fills itself while open: "mantra (LIVE)   Wi-Fi · ping 28 ms · 23.1 28.6 Mbit/s" (download green,
+upload red), "Something   Wi-Fi · not in range" greyed, "AX88179B   cable · ping 27 ms" yellow. A pick puts that
+device first in macOS's service order (no password, proven: en17 above Wi-Fi). The keeper has a LAN driver, so a cable
+in the list is a failover target. Speed tests are kept per connection. Seen by Marko (screenshots 01:47, 01:58); the
+in-place rows after the cut/blank-bar fix not yet seen.
