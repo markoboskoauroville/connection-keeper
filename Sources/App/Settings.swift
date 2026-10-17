@@ -8,6 +8,7 @@ final class SettingsWindow: NSObject {
     let window: NSWindow
     let rows = NSStackView()
     let addPopup = NSPopUpButton(frame: .zero, pullsDown: true)
+    let addLanPopup = NSPopUpButton(frame: .zero, pullsDown: true)   // v12: "add lan interface meaning cable interface"
     let interval = NSTextField(string: "")
     let dry = NSButton(checkboxWithTitle: "Dry run (the keeper only logs what it would do)", target: nil, action: nil)
     let onTop = NSButton(checkboxWithTitle: "Always on top (the stripe stays above every window, on every Space)", target: nil, action: nil)
@@ -38,6 +39,8 @@ final class SettingsWindow: NSObject {
 
         addPopup.target = self
         addPopup.action = #selector(add(_:))
+        addLanPopup.target = self
+        addLanPopup.action = #selector(addLan(_:))
 
         interval.alignment = .right
         interval.widthAnchor.constraint(equalToConstant: 50).isActive = true
@@ -86,7 +89,7 @@ final class SettingsWindow: NSObject {
         alertLine.maximumNumberOfLines = 0
         alertLine.preferredMaxLayoutWidth = 560
 
-        let stack = NSStackView(views: [alertLine, title, rows, speedRow, addPopup, intervalRow, unitRow, dataRow, dataAutoRow, onTop, dry, version])
+        let stack = NSStackView(views: [alertLine, title, rows, speedRow, NSStackView(views: [addPopup, addLanPopup]), intervalRow, unitRow, dataRow, dataAutoRow, onTop, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -128,7 +131,7 @@ final class SettingsWindow: NSObject {
             on.state = c.enabled ? .on : .off
             on.tag = i
             on.widthAnchor.constraint(equalToConstant: 220).isActive = true
-            let kind = NSTextField(labelWithString: c.kind == "wifi" ? "Wi-Fi" : "\(c.kind) (not driven yet)")
+            let kind = NSTextField(labelWithString: c.kind == "wifi" ? "Wi-Fi" : c.kind == "lan" ? "LAN (cable)" : "\(c.kind) (not driven yet)")
             kind.textColor = .secondaryLabelColor
             kind.widthAnchor.constraint(equalToConstant: 80).isActive = true
             let up = small("▲", #selector(moveUp(_:)), i); up.isEnabled = i > 0
@@ -149,6 +152,12 @@ final class SettingsWindow: NSObject {
         let have = Set(cfg.connections.map { $0.name })
         for name in Net.preferredNetworks(Net.wifiInterface() ?? "en0") where !have.contains(name) {
             addPopup.addItem(withTitle: name)
+        }
+        addLanPopup.removeAllItems()
+        addLanPopup.addItem(withTitle: "Add a LAN (cable) device…")
+        for (name, device) in Net.lanServices() where !have.contains(name) {
+            addLanPopup.addItem(withTitle: "\(name)\(Net.ipAddress(device) != nil ? "  (cable in now)" : "")")
+            addLanPopup.lastItem?.representedObject = name
         }
         interval.stringValue = String(format: "%g", Double(cfg.intervalSeconds) / 60)
         dry.state = cfg.dryRun ? .on : .off
@@ -209,6 +218,12 @@ final class SettingsWindow: NSObject {
     @objc func add(_ p: NSPopUpButton) {
         guard p.indexOfSelectedItem > 0, let name = p.titleOfSelectedItem else { return }
         cfg.connections.append(Connection(kind: "wifi", name: name))
+        commit()
+    }
+
+    @objc func addLan(_ p: NSPopUpButton) {
+        guard p.indexOfSelectedItem > 0, let name = p.selectedItem?.representedObject as? String else { return }
+        cfg.connections.append(Connection(kind: "lan", name: name, interface: Net.lanServices().first { $0.name == name }?.device))
         commit()
     }
 

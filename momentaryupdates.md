@@ -197,4 +197,6 @@ the name in System Settings → Network ("AX88179B" for the USB-C LAN on en17).
 
 > please see the latest screenshot. The section is missing "add lan interface meaning cable interface"
 
+> besides the ping, you can also add the last test speed
+
 **Status:** open.

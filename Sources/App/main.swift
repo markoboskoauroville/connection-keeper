@@ -605,7 +605,12 @@ final class Stripe: NSObject {
             let ssid = wifi.flatMap { Net.currentSSID($0) }
             let wifiMs = wifi.flatMap { w in Net.ipAddress(w) != nil ? Net.onlineVia(w, host: cfg.pingHost) : nil }
             let near = Net.wifiInRange()
-            let others = Net.activeInterfaces().filter { $0 != wifi }.map { ($0, Net.displayName($0), Net.onlineVia($0, host: cfg.pingHost)) }
+            let active = Net.activeInterfaces().filter { $0 != wifi }
+            // his LAN connections (⚙) always, then any other device with an address now
+            var others: [(String, String, Double?)] = cfg.connections.filter { $0.kind == "lan" }.map { c in
+                let dev = Net.lanDevice(c) ?? ""
+                return (dev, c.name, active.contains(dev) ? Net.onlineVia(dev, host: cfg.pingHost) : nil) }
+            for i in active where !others.contains(where: { $0.0 == i }) { others.append((i, Net.displayName(i), Net.onlineVia(i, host: cfg.pingHost))) }
             RunLoop.main.perform(inModes: [.common]) {
                 var at = menu.index(of: waiting)
                 menu.removeItem(waiting)
@@ -627,7 +632,7 @@ final class Stripe: NSObject {
                     add("\(c.name)   Wi-Fi · \(state)", ok, inUse && route == wifi, Ink.green, #selector(self.pick(_:)), c.name)
                 }
                 for (i, name, ms) in others {
-                    add("\(name)   \(ms.map { String(format: "online %.0f ms", $0) } ?? "no internet")", ms != nil, route == i,
+                    add("\(name)   LAN · \(ms.map { String(format: "online %.0f ms", $0) } ?? "not available")", ms != nil, route == i,
                         Ink.yellow, #selector(self.pickDevice(_:)), i)
                 }
                 menu.update()

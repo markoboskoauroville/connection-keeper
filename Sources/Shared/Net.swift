@@ -108,6 +108,28 @@ enum Net {
         return r.status == 0 && !r.out.contains("rror") ? (true, "\(mine) first") : (false, r.out.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
+    // The cable devices macOS has a network service for (USB LAN adapters, Ethernet, a tethered phone), by the name in
+    // System Settings → Network, with their device: [("AX88179B", "en17"), ("iPhone USB", "en8"), …]. Wi-Fi, the
+    // Thunderbolt bridge and services without a device are left out.
+    static func lanServices() -> [(name: String, device: String)] {
+        let lines = shell("/usr/sbin/networksetup", ["-listnetworkserviceorder"]).out.components(separatedBy: "\n")
+        var out: [(String, String)] = []
+        for (i, line) in lines.enumerated() {
+            guard let r = line.range(of: #"^\([0-9*]+\) "#, options: .regularExpression), i + 1 < lines.count,
+                  let d = lines[i + 1].range(of: #"Device: ([a-z0-9]+)\)"#, options: .regularExpression) else { continue }
+            let name = String(line[r.upperBound...])
+            let device = String(lines[i + 1][d].dropFirst("Device: ".count).dropLast())
+            if lines[i + 1].contains("Hardware Port: Wi-Fi") || name.contains("Thunderbolt Bridge") || device.hasPrefix("bridge") { continue }
+            out.append((name, device))
+        }
+        return out
+    }
+
+    // The device of a LAN connection now (a USB adapter may get another enX when plugged elsewhere): by its service name.
+    static func lanDevice(_ c: Connection) -> String? {
+        lanServices().first { $0.name == c.name }?.device ?? c.interface
+    }
+
     static func currentSSID(_ iface: String) -> String? {
         let out = shell("/usr/sbin/ipconfig", ["getsummary", iface]).out
         for line in out.components(separatedBy: "\n") {

@@ -57,7 +57,20 @@ struct WifiDriver: Driver {
     }
 }
 
-let drivers: [String: Driver] = ["wifi": WifiDriver()]
+// LAN (v12, Marko 18.10.2026: "add lan interface meaning cable interface"): a cable that answers through itself goes
+// to the top of the service order, and the internet goes through it.
+struct LanDriver: Driver {
+    func activate(_ c: Connection, keeper: Keeper) -> Bool {
+        guard let dev = Net.lanDevice(c), Net.ipAddress(dev) != nil else { keeper.log("LAN \"\(c.name)\": no cable or no address"); return false }
+        guard Net.onlineVia(dev, host: keeper.cfg.pingHost) != nil else { keeper.log("LAN \"\(c.name)\" (\(dev)): no internet through it"); return false }
+        if keeper.dryRun { keeper.log("WOULD put LAN \"\(c.name)\" (\(dev)) first"); return false }
+        let r = Net.prefer(dev)
+        keeper.log("LAN \"\(c.name)\" (\(dev)): " + r.detail)
+        return r.ok
+    }
+}
+
+let drivers: [String: Driver] = ["wifi": WifiDriver(), "lan": LanDriver()]
 
 final class Keeper {
     var cfg = Config.load()
