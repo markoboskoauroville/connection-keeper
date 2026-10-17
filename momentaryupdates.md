@@ -109,7 +109,7 @@ Then, in the same session:
 SMS typed letter by letter, the reply opened and held 15 s. No Claude (the AI may not type the router password; the
 script does). Proven without an SMS (`router-sms inbox --visible`, 20–30 s). The warm router-sms server is stopped:
 it held the router's only session and was why the check failed ("no New Message form"). The first real check is
-Marko's click on the stripe.
+Marko's click on the stripe. **Marko, 18.10.2026: "I clicked on GB. Left it everything looks fantastic"** — confirmed.
 
 ## 18.10.2026, request 16
 
