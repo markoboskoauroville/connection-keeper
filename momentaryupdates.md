@@ -172,3 +172,9 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 > also for the device used for connecting to the network, every Wi-Fi device will be green. Every LAN port hardware port or maybe tethering through phone will be yellow. Green and yellow, so we are also doing the thing with network devices
 
 **Status:** built v12 18.10.2026: the connection's name is green when the internet goes through Wi-Fi, yellow through anything else (LAN, USB adapter, phone tethering).
+
+## 18.10.2026, request 23 (v12 bug)
+
+> there must be some bug. I always see en0 as device, but I'm changing the devices. What is the n0? Why is the persistence
+
+**Status:** open.
