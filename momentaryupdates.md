@@ -210,3 +210,15 @@ upload red), "Something   Wi-Fi · not in range" greyed, "AX88179B   cable · pi
 device first in macOS's service order (no password, proven: en17 above Wi-Fi). The keeper has a LAN driver, so a cable
 in the list is a failover target. Speed tests are kept per connection. Seen by Marko (screenshots 01:47, 01:58); the
 in-place rows after the cut/blank-bar fix not yet seen.
+
+## 18.10.2026, request 25 (for the cloud session building the aggregation proxy, branch claude/dreamy-dirac-n94gqc)
+
+> okay, then write the message to that session that it needs to ignore. If LAN and WiFi are coming from the same devices, these are not different devices. It needs to aggregate only devices which are different
+
+**For the aggregation proxy:** aggregate only connections that leave the house through *different* devices. Measured on
+this Mac on 18.10.2026: the cable (AX88179B, en17, 192.168.1.103) and the Wi-Fi ("mantra", en0, 192.168.1.102) both
+go through the same TP-Link 4G router (192.168.1.1, one Telemach SIM), and each gives about 25–33 Mbit/s on
+speedtest.net, the same line either way. Such a pair is one connection and must be ignored for aggregation. A way
+to tell: the same gateway (router address and its MAC, `arp -n <gateway>` on each device) or the same public IP
+(`curl --interface <device> https://api.ipify.org`) means the same uplink. A different uplink is, for example, a phone
+on another SIM tethered over USB, or a Wi-Fi from another router.
