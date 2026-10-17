@@ -160,4 +160,9 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 
 > not tested
 
+> trere doots inside parenthesis
+
+> color: yellow
+> color ping section yelloiw
+
 **Status:** open.
