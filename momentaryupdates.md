@@ -222,3 +222,5 @@ speedtest.net, the same line either way. Such a pair is one connection and must 
 to tell: the same gateway (router address and its MAC, `arp -n <gateway>` on each device) or the same public IP
 (`curl --interface <device> https://api.ipify.org`) means the same uplink. A different uplink is, for example, a phone
 on another SIM tethered over USB, or a Wi-Fi from another router.
+
+Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` both answer the same public IP, 86.33.86.202 (Telemach).
