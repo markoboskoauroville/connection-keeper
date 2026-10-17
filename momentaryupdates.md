@@ -195,4 +195,6 @@ the name in System Settings → Network ("AX88179B" for the USB-C LAN on en17).
 
 > yes, very nice. But at the same time I have also Wi-Fi enabled, which is right now what is active is Mantra. But also something needs to be grayed out because it's not available at this moment
 
+> please see the latest screenshot. The section is missing "add lan interface meaning cable interface"
+
 **Status:** open.
