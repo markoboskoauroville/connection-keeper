@@ -183,4 +183,6 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 
 > App should check all internet connections and offer only the one which is online now. Offline doesn't make sense to offer. Make it live, real app please
 
+> for test now, try to switch between LAN connection and Wi-Fi connection. I just connected to USB-C my LAN interface. There is a cable in, so it should also give internet
+
 **Status:** open.

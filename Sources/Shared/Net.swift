@@ -59,6 +59,36 @@ enum Net {
         return iface
     }
 
+    // LIVE (v12, Marko 18.10.2026: "check all internet connections and offer only the one which is online now ... Make
+    // it live"): the Wi-Fi networks in range this moment, by name. system_profiler still names them where CoreWLAN's
+    // scan gives nil without the Location permission. About 3 s; call it off the main thread.
+    static func wifiInRange() -> Set<String> {
+        let out = shell("/usr/sbin/system_profiler", ["SPAirPortDataType"], timeout: 20).out
+        var names = Set<String>(), inList = false
+        for line in out.components(separatedBy: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t == "Current Network Information:" || t == "Other Local Wi-Fi Networks:" { inList = true; continue }
+            let indent = line.prefix { $0 == " " }.count
+            if inList && indent <= 10 && !t.isEmpty { inList = false }
+            if inList && indent == 12 && t.hasSuffix(":") { names.insert(String(t.dropLast())) }
+        }
+        return names
+    }
+
+    // The devices that have an address now (Wi-Fi, a cable, a USB adapter, a tethered phone), not the Mac's own.
+    static func activeInterfaces() -> [String] {
+        let all = shell("/sbin/ifconfig", ["-l"], timeout: 5).out.split(separator: " ").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let skip = ["lo", "gif", "stf", "utun", "awdl", "llw", "anpi", "ap", "bridge"]
+        return all.filter { i in !skip.contains { i.hasPrefix($0) } && ipAddress(i) != nil }
+    }
+
+    // The internet through this one device, without switching anything: one ping bound to it. The ms, or nil.
+    static func onlineVia(_ iface: String, host: String = "1.1.1.1") -> Double? {
+        let r = shell("/sbin/ping", ["-b", iface, "-c", "1", "-t", "3", host], timeout: 6)
+        guard r.status == 0, let m = r.out.range(of: #"time=([0-9.]+)"#, options: .regularExpression) else { return nil }
+        return Double(r.out[m].dropFirst(5))
+    }
+
     static func currentSSID(_ iface: String) -> String? {
         let out = shell("/usr/sbin/ipconfig", ["getsummary", iface]).out
         for line in out.components(separatedBy: "\n") {

@@ -586,16 +586,48 @@ final class Stripe: NSObject {
         return Net.displayName(i)
     }
 
+    // v12 LIVE (Marko 18.10.2026: "offer only the one which is online now. Offline doesn't make sense to offer"): the
+    // drop-down opens with "checking…" and fills itself while open: every device with an address is pinged through
+    // itself (online ✓ and its ms, or left out); the Wi-Fi networks of the list are offered only when in range now.
+    // A Wi-Fi not joined cannot be pinged before joining, so "in range" is the most that can be known of it.
     @objc func showConnections() {
         let menu = NSMenu()
-        let current = (state?.isFresh ?? false) ? state?.current : here
-        for c in Config.load().connections {
-            let item = NSMenuItem(title: "\(c.name)\(c.kind == "wifi" ? "" : "  (\(c.kind))")", action: #selector(pick(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = c.name
-            item.state = c.name == current ? .on : .off
-            item.isEnabled = c.enabled && c.kind == "wifi"
-            menu.addItem(item)
+        menu.autoenablesItems = false
+        let waiting = NSMenuItem(title: "checking the connections…", action: nil, keyEquivalent: "")
+        waiting.isEnabled = false
+        menu.addItem(waiting)
+        let cfg = Config.load()
+        DispatchQueue.global().async {
+            let wifi = Net.wifiInterface()
+            var online: [(name: String, ms: Double, wifi: Bool)] = []
+            for i in Net.activeInterfaces() {
+                if let ms = Net.onlineVia(i, host: cfg.pingHost) { online.append((Net.displayName(i), ms, i == wifi)) }
+            }
+            let near = Net.wifiInRange()
+            let joinable = cfg.connections.filter { $0.enabled && $0.kind == "wifi" && near.contains($0.name) && !online.contains { o in o.name == $0.name } }
+            RunLoop.main.perform(inModes: [.common]) {
+                var at = menu.index(of: waiting)
+                menu.removeItem(waiting)
+                for o in online {
+                    let item = NSMenuItem(title: String(format: "%@   online ✓ %.0f ms", o.name, o.ms), action: nil, keyEquivalent: "")
+                    item.state = .on
+                    item.isEnabled = false
+                    item.attributedTitle = NSAttributedString(string: item.title, attributes: [.foregroundColor: o.wifi ? Ink.green : Ink.yellow, .font: NSFont.menuFont(ofSize: 0)])
+                    menu.insertItem(item, at: at); at += 1
+                }
+                for c in joinable {
+                    let item = NSMenuItem(title: "\(c.name)   in range, switch to it", action: #selector(self.pick(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.representedObject = c.name
+                    menu.insertItem(item, at: at); at += 1
+                }
+                if online.isEmpty && joinable.isEmpty {
+                    let none = NSMenuItem(title: "no connection online", action: nil, keyEquivalent: "")
+                    none.isEnabled = false
+                    menu.insertItem(none, at: at)
+                }
+                menu.update()
+            }
         }
         menu.addItem(.separator())
         let check = NSMenuItem(title: "Check now", action: #selector(checkNow), keyEquivalent: "")
