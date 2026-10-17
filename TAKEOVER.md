@@ -188,3 +188,15 @@ Test the ladder without touching the network:
 - The LaunchAgent was loaded on 14.10.2026 and ran; start at login and restart after a crash are untested.
 - A captive portal has only been reasoned about, never met.
 - The stripe's speed was seen moving (5 kB/s → 198 kB/s) but not compared against another meter.
+
+## State on 18.10.2026 (v12)
+
+- The stripe: connection (green Wi-Fi / yellow other) | speed with the last speedtest.net result in parentheses
+  (green down, red up) | ping (yellow) | data left; the status and failover places only when they have something to say.
+- A click on the speed runs `speedtest-firefox --visible` (Tools/, linked into ~/.local/bin; kept profile
+  ~/Library/Application Support/connection-keeper/firefox); a click on the data runs `router-sms balance --visible`.
+- At start: pingNow, then `router-sms balance` then `speedtest-firefox`, both headless; again once past midnight
+  (`newDay`). Each speed test costs about 100 MB of the SIM.
+- The router-sms warm server is unloaded and must stay so (one router session).
+- Never proven: the red alert's look with the v12 hidden places (`--simulate-failover`), the yellow colour on a cable
+  or tethered phone (no cable plugged in on 18.10.2026).

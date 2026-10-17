@@ -1,6 +1,7 @@
 // Connection Keeper (Mantra): one floating stripe that shows the connection, its speed and the
 // keeper's last word, with a drop-down to switch by hand and a gear for the list of connections.
 import AppKit
+import CoreWLAN
 
 let appName = "Connection Keeper (Mantra)"
 
@@ -69,7 +70,7 @@ func speedSample() -> String {
 
 // v12 (Marko 18.10.2026: "you're using too much of my real estate ... remove internet ... just in parentheses. Put the
 // test results ... I don't need the time"): the last speedtest.net result in parentheses after each live number, in
-// Mbit/s (MB/s when the unit is bytes); "(…)" while a test runs, "(✗)" for 30 s after one failed.
+// Mbit/s (MB/s when the unit is bytes); "(...)" until this run has tested, "(✗)" for 30 s after one failed.
 func testPart(_ mbps: Double?, mark: String?) -> String {
     let inner: String
     if let mark { inner = mark }
@@ -77,6 +78,13 @@ func testPart(_ mbps: Double?, mark: String?) -> String {
     else { inner = "—" }
     let t = "(\(inner))"
     return String(repeating: " ", count: max(0, 7 - t.count)) + t
+}
+
+// v12 (Marko 18.10.2026: "every Wi-Fi device will be green. Every LAN port hardware port or maybe tethering through
+// phone will be yellow"): the connection's name takes the colour of the device the internet goes through.
+func isWiFi(_ iface: String?) -> Bool {
+    guard let iface else { return false }
+    return CWWiFiClient.shared().interfaceNames()?.contains(iface) ?? false
 }
 
 func ago(_ d: Date?) -> String {
@@ -104,7 +112,7 @@ final class Stripe: NSObject {
     let data = NSButton(title: "data —", target: nil, action: nil)   // v8: the Telemach balance; a click asks now
     var dataBusy = false
     var lastTest = WebSpeed.load()              // v11/v12: the last speedtest.net result, in parentheses beside the speed
-    var testMark: String?                       // "…" while a test runs, "✗" after a failure
+    var testMark: String?                       // "..." until tested, "✗" after a failure
     var webBusy = false
     var webHeld = Date.distantPast
     var dataHeld = Date.distantPast             // a failed check's words stay until then
@@ -523,6 +531,7 @@ final class Stripe: NSObject {
         let cfg = Config.load()
         let current = alive ? state?.current : here
         connButton.title = (current ?? "no network") + " ▾"
+        if !red && !noOther { connButton.contentTintColor = iface == nil ? Ink.dim : isWiFi(iface) ? Ink.green : Ink.yellow }
 
         if Date() < pingHeld { return }            // a pressed ping's answer is being shown
 

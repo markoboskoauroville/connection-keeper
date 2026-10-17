@@ -135,7 +135,7 @@ reply, which led to the router-sms fix (each look reloads the page); after it 23
 
 > I'm confused why I always get a fresh web browser with these tests. I'm installing uBlock plugin not to see advertisement from speed test, and every time I run the speed test it looks like a new browser without any plugins. And I need to be forced to look at advertisement. Very bad also, you're using too much of my real estate. I told you next on the internet connection and remove internet. Understand it's internet just in parentheses. Put the test results. I don't need a new section, and I don't need the time when it was tested. I don't care about the time. I don't care
 
-**Status:** open.
+**Status:** built v12 18.10.2026: the speed test's Firefox keeps one profile (~/Library/Application Support/connection-keeper/firefox), so uBlock installed there once stays, behind the scenes too; the test result sits in parentheses after each live number, no item of its own, no time, no word "internet".
 
 ## 18.10.2026, request 19 (v12)
 
@@ -143,7 +143,7 @@ reply, which led to the router-sms fix (each look reloads the page); after it 23
 
 > also, I don't need arrowsness to do speed because we're going to do color coding. Green number means download, red number means upload. That's all
 
-**Status:** open.
+**Status:** built v12 18.10.2026: no "checked … ago", no failover text (the status place shows only when it has something to say, the failover place only in the red alert), no time on the data ("98.5 GB left"), spacing 3 instead of 6, smaller margins; no arrows, download green, upload red.
 
 ## 18.10.2026, request 20 (v12)
 
@@ -165,10 +165,10 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 > color: yellow
 > color ping section yelloiw
 
-**Status:** open.
+**Status:** built v12 18.10.2026: at start the ping, the data and the speed test run at once (behind the scenes); until each answers its place says (...); the ping section is yellow.
 
 ## 18.10.2026, request 22 (v12)
 
 > also for the device used for connecting to the network, every Wi-Fi device will be green. Every LAN port hardware port or maybe tethering through phone will be yellow. Green and yellow, so we are also doing the thing with network devices
 
-**Status:** open.
+**Status:** built v12 18.10.2026: the connection's name is green when the internet goes through Wi-Fi, yellow through anything else (LAN, USB adapter, phone tethering).

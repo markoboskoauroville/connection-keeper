@@ -127,3 +127,17 @@ no value yet. Only a click by hand opens a window.
 ```
 speedtest-firefox [--visible] [--json]     # Tools/speedtest-firefox, linked into ~/.local/bin
 ```
+
+## One line, less of it, colours instead of words (v12, 18.10.2026)
+
+![the stripe, v12](docs/v12-stripe.png)
+
+The stripe says only what matters, in one line (MANTRA_MANIFEST modules/one-line-stripe.md): the connection (green
+on Wi-Fi, yellow on a cable, USB adapter or phone), the live internet speed with the last speedtest.net result in
+parentheses (download green, upload red, no arrows, no time), the ping in yellow, the data left ("98.5 GB left", no
+time). "checked … ago" and "failover … ago" are gone; the status place appears only when it has something to say
+(NO OTHER CONNECTION, a ping answer, a switch), the failover place only in the red alert. At every start the ping,
+the data and the speed test run at once behind the scenes, and each place says (...) until its answer comes.
+
+The speed test's Firefox keeps one profile, `~/Library/Application Support/connection-keeper/firefox`: an add-on
+installed there once (uBlock Origin, against the advertisements) stays for every test.

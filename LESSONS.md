@@ -102,3 +102,17 @@ switch itself does not work in v4.
 
 The Firefox download (Video Download Helper, HLS, 1.6 GB) survived the 09:42 change of network and finished at
 09:53 on Something.
+
+## 18.10.2026 (v11, v12)
+
+- **The router allows one session**, so nothing may stay logged in to it in the background (the router-sms warm server
+  did, and every check failed by turns); and it shows a new SMS only to a freshly loaded page. Both are in
+  router-sms's LESSONS; the rule in MANTRA_MANIFEST modules/tp-link-router.md.
+- **The AI never types a router password.** Request 15 asked for Claude in Chrome; the script types it instead, which
+  also turned out faster and free (no Claude run per click).
+- **A throwaway Firefox profile loses what he installs in it** (uBlock, 18.10.2026). The speed test keeps one profile;
+  router-sms still uses a throwaway one (nothing to keep there).
+- **A fixed-width label wraps when its sample is one character short**: the padded "(25.6)" is seven places, the
+  sample had six. One line is a manifest rule now (modules/one-line-stripe.md).
+- **speedtest.net 2026 has no stable class names**: GO is a button whose text is "GO", the numbers are read from the
+  page's words after DOWNLOAD Mbps / UPLOAD Mbps / Ping ms, and the test is over when the address becomes /result/<id>.
