@@ -199,4 +199,8 @@ the name in System Settings → Network ("AX88179B" for the USB-C LAN on en17).
 
 > besides the ping, you can also add the last test speed
 
+> I'm talking about a small menu that opens the menu to change the connection
+
+> open plese add to live connection in parentecis (LIVE) there was some other text not so clear what it menas this is clerar
+
 **Status:** open.

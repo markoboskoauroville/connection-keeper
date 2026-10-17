@@ -40,6 +40,20 @@ struct WebSpeed: Codable {
     }
 }
 
+// v12 (Marko 18.10.2026: "besides the ping, you can also add the last test speed", in the drop-down): every result is
+// also kept under the connection it was measured on, so each row of the drop-down shows its own.
+enum WebSpeedByConnection {
+    static let file = Paths.support.appendingPathComponent("speedtest-by-connection.json")
+    static func all() -> [String: WebSpeed] {
+        guard let d = try? Data(contentsOf: file) else { return [:] }
+        return (try? JSONDecoder().decode([String: WebSpeed].self, from: d)) ?? [:]
+    }
+    static func record(_ s: WebSpeed, on name: String) {
+        var a = all(); a[name] = s
+        try? JSONEncoder().encode(a).write(to: file, options: .atomic)
+    }
+}
+
 // "I need to have the values for this day": a value whose date is not today is checked again behind the scenes.
 func isToday(_ at: String?) -> Bool {
     guard let at else { return false }

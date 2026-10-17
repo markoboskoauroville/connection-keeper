@@ -361,10 +361,13 @@ final class Stripe: NSObject {
         appendLog("\(logStamp()) SPEEDTEST asked\(visible ? " in front of him" : " behind the scenes")")
         DispatchQueue.global().async {
             let r = WebSpeed.run(visible: visible)
+            let on = Net.defaultRouteInterface().map(Net.displayName)   // the connection it was measured on
             DispatchQueue.main.async {
                 self.webBusy = false
                 switch r {
-                case .success: self.showWebSpeed()
+                case .success(let w):
+                    if let on { WebSpeedByConnection.record(w, on: on) }
+                    self.showWebSpeed()
                 case .failure(let e):
                     appendLog("\(logStamp()) SPEEDTEST FAILED: \(e.localizedDescription)")
                     self.webHeld = Date().addingTimeInterval(30)
@@ -611,6 +614,7 @@ final class Stripe: NSObject {
                 let dev = Net.lanDevice(c) ?? ""
                 return (dev, c.name, active.contains(dev) ? Net.onlineVia(dev, host: cfg.pingHost) : nil) }
             for i in active where !others.contains(where: { $0.0 == i }) { others.append((i, Net.displayName(i), Net.onlineVia(i, host: cfg.pingHost))) }
+            let tests = WebSpeedByConnection.all()
             RunLoop.main.perform(inModes: [.common]) {
                 var at = menu.index(of: waiting)
                 menu.removeItem(waiting)
@@ -620,8 +624,17 @@ final class Stripe: NSObject {
                     item.representedObject = obj
                     item.isEnabled = ok
                     item.state = on ? .on : .off
-                    item.attributedTitle = NSAttributedString(string: title, attributes: [
+                    let t = NSMutableAttributedString(string: title, attributes: [
                         .foregroundColor: ok ? color : Ink.grey, .font: NSFont.menuFont(ofSize: 0)])
+                    // the last speed test on this connection: download green, upload red (dimmed when not available)
+                    if let w = tests[obj] ?? tests[title.components(separatedBy: "   ").first ?? ""] {
+                        let f = NSFont.menuFont(ofSize: 0)
+                        t.append(NSAttributedString(string: "  · ", attributes: [.foregroundColor: Ink.grey, .font: f]))
+                        t.append(NSAttributedString(string: String(format: "%.1f", w.down_mbps), attributes: [.foregroundColor: ok ? Ink.green : Ink.grey, .font: f]))
+                        t.append(NSAttributedString(string: " ", attributes: [.font: f]))
+                        t.append(NSAttributedString(string: String(format: "%.1f Mbit/s", w.up_mbps), attributes: [.foregroundColor: ok ? Ink.red : Ink.grey, .font: f]))
+                    }
+                    item.attributedTitle = t
                     menu.insertItem(item, at: at); at += 1
                 }
                 for c in cfg.connections where c.kind == "wifi" {
