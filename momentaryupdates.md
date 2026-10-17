@@ -185,4 +185,6 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 
 > for test now, try to switch between LAN connection and Wi-Fi connection. I just connected to USB-C my LAN interface. There is a cable in, so it should also give internet
 
+> or even better, when I confirm that what are actually my connection, they need to be graded out if they are not available
+
 **Status:** open.
