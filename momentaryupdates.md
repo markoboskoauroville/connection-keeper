@@ -115,4 +115,6 @@ Marko's click on the stripe.
 
 > a new feature in the app is when I click on download speed, it tests download speed. When I click on upload speed, it tests upload speed and gives me the test results
 
+> also same principle for speed test. When I click speed, you are going to open the speedtest.net and test the speeds. Next to (upload and download) current speed, you just keep the last result so Firefox is ideal for this kind of thing because it can be easily controlled remotely with fixed script without cloud at the end
+
 **Status:** open.
