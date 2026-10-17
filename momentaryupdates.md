@@ -110,3 +110,9 @@ SMS typed letter by letter, the reply opened and held 15 s. No Claude (the AI ma
 script does). Proven without an SMS (`router-sms inbox --visible`, 20–30 s). The warm router-sms server is stopped:
 it held the router's only session and was why the check failed ("no New Message form"). The first real check is
 Marko's click on the stripe.
+
+## 18.10.2026, request 16
+
+> a new feature in the app is when I click on download speed, it tests download speed. When I click on upload speed, it tests upload speed and gives me the test results
+
+**Status:** open.
