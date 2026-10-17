@@ -130,3 +130,9 @@ download and upload in one run, so either click gives both.
 **Status:** built v11 18.10.2026: 5 s after the start the data check, then the speed test, both headless; again once
 past midnight if the day has no value. First start 01:13: speed 33.14 ↓ 25.15 ↑ (36 s); the data check missed the
 reply, which led to the router-sms fix (each look reloads the page); after it 23 s behind the scenes, 43 s visible.
+
+## 18.10.2026, request 18 (v12)
+
+> I'm confused why I always get a fresh web browser with these tests. I'm installing uBlock plugin not to see advertisement from speed test, and every time I run the speed test it looks like a new browser without any plugins. And I need to be forced to look at advertisement. Very bad also, you're using too much of my real estate. I told you next on the internet connection and remove internet. Understand it's internet just in parentheses. Put the test results. I don't need a new section, and I don't need the time when it was tested. I don't care about the time. I don't care
+
+**Status:** open.
