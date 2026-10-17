@@ -3,6 +3,7 @@
 // nothing is happening in front of my eyes. Everything in the background. When I manually click, it's happening in
 // front of my eyes"). The command `speedtest-firefox` (Tools/, linked into ~/.local/bin): a Firefox of its own presses
 // GO on speedtest.net and reads the numbers. Headless at start and on a new day; --visible for a click. No AI.
+// v12: shown in parentheses after the live speed (main.swift testPart), no item of its own, no time.
 import AppKit
 
 struct WebSpeed: Codable {
@@ -13,13 +14,6 @@ struct WebSpeed: Codable {
     var at: String              // "2026-10-18 01:11"
     var time: String            // "01:11"
     var seconds: Double?
-
-    var line: String { String(format: "test ↓ %5.1f ↑ %5.1f · %@", down_mbps, up_mbps, time) }   // Mbit/s, as speedtest.net
-    var tip: String {
-        String(format: "speedtest.net at %@: download %.2f Mbit/s, upload %.2f Mbit/s", at, down_mbps, up_mbps)
-            + (ping_ms.map { String(format: ", ping %.0f ms", $0) } ?? "") + (url.map { "\n\($0)" } ?? "")
-            + "\nClick: test again on speedtest.net in a Firefox window you watch."
-    }
 
     static let file = Paths.support.appendingPathComponent("speedtest.json")   // written by the command
     static let command = Paths.home.appendingPathComponent(".local/bin/speedtest-firefox").path

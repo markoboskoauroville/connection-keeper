@@ -63,7 +63,19 @@ func speedSample() -> String {
     let u = SpeedUnit.current
     let digits = (u == .autoBits || u == .autoBytes) ? 5 : 9
     let n = String(repeating: "8", count: digits) + " " + String(repeating: "M", count: u.unitWidth)
-    return "internet ↓ \(n)  ↑ \(n)"
+    return "↓ \(n) (88.8)  ↑ \(n) (88.8)"
+}
+
+// v12 (Marko 18.10.2026: "you're using too much of my real estate ... remove internet ... just in parentheses. Put the
+// test results ... I don't need the time"): the last speedtest.net result in parentheses after each live number, in
+// Mbit/s (MB/s when the unit is bytes); "(…)" while a test runs, "(✗)" for 30 s after one failed.
+func testPart(_ mbps: Double?, mark: String?) -> String {
+    let inner: String
+    if let mark { inner = mark }
+    else if let mbps { inner = SpeedUnit.slot(SpeedUnit.current.isBits ? mbps : mbps / 8).trimmingCharacters(in: .whitespaces) }
+    else { inner = "—" }
+    let t = "(\(inner))"
+    return String(repeating: " ", count: max(0, 7 - t.count)) + t
 }
 
 func ago(_ d: Date?) -> String {
@@ -90,7 +102,8 @@ final class Stripe: NSObject {
     let ping = NSButton(title: "ping —", target: nil, action: nil)
     let data = NSButton(title: "data —", target: nil, action: nil)   // v8: the Telemach balance; a click asks now
     var dataBusy = false
-    let webSpeed = NSButton(title: "test —", target: nil, action: nil)   // v11: the last speedtest.net result; a click tests
+    var lastTest = WebSpeed.load()              // v11/v12: the last speedtest.net result, in parentheses beside the speed
+    var testMark: String?                       // "…" while a test runs, "✗" after a failure
     var webBusy = false
     var webHeld = Date.distantPast
     var dataHeld = Date.distantPast             // a failed check's words stay until then
@@ -164,22 +177,13 @@ final class Stripe: NSObject {
         data.translatesAutoresizingMaskIntoConstraints = false
         data.setContentHuggingPriority(.required, for: .horizontal)
         _ = fixWidth(data, max(textWidth("888.8 GB left · 88:88", monoFont), textWidth("checking data…", monoFont)))
-        webSpeed.isBordered = false
-        webSpeed.target = self
-        webSpeed.action = #selector(testSpeedByHand)
-        webSpeed.font = monoFont
-        webSpeed.contentTintColor = Ink.text
-        webSpeed.alignment = .left
-        webSpeed.translatesAutoresizingMaskIntoConstraints = false
-        webSpeed.setContentHuggingPriority(.required, for: .horizontal)
-        _ = fixWidth(webSpeed, max(textWidth("test ↓ 888.8 ↑ 888.8 · 88:88", monoFont), textWidth("testing speed…", monoFont)))
         // "When I click on download speed, it tests download speed" (request 16): the live speed starts the test too
         speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testSpeedByHand)))
+        speed.toolTip = speedTip()
         data.font = monoFont
         ping.font = monoFont
         _ = fixWidth(ping, textWidth("ping 999 ms", monoFont))
         speedWidth = speed.constraints.first { $0.firstAttribute == .width }
-        speed.toolTip = "Internet only: the bytes through the router to the internet (the default route), per second. Traffic inside the local network (the phone, the router, other computers) is not counted.\nClick: test the speed on speedtest.net in a Firefox window you watch."
         connWidth = fixWidth(connButton, connectionWidth())
         NotificationCenter.default.addObserver(forName: SpeedUnit.changed, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
@@ -213,7 +217,7 @@ final class Stripe: NSObject {
             return p
         }
         for b in [connButton, ping, gear] { b.setContentHuggingPriority(.required, for: .horizontal) }
-        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), webSpeed, pipe(), ping, pipe(), data, pipe(), checked, pipe(), failover, ok])
+        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, pipe(), checked, pipe(), failover, ok])
         row.orientation = .horizontal
         row.spacing = 6
         row.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
@@ -299,18 +303,23 @@ final class Stripe: NSObject {
     }
 
     // THE SPEED TEST (v11): the last speedtest.net result beside the live speed; a click tests in front of him.
+    func speedLine(_ down: Double?, _ up: Double?) -> String {
+        let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
+        return "↓ \(down.map(rate) ?? dash) \(testPart(lastTest?.down_mbps, mark: testMark))  ↑ \(up.map(rate) ?? dash) \(testPart(lastTest?.up_mbps, mark: testMark))"
+    }
+
+    func speedTip() -> String {
+        "Internet only: the bytes through the router to the internet (the default route), per second. Traffic inside the local network is not counted.\n"
+            + "In parentheses: the last speedtest.net result, \(SpeedUnit.current.isBits ? "Mbit/s" : "MB/s")"
+            + (lastTest.map { String(format: " (%.2f ↓ %.2f ↑ Mbit/s, ping %.0f ms)", $0.down_mbps, $0.up_mbps, $0.ping_ms ?? 0) } ?? "")
+            + ".\nClick: test on speedtest.net in a Firefox window you watch."
+    }
+
     func showWebSpeed() {
         if webBusy || Date() < webHeld { return }
-        if let w = WebSpeed.load() {
-            webSpeed.title = w.line
-            webSpeed.contentTintColor = red ? Ink.red : Ink.text
-            webSpeed.toolTip = w.tip
-        } else {
-            webSpeed.title = "test —"
-            webSpeed.contentTintColor = red ? Ink.red : Ink.dim
-            webSpeed.toolTip = "Click: test the speed on speedtest.net in a Firefox window you watch."
-        }
-        fit()
+        testMark = nil
+        lastTest = WebSpeed.load()
+        speed.toolTip = speedTip()
     }
 
     @objc func testSpeedByHand() { testSpeed(visible: true) }
@@ -318,9 +327,7 @@ final class Stripe: NSObject {
     func testSpeed(visible: Bool) {
         if webBusy { return }
         webBusy = true
-        webSpeed.title = "testing speed…"
-        webSpeed.contentTintColor = Ink.amber
-        fit()
+        testMark = "…"
         appendLog("\(logStamp()) SPEEDTEST asked\(visible ? " in front of him" : " behind the scenes")")
         DispatchQueue.global().async {
             let r = WebSpeed.run(visible: visible)
@@ -331,10 +338,8 @@ final class Stripe: NSObject {
                 case .failure(let e):
                     appendLog("\(logStamp()) SPEEDTEST FAILED: \(e.localizedDescription)")
                     self.webHeld = Date().addingTimeInterval(30)
-                    self.webSpeed.title = "test ✗"
-                    self.webSpeed.contentTintColor = Ink.red
-                    self.webSpeed.toolTip = e.localizedDescription
-                    self.fit()
+                    self.testMark = "✗"
+                    self.speed.toolTip = "The speed test failed: \(e.localizedDescription)"
                     DispatchQueue.main.asyncAfter(deadline: .now() + 30.5) { self.showWebSpeed() }
                 }
             }
@@ -399,7 +404,7 @@ final class Stripe: NSObject {
                 if Date() >= pingHeld { ping.contentTintColor = Ink.text }
                 speed.textColor = Ink.text; failover.textColor = Ink.text; failover.font = speed.font
                 ok.isHidden = true
-                showData(); showWebSpeed()
+                showData()
                 failoverWidth.constant = Stripe.failoverNormal
                 fit()
                 reading()
@@ -412,7 +417,7 @@ final class Stripe: NSObject {
             failoverWidth.constant = 260
             fit()
         }
-        for b in [connButton, ping, data, webSpeed, gear] { b.contentTintColor = Ink.red }
+        for b in [connButton, ping, data, gear] { b.contentTintColor = Ink.red }
         for l in [speed, checked, failover] { l.textColor = Ink.red }
         failover.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
         failover.stringValue = a.line
@@ -471,20 +476,20 @@ final class Stripe: NSObject {
                 let c = Traffic.internet(iface)
                 DispatchQueue.main.async {
                     self.sampling = false
-                    guard let c else { self.speed.stringValue = "internet ↓     —        ↑     —"; self.lastCounters = nil; return }
+                    guard let c else { self.speed.stringValue = self.speedLine(nil, nil); self.lastCounters = nil; return }
                     let dt = Date().timeIntervalSince(self.lastSample)
                     if let last = self.lastCounters, dt > 0 {
                         // a route made again (network change) starts its counters at 0: show nothing for that second
                         let down = c.rx >= last.rx ? Double(c.rx - last.rx) / dt : 0
                         let up = c.tx >= last.tx ? Double(c.tx - last.tx) / dt : 0
-                        self.speed.stringValue = "internet ↓ \(rate(down))  ↑ \(rate(up))"
+                        self.speed.stringValue = self.speedLine(down, up)
                     }
                     self.lastCounters = c
                     self.lastSample = Date()
                 }
             }
         } else if iface == nil {
-            speed.stringValue = "internet ↓     —        ↑     —"
+            speed.stringValue = speedLine(nil, nil)
         }
 
         state = KeeperState.load()

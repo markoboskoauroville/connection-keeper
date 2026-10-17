@@ -1,7 +1,7 @@
 #!/Users/markobosko/.pyenv/versions/3.10.14/bin/python3
 """
 speedtest-firefox: the internet speed measured on speedtest.net in a Firefox window Marko watches.
-A Firefox of its own (throwaway profile, never his Firefox) opens speedtest.net, declines the cookie
+A Firefox of its own (one kept profile, never his Firefox) opens speedtest.net, declines the cookie
 banner, presses GO, waits for download, upload and ping, and closes. No AI: the same script every
 time (Marko, 18.10.2026, requests 16 and 17).
 
@@ -9,14 +9,17 @@ time (Marko, 18.10.2026, requests 16 and 17).
     speedtest-firefox --visible      the same test in a window in front of him, the result held 10 s: a click
     speedtest-firefox last [--json]  the last result, no test
 
-The last result is kept in ~/Library/Application Support/connection-keeper/speedtest.json.
+The profile is kept in ~/Library/Application Support/connection-keeper/firefox (v12, Marko 18.10.2026: "every time
+I run the speed test it looks like a new browser without any plugins"): an add-on he installs there, uBlock Origin,
+stays for every test, behind the scenes too. The last result is kept in ~/Library/Application Support/connection-keeper/speedtest.json.
 """
-import fcntl, json, os, shutil, socket, subprocess, sys, tempfile, time
+import fcntl, json, os, socket, subprocess, sys, time
 from datetime import datetime
 
 FIREFOX = '/Applications/Firefox.app/Contents/MacOS/firefox'
 URL = 'https://www.speedtest.net/'
 LAST = os.path.expanduser('~/Library/Application Support/connection-keeper/speedtest.json')
+PROFILE = os.path.expanduser('~/Library/Application Support/connection-keeper/firefox')
 LOG = os.path.expanduser('~/Library/Logs/connection-keeper.log')
 TEST_WAIT = 120   # seconds from GO to the upload result
 SHOW = 10         # seconds the result stays in front of him
@@ -44,7 +47,10 @@ class Browser:
 
     def __init__(self, visible):
         import websocket  # websocket-client
-        self.profile = tempfile.mkdtemp(prefix='speedtest-firefox-')
+        self.profile = PROFILE
+        os.makedirs(PROFILE, exist_ok=True)
+        with open(os.path.join(PROFILE, 'user.js'), 'w') as f:   # no first-run pages; his add-ons stay switched on
+            f.write(USER_JS)
         self.port = free_port()
         look = ['--width', '1200', '--height', '860'] if visible else ['--headless']
         self.proc = subprocess.Popen(
@@ -101,8 +107,17 @@ class Browser:
                 self.proc.wait(5)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
-        shutil.rmtree(self.profile, ignore_errors=True)
 
+
+USER_JS = '''user_pref("remote.prefs.recommended", false);
+user_pref("browser.aboutwelcome.enabled", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("startup.homepage_welcome_url", "");
+user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("extensions.autoDisableScopes", 0);
+'''
 
 VIS = 'const vis = e => !!(e && e.offsetParent);'
 

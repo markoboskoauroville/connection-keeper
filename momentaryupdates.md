@@ -136,3 +136,9 @@ reply, which led to the router-sms fix (each look reloads the page); after it 23
 > I'm confused why I always get a fresh web browser with these tests. I'm installing uBlock plugin not to see advertisement from speed test, and every time I run the speed test it looks like a new browser without any plugins. And I need to be forced to look at advertisement. Very bad also, you're using too much of my real estate. I told you next on the internet connection and remove internet. Understand it's internet just in parentheses. Put the test results. I don't need a new section, and I don't need the time when it was tested. I don't care about the time. I don't care
 
 **Status:** open.
+
+## 18.10.2026, request 19 (v12)
+
+> also, I don't need text checked two minutes ago fall over. I don't need that's extra. Remove and reduce as much as possible size of this banner by reducing spaces. Also, 98.5 GB left. Nice, but time when we tested it's not important. Remove it please
+
+**Status:** open.
