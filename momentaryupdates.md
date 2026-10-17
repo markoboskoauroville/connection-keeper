@@ -117,7 +117,9 @@ Marko's click on the stripe.
 
 > also same principle for speed test. When I click speed, you are going to open the speedtest.net and test the speeds. Next to (upload and download) current speed, you just keep the last result so Firefox is ideal for this kind of thing because it can be easily controlled remotely with fixed script without cloud at the end
 
-**Status:** open.
+**Status:** built v11 18.10.2026: `test ↓ 33.1 ↑ 25.2 · 01:15` beside the live speed; a click on it or on the live
+speed runs speedtest.net in a Firefox window he watches (Tools/speedtest-firefox, no AI). speedtest.net measures
+download and upload in one run, so either click gives both.
 
 ## 18.10.2026, request 17
 
@@ -125,4 +127,6 @@ Marko's click on the stripe.
 
 > so during running, nothing is happening in front of my eyes. Everything in the background. When I manually click, it's happening in front of my eyes
 
-**Status:** open.
+**Status:** built v11 18.10.2026: 5 s after the start the data check, then the speed test, both headless; again once
+past midnight if the day has no value. First start 01:13: speed 33.14 ↓ 25.15 ↑ (36 s); the data check missed the
+reply, which led to the router-sms fix (each look reloads the page); after it 23 s behind the scenes, 43 s visible.

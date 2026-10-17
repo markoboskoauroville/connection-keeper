@@ -1,0 +1,206 @@
+#!/Users/markobosko/.pyenv/versions/3.10.14/bin/python3
+"""
+speedtest-firefox: the internet speed measured on speedtest.net in a Firefox window Marko watches.
+A Firefox of its own (throwaway profile, never his Firefox) opens speedtest.net, declines the cookie
+banner, presses GO, waits for download, upload and ping, and closes. No AI: the same script every
+time (Marko, 18.10.2026, requests 16 and 17).
+
+    speedtest-firefox [--json]       one test behind the scenes (headless): the app at start
+    speedtest-firefox --visible      the same test in a window in front of him, the result held 10 s: a click
+    speedtest-firefox last [--json]  the last result, no test
+
+The last result is kept in ~/Library/Application Support/connection-keeper/speedtest.json.
+"""
+import fcntl, json, os, shutil, socket, subprocess, sys, tempfile, time
+from datetime import datetime
+
+FIREFOX = '/Applications/Firefox.app/Contents/MacOS/firefox'
+URL = 'https://www.speedtest.net/'
+LAST = os.path.expanduser('~/Library/Application Support/connection-keeper/speedtest.json')
+LOG = os.path.expanduser('~/Library/Logs/connection-keeper.log')
+TEST_WAIT = 120   # seconds from GO to the upload result
+SHOW = 10         # seconds the result stays in front of him
+
+
+class Fail(Exception):
+    pass
+
+
+def log(msg):
+    with open(LOG, 'a') as f:
+        f.write(f"{datetime.now().astimezone().isoformat(timespec='seconds')} SPEEDTEST {msg}\n")
+
+
+def free_port():
+    s = socket.socket()
+    s.bind(('127.0.0.1', 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
+class Browser:
+    """A Firefox of our own, headless or a window he watches,, driven over WebDriver BiDi (as router-sms does)."""
+
+    def __init__(self, visible):
+        import websocket  # websocket-client
+        self.profile = tempfile.mkdtemp(prefix='speedtest-firefox-')
+        self.port = free_port()
+        look = ['--width', '1200', '--height', '860'] if visible else ['--headless']
+        self.proc = subprocess.Popen(
+            [FIREFOX, *look, '--no-remote', '--profile', self.profile,
+             '--remote-debugging-port', str(self.port)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = time.time() + 30
+        while True:
+            try:
+                self.ws = websocket.create_connection(f'ws://127.0.0.1:{self.port}/session',
+                                                      suppress_origin=True, timeout=60)
+                break
+            except Exception:
+                if time.time() > deadline or self.proc.poll() is not None:
+                    self.close()
+                    raise Fail('Firefox did not start')
+                time.sleep(0.3)
+        self.n = 0
+        self.call('session.new', {'capabilities': {}})
+        self.ctx = self.call('browsingContext.getTree', {'maxDepth': 0})['contexts'][0]['context']
+
+    def call(self, method, params=None):
+        self.n += 1
+        mid = self.n
+        self.ws.send(json.dumps({'id': mid, 'method': method, 'params': params or {}}))
+        while True:
+            msg = json.loads(self.ws.recv())
+            if msg.get('id') != mid:
+                continue
+            if msg.get('type') == 'error':
+                raise Fail(f"{method}: {msg.get('error')}: {msg.get('message')}")
+            return msg['result']
+
+    def js(self, expr):
+        r = self.call('script.evaluate', {
+            'expression': f'(async () => JSON.stringify(await ({expr})()))()',
+            'target': {'context': self.ctx}, 'awaitPromise': True, 'resultOwnership': 'none'})
+        if r.get('type') == 'exception':
+            raise Fail('page error: ' + r['exceptionDetails'].get('text', '?'))
+        v = r['result'].get('value')
+        return json.loads(v) if isinstance(v, str) else None
+
+    def open(self, url):
+        self.call('browsingContext.navigate', {'context': self.ctx, 'url': url, 'wait': 'complete'})
+
+    def close(self):
+        try:
+            self.ws.close()
+        except Exception:
+            pass
+        if self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+        shutil.rmtree(self.profile, ignore_errors=True)
+
+
+VIS = 'const vis = e => !!(e && e.offsetParent);'
+
+# The cookie banner: the least, never "accept all".
+DECLINE_JS = f'''async () => {{ {VIS}
+  const words = ["reject all", "reject", "decline", "only necessary", "necessary only", "continue without accepting"];
+  const b = [...document.querySelectorAll("button, a")].find(e => vis(e) && words.includes(e.innerText.trim().toLowerCase()));
+  if (b) {{ b.click(); return "declined"; }}
+  return ""; }}'''
+
+GO_JS = f'''async () => {{ {VIS}
+  const go = [...document.querySelectorAll("button, a")].find(e => vis(e) && e.innerText && e.innerText.trim() === "GO");
+  if (go) {{ go.click(); return "go"; }}
+  return ""; }}'''
+
+# The page's words, as a person reads them: "DOWNLOAD Mbps / 29.74 / UPLOAD Mbps / 24.61 / Ping ms / 28"; the test is
+# over when the address becomes /result/<id> (the 2026 speedtest.net, no stable class names).
+RESULT_JS = '''async () => {
+  const lines = (document.querySelector("main") || document.body).innerText.split("\\n").map(t => t.trim()).filter(t => t);
+  const after = (label) => { const i = lines.findIndex(t => t.toUpperCase() === label); const v = i >= 0 ? lines[i + 1] : "";
+                             return /^[0-9.]+$/.test(v) ? v : ""; };
+  return {down: after("DOWNLOAD MBPS"), up: after("UPLOAD MBPS"), ping: after("PING MS"), unit: "Mbps",
+          url: location.href, done: /\\/result\\//.test(location.href)}; }'''
+
+
+def test(visible):
+    b = Browser(visible)
+    try:
+        b.open(URL)
+        t0 = time.time()
+        while time.time() - t0 < 20:          # the banner, then GO
+            b.js(DECLINE_JS)
+            if b.js(GO_JS) == 'go':
+                break
+            time.sleep(0.7)
+        else:
+            raise Fail('no GO button on speedtest.net')
+        time.sleep(0.5)
+        log('GO pressed' + (' (in front of him)' if visible else ' (behind the scenes)'))
+        start = time.time()
+        r = {}
+        while time.time() - start < TEST_WAIT:
+            time.sleep(1.5)
+            try:
+                r = b.js(RESULT_JS) or {}
+            except Fail:
+                continue
+            if r.get('done') and r.get('down') and r.get('up'):
+                break
+        if not (r.get('down') and r.get('up')):
+            raise Fail(f'no result within {TEST_WAIT} s')
+        if visible:
+            time.sleep(SHOW)                  # the numbers stay in front of him
+        res = {'down_mbps': float(r['down']), 'up_mbps': float(r['up']),
+               'ping_ms': float(r['ping']) if r.get('ping') else None, 'unit': r.get('unit') or 'Mbps',
+               'url': r.get('url'), 'at': datetime.now().strftime('%Y-%m-%d %H:%M'),
+               'time': datetime.now().strftime('%H:%M'), 'seconds': round(time.time() - start, 1)}
+        os.makedirs(os.path.dirname(LAST), exist_ok=True)
+        with open(LAST + '.tmp', 'w') as f:
+            json.dump(res, f, indent=1)
+        os.replace(LAST + '.tmp', LAST)
+        log(f"↓ {res['down_mbps']} ↑ {res['up_mbps']} Mbps, ping {res['ping_ms']} ms ({res['url']})")
+        return res
+    finally:
+        b.close()
+
+
+def main(argv):
+    if argv[:1] in (['-h'], ['--help'], ['help']):
+        print(__doc__.strip())
+        return 0
+    as_json, visible = '--json' in argv, '--visible' in argv
+    argv = [a for a in argv if a not in ('--json', '--visible')]
+    try:
+        if argv[:1] == ['last']:
+            try:
+                res = json.load(open(LAST))
+            except (OSError, ValueError):
+                raise Fail('no speed test yet')
+        else:
+            os.makedirs(os.path.dirname(LAST), exist_ok=True)
+            lock = open(LAST + '.lock', 'a')   # one test at a time
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                raise Fail('a speed test is already running')
+            res = test(visible)
+    except Fail as e:
+        log(f'FAILED {e}')
+        print(json.dumps({'error': str(e)}) if as_json else f'speedtest-firefox: {e}',
+              file=sys.stdout if as_json else sys.stderr)
+        return 1
+    if as_json:
+        print(json.dumps(res))
+    else:
+        print(f"↓ {res['down_mbps']} ↑ {res['up_mbps']} {res['unit']} · ping {res['ping_ms']} ms · {res['time']}")
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

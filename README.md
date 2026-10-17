@@ -114,3 +114,16 @@ on the router, logs in (the password typed dot by dot), writes STANJE to 13880 l
 the Inbox, opens Telemach's reply when it comes and holds it on the screen for 15 s, then closes; the stripe shows
 the result. The same script every time, no AI. Nothing else may stay logged in to the router meanwhile (it allows one
 session; MANTRA_MANIFEST modules/tp-link-router.md).
+
+**The speed test on speedtest.net.** Beside the live internet speed the stripe keeps the last speedtest.net result,
+**test ↓ 33.1 ↑ 25.2 · 01:15** (Mbit/s). A click on it, or on the live speed, runs `speedtest-firefox --visible`: a
+Firefox window opens speedtest.net, declines the cookie banner, presses GO and shows the result for 10 s (about 45 s
+in all).
+
+**Behind the scenes at every start, and once on a new day.** Five seconds after the stripe starts it asks the data
+left, then runs the speed test, both headless, nothing on the screen; past midnight it does both again if the day has
+no value yet. Only a click by hand opens a window.
+
+```
+speedtest-firefox [--visible] [--json]     # Tools/speedtest-firefox, linked into ~/.local/bin
+```

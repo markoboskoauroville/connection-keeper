@@ -3,8 +3,10 @@
 // scenes"). The stripe runs the command `router-sms balance --json` (repo router-sms, ~/Developer/ROUTER_SMS): a
 // headless Firefox sends STANJE to 13880 through the TP-Link router and reads Telemach's reply. No AI, no window.
 // The last answer is kept in data-balance.json and shown at start.
-// v11 (Marko 18.10.2026, request 15: "like invisible hand ... do it in front of my eyes"): the command runs with
-// --visible, so the same script does every step in a Firefox window he watches (log in, SMS, the reply), then closes it.
+// v11 (Marko 18.10.2026, requests 15 and 17: "like invisible hand ... do it in front of my eyes"; "during running,
+// nothing is happening in front of my eyes ... When I manually click, it's happening in front of my eyes"): a click
+// runs the command with --visible, so the same script does every step in a Firefox window he watches; at start and
+// on a new day it runs behind the scenes.
 import AppKit
 
 struct DataBalance: Codable {
@@ -42,12 +44,12 @@ struct DataBalance: Codable {
     }
 
     // Runs the command (one SMS); call it off the main thread. Either the balance or the reason it failed.
-    static func check() -> Result<DataBalance, Error> {
+    static func check(visible: Bool) -> Result<DataBalance, Error> {
         struct Fail: LocalizedError { let errorDescription: String? }
         guard FileManager.default.isExecutableFile(atPath: command) else {
             return .failure(Fail(errorDescription: "router-sms is not installed (~/Developer/ROUTER_SMS)"))
         }
-        let r = shell(command, ["balance", "--visible", "--json"], timeout: 150)
+        let r = shell(command, visible ? ["balance", "--visible", "--json"] : ["balance", "--json"], timeout: 150)
         let last = r.out.split(separator: "\n").last.map(String.init) ?? ""
         if let d = last.data(using: .utf8), let b = try? JSONDecoder().decode(DataBalance.self, from: d) {
             b.save()

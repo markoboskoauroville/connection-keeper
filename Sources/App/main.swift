@@ -90,6 +90,9 @@ final class Stripe: NSObject {
     let ping = NSButton(title: "ping —", target: nil, action: nil)
     let data = NSButton(title: "data —", target: nil, action: nil)   // v8: the Telemach balance; a click asks now
     var dataBusy = false
+    let webSpeed = NSButton(title: "test —", target: nil, action: nil)   // v11: the last speedtest.net result; a click tests
+    var webBusy = false
+    var webHeld = Date.distantPast
     var dataHeld = Date.distantPast             // a failed check's words stay until then
     let checked = label(Stripe.checkedNormal)
     let failover = label(Stripe.failoverNormal)
@@ -154,18 +157,29 @@ final class Stripe: NSObject {
         ping.toolTip = "Press: ping now and say on the stripe whether the internet is alive"
         data.isBordered = false
         data.target = self
-        data.action = #selector(checkData)
+        data.action = #selector(checkDataByHand)
         data.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         data.contentTintColor = Ink.text
         data.alignment = .left
         data.translatesAutoresizingMaskIntoConstraints = false
         data.setContentHuggingPriority(.required, for: .horizontal)
         _ = fixWidth(data, max(textWidth("888.8 GB left · 88:88", monoFont), textWidth("checking data…", monoFont)))
+        webSpeed.isBordered = false
+        webSpeed.target = self
+        webSpeed.action = #selector(testSpeedByHand)
+        webSpeed.font = monoFont
+        webSpeed.contentTintColor = Ink.text
+        webSpeed.alignment = .left
+        webSpeed.translatesAutoresizingMaskIntoConstraints = false
+        webSpeed.setContentHuggingPriority(.required, for: .horizontal)
+        _ = fixWidth(webSpeed, max(textWidth("test ↓ 888.8 ↑ 888.8 · 88:88", monoFont), textWidth("testing speed…", monoFont)))
+        // "When I click on download speed, it tests download speed" (request 16): the live speed starts the test too
+        speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testSpeedByHand)))
         data.font = monoFont
         ping.font = monoFont
         _ = fixWidth(ping, textWidth("ping 999 ms", monoFont))
         speedWidth = speed.constraints.first { $0.firstAttribute == .width }
-        speed.toolTip = "Internet only: the bytes through the router to the internet (the default route), per second. Traffic inside the local network (the phone, the router, other computers) is not counted."
+        speed.toolTip = "Internet only: the bytes through the router to the internet (the default route), per second. Traffic inside the local network (the phone, the router, other computers) is not counted.\nClick: test the speed on speedtest.net in a Firefox window you watch."
         connWidth = fixWidth(connButton, connectionWidth())
         NotificationCenter.default.addObserver(forName: SpeedUnit.changed, object: nil, queue: .main) { [weak self] _ in
             guard let self else { return }
@@ -199,7 +213,7 @@ final class Stripe: NSObject {
             return p
         }
         for b in [connButton, ping, gear] { b.setContentHuggingPriority(.required, for: .horizontal) }
-        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, pipe(), checked, pipe(), failover, ok])
+        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), webSpeed, pipe(), ping, pipe(), data, pipe(), checked, pipe(), failover, ok])
         row.orientation = .horizontal
         row.spacing = 6
         row.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
@@ -221,10 +235,16 @@ final class Stripe: NSObject {
         panel.orderFrontRegardless()
 
         showData()
+        showWebSpeed()
         refresh()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData() }
-        NotificationCenter.default.addObserver(forName: DataBalanceNote.checkNow, object: nil, queue: .main) { [weak self] _ in self?.checkData() }
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData(); self?.newDay() }
+        // At every start, behind the scenes (request 17): the data left, then the speed test, one after the other so
+        // the two Firefoxes never share the 4G line's measurement.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            self?.checkData(visible: false) { self?.testSpeed(visible: false) }
+        }
+        NotificationCenter.default.addObserver(forName: DataBalanceNote.checkNow, object: nil, queue: .main) { [weak self] _ in self?.checkDataByHand() }
     }
 
     // THE DATA BALANCE (v8): the last answer, "28.6 GB left · 11:57" (GB with one decimal, the time from Telemach's SMS);
@@ -244,16 +264,18 @@ final class Stripe: NSObject {
     }
 
     // A click on the item, ⚙ → Check data, or the timer: the command runs behind the scenes, the stripe never waits.
-    @objc func checkData() {
-        if dataBusy { return }
+    @objc func checkDataByHand() { checkData(visible: true) }
+
+    func checkData(visible: Bool, then: (() -> Void)? = nil) {
+        if dataBusy { then?(); return }
         dataBusy = true
         data.title = "checking data…"
         data.contentTintColor = Ink.amber
         fit()
         let t0 = Date()
-        appendLog("\(logStamp()) DATA balance asked: router-sms balance (STANJE to 13880)")
+        appendLog("\(logStamp()) DATA balance asked: router-sms balance (STANJE to 13880)\(visible ? " in front of him" : " behind the scenes")")
         DispatchQueue.global().async {
-            let r = DataBalance.check()
+            let r = DataBalance.check(visible: visible)
             DispatchQueue.main.async {
                 self.dataBusy = false
                 let secs = Date().timeIntervalSince(t0)
@@ -271,15 +293,73 @@ final class Stripe: NSObject {
                     self.fit()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 30.5) { self.showData() }
                 }
+                then?()
             }
         }
+    }
+
+    // THE SPEED TEST (v11): the last speedtest.net result beside the live speed; a click tests in front of him.
+    func showWebSpeed() {
+        if webBusy || Date() < webHeld { return }
+        if let w = WebSpeed.load() {
+            webSpeed.title = w.line
+            webSpeed.contentTintColor = red ? Ink.red : Ink.text
+            webSpeed.toolTip = w.tip
+        } else {
+            webSpeed.title = "test —"
+            webSpeed.contentTintColor = red ? Ink.red : Ink.dim
+            webSpeed.toolTip = "Click: test the speed on speedtest.net in a Firefox window you watch."
+        }
+        fit()
+    }
+
+    @objc func testSpeedByHand() { testSpeed(visible: true) }
+
+    func testSpeed(visible: Bool) {
+        if webBusy { return }
+        webBusy = true
+        webSpeed.title = "testing speed…"
+        webSpeed.contentTintColor = Ink.amber
+        fit()
+        appendLog("\(logStamp()) SPEEDTEST asked\(visible ? " in front of him" : " behind the scenes")")
+        DispatchQueue.global().async {
+            let r = WebSpeed.run(visible: visible)
+            DispatchQueue.main.async {
+                self.webBusy = false
+                switch r {
+                case .success: self.showWebSpeed()
+                case .failure(let e):
+                    appendLog("\(logStamp()) SPEEDTEST FAILED: \(e.localizedDescription)")
+                    self.webHeld = Date().addingTimeInterval(30)
+                    self.webSpeed.title = "test ✗"
+                    self.webSpeed.contentTintColor = Ink.red
+                    self.webSpeed.toolTip = e.localizedDescription
+                    self.fit()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 30.5) { self.showWebSpeed() }
+                }
+            }
+        }
+    }
+
+    // "I need to have the values for this day": past midnight, both again behind the scenes (once: a failure waits
+    // for the next start or a click, so a dead line never sends SMS after SMS).
+    var dayTried = ""
+    func newDay() {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"
+        let today = f.string(from: Date())
+        if dayTried == "" { dayTried = today; return }          // the start already asked
+        guard dayTried != today else { return }
+        dayTried = today
+        let needData = !isToday(DataBalance.load()?.checked), needSpeed = !isToday(WebSpeed.load()?.at)
+        if needData { checkData(visible: false) { if needSpeed { self.testSpeed(visible: false) } } }
+        else if needSpeed { testSpeed(visible: false) }
     }
 
     func autoData() {
         let h = DataAuto.hours
         guard h > 0, !dataBusy else { return }
         let last = (try? DataBalance.file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-        if Date().timeIntervalSince(last) >= Double(h) * 3600 { checkData() }
+        if Date().timeIntervalSince(last) >= Double(h) * 3600 { checkData(visible: false) }
     }
 
     // On top: above ordinary and floating windows, on every Space, beside full-screen apps. Off: an ordinary window.
@@ -319,7 +399,7 @@ final class Stripe: NSObject {
                 if Date() >= pingHeld { ping.contentTintColor = Ink.text }
                 speed.textColor = Ink.text; failover.textColor = Ink.text; failover.font = speed.font
                 ok.isHidden = true
-                showData()
+                showData(); showWebSpeed()
                 failoverWidth.constant = Stripe.failoverNormal
                 fit()
                 reading()
@@ -332,7 +412,7 @@ final class Stripe: NSObject {
             failoverWidth.constant = 260
             fit()
         }
-        for b in [connButton, ping, data, gear] { b.contentTintColor = Ink.red }
+        for b in [connButton, ping, data, webSpeed, gear] { b.contentTintColor = Ink.red }
         for l in [speed, checked, failover] { l.textColor = Ink.red }
         failover.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
         failover.stringValue = a.line
@@ -619,5 +699,5 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let stripe = Stripe()
 if CommandLine.arguments.contains("--settings") { stripe.openSettings() }
-if CommandLine.arguments.contains("--check-data") { stripe.checkData() }    // v8: the same as a click on the data item
+if CommandLine.arguments.contains("--check-data") { stripe.checkDataByHand() }    // v8: the same as a click on the data item
 app.run()
