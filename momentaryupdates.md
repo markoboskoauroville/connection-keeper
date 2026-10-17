@@ -92,3 +92,9 @@ words (540 instead of 797 points in the normal state; docs/v7-stripe.png). Red a
 > Please check what connection keeper is doing. I think it's measuring my local network transfer. It should only show the speed of internet transfer, never local.
 
 **Status:** built v10 14.10.2026. It was so: the stripe counted every byte on en0, the phone included. Now it shows **internet** only, the bytes of the default route through the router (TCP and UDP). During a 150 MB adb push to the phone at 3.6–3.9 MB/s, the stripe showed 0–26 kB/s up (docs/v10-stripe-during-adb-2.png).
+
+## 18.10.2026, request 15 (v11, change of design)
+
+> my connection keeper application has problems sending SMS and receiving SMS. Please let's change it. When I click to check the available beta, you need to create action to open Chrome browser, go to this address, type this password and be inside, and send SMS by using Claude plugin. And then like invisible hand, it's needed to do it in front of my eyes using this interface http://192.168.1.1/ pasword is [the router password]
+
+(The password is written here as "the router's password"; it is kept in the login keychain, never in the repository.)
