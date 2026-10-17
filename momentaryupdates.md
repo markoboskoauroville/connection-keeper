@@ -118,3 +118,11 @@ Marko's click on the stripe.
 > also same principle for speed test. When I click speed, you are going to open the speedtest.net and test the speeds. Next to (upload and download) current speed, you just keep the last result so Firefox is ideal for this kind of thing because it can be easily controlled remotely with fixed script without cloud at the end
 
 **Status:** open.
+
+## 18.10.2026, request 17
+
+> every time an app starts, it needs to check SMS in the background and give me the GB left. Same for the speed test. Also in the background do the speed test so running the app. Meaning I need to have the values for this day
+
+> so during running, nothing is happening in front of my eyes. Everything in the background. When I manually click, it's happening in front of my eyes
+
+**Status:** open.
