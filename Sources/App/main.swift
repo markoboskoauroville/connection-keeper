@@ -586,10 +586,12 @@ final class Stripe: NSObject {
         return Net.displayName(i)
     }
 
-    // v12 LIVE (Marko 18.10.2026: "offer only the one which is online now. Offline doesn't make sense to offer"): the
-    // drop-down opens with "checking…" and fills itself while open: every device with an address is pinged through
-    // itself (online ✓ and its ms, or left out); the Wi-Fi networks of the list are offered only when in range now.
-    // A Wi-Fi not joined cannot be pinged before joining, so "in range" is the most that can be known of it.
+    // v12 LIVE (Marko 18.10.2026: "offer only the one which is online now ... Make it live", then "when I confirm what
+    // are actually my connection, they need to be greyed out if they are not available"): the drop-down opens with
+    // "checking…" and fills itself while open. His Wi-Fi networks (⚙) are always listed: usable when in range (or in use
+    // and answering), greyed out when not. Every other device with an address (a cable, a USB adapter, a phone) is
+    // pinged through itself: usable when it answers, greyed when not. A Wi-Fi not joined cannot be pinged before
+    // joining, so "in range" is the most that can be known of it. The one carrying the internet has the tick.
     @objc func showConnections() {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -599,32 +601,34 @@ final class Stripe: NSObject {
         let cfg = Config.load()
         DispatchQueue.global().async {
             let wifi = Net.wifiInterface()
-            var online: [(name: String, ms: Double, wifi: Bool)] = []
-            for i in Net.activeInterfaces() {
-                if let ms = Net.onlineVia(i, host: cfg.pingHost) { online.append((Net.displayName(i), ms, i == wifi)) }
-            }
+            let route = Net.defaultRouteInterface()
+            let ssid = wifi.flatMap { Net.currentSSID($0) }
+            let wifiMs = wifi.flatMap { w in Net.ipAddress(w) != nil ? Net.onlineVia(w, host: cfg.pingHost) : nil }
             let near = Net.wifiInRange()
-            let joinable = cfg.connections.filter { $0.enabled && $0.kind == "wifi" && near.contains($0.name) && !online.contains { o in o.name == $0.name } }
+            let others = Net.activeInterfaces().filter { $0 != wifi }.map { ($0, Net.displayName($0), Net.onlineVia($0, host: cfg.pingHost)) }
             RunLoop.main.perform(inModes: [.common]) {
                 var at = menu.index(of: waiting)
                 menu.removeItem(waiting)
-                for o in online {
-                    let item = NSMenuItem(title: String(format: "%@   online ✓ %.0f ms", o.name, o.ms), action: nil, keyEquivalent: "")
-                    item.state = .on
-                    item.isEnabled = false
-                    item.attributedTitle = NSAttributedString(string: item.title, attributes: [.foregroundColor: o.wifi ? Ink.green : Ink.yellow, .font: NSFont.menuFont(ofSize: 0)])
-                    menu.insertItem(item, at: at); at += 1
-                }
-                for c in joinable {
-                    let item = NSMenuItem(title: "\(c.name)   in range, switch to it", action: #selector(self.pick(_:)), keyEquivalent: "")
+                func add(_ title: String, _ ok: Bool, _ on: Bool, _ color: NSColor, _ action: Selector?, _ obj: String) {
+                    let item = NSMenuItem(title: title, action: ok ? action : nil, keyEquivalent: "")
                     item.target = self
-                    item.representedObject = c.name
+                    item.representedObject = obj
+                    item.isEnabled = ok
+                    item.state = on ? .on : .off
+                    item.attributedTitle = NSAttributedString(string: title, attributes: [
+                        .foregroundColor: ok ? color : Ink.grey, .font: NSFont.menuFont(ofSize: 0)])
                     menu.insertItem(item, at: at); at += 1
                 }
-                if online.isEmpty && joinable.isEmpty {
-                    let none = NSMenuItem(title: "no connection online", action: nil, keyEquivalent: "")
-                    none.isEnabled = false
-                    menu.insertItem(none, at: at)
+                for c in cfg.connections where c.kind == "wifi" {
+                    let inUse = c.name == ssid
+                    let ok = c.enabled && (inUse ? wifiMs != nil : near.contains(c.name))
+                    let state = inUse ? (wifiMs.map { String(format: "online %.0f ms", $0) } ?? "joined, no internet")
+                        : near.contains(c.name) ? "in range" : "not available"
+                    add("\(c.name)   Wi-Fi · \(state)", ok, inUse && route == wifi, Ink.green, #selector(self.pick(_:)), c.name)
+                }
+                for (i, name, ms) in others {
+                    add("\(name)   \(ms.map { String(format: "online %.0f ms", $0) } ?? "no internet")", ms != nil, route == i,
+                        Ink.yellow, #selector(self.pickDevice(_:)), i)
                 }
                 menu.update()
             }
@@ -646,10 +650,26 @@ final class Stripe: NSObject {
     // switching immediately."). The stripe joins at once itself, keeper or not, holds the keeper's checks
     // meanwhile, and says on the status line what is happening and how it ended. A switch by hand never turns
     // the stripe red. Joining goes the road in Join.swift (networksetup, the stored password, Control Centre).
+    // v12: a cable, a USB adapter or a phone: its service to the top of the order, the internet goes through it.
+    @objc func pickDevice(_ item: NSMenuItem) {
+        guard let iface = item.representedObject as? String else { return }
+        let name = Net.displayName(iface)
+        let r = Net.prefer(iface)
+        appendLog("\(logStamp()) MANUAL switch to \(name) (\(iface)) from the stripe: " + (r.ok ? "done, \(r.detail)" : "FAILED: \(r.detail)"))
+        show(r.ok ? "on \(name) ✓" : "✗ \(name): \(r.detail)", r.ok ? Ink.green : Ink.red, for: 20)
+        lastCounters = nil
+        if state?.isFresh ?? false { KeeperCommand(action: "check").send() }
+    }
+
     @objc func pick(_ item: NSMenuItem) {
         guard let name = item.representedObject as? String else { return }
         if Config.load().dryRun { show("dry run: would join \(name)", Ink.amber, for: 20); return }
         let iface = Net.wifiInterface() ?? "en0"
+        Net.prefer(iface)                                   // v12: Wi-Fi above a cable, so the internet follows the pick
+        if Net.currentSSID(iface) == name {
+            appendLog("\(logStamp()) MANUAL switch to \"\(name)\": already joined, Wi-Fi now first")
+            show("on \(name) ✓", Ink.green, for: 20); return
+        }
         show("switching to \(name)…", Ink.amber, for: 180)
         dot.color = Ink.amber
         appendLog("\(logStamp()) MANUAL switch to \"\(name)\" from the stripe: joining now")

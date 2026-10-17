@@ -89,6 +89,25 @@ enum Net {
         return Double(r.out[m].dropFirst(5))
     }
 
+    // SWITCH BETWEEN DEVICES (v12, Marko 18.10.2026: "try to switch between LAN connection and Wi-Fi connection"): the
+    // device's network service goes to the top of macOS's service order, so the internet goes through it; no
+    // password is needed (proven 18.10.2026: AX88179B on en17 above Wi-Fi, the default route moved to en17).
+    @discardableResult
+    static func prefer(_ iface: String) -> (ok: Bool, detail: String) {
+        let lines = shell("/usr/sbin/networksetup", ["-listnetworkserviceorder"]).out.components(separatedBy: "\n")
+        var order: [String] = [], mine: String?
+        for (i, line) in lines.enumerated() {
+            guard let r = line.range(of: #"^\([0-9*]+\) "#, options: .regularExpression) else { continue }
+            let name = String(line[r.upperBound...])
+            order.append(name)
+            if i + 1 < lines.count, lines[i + 1].contains("Device: \(iface))") { mine = name }
+        }
+        guard let mine else { return (false, "no network service for \(iface)") }
+        if order.first == mine { return (true, "\(mine) is first already") }
+        let r = shell("/usr/sbin/networksetup", ["-ordernetworkservices", mine] + order.filter { $0 != mine })
+        return r.status == 0 && !r.out.contains("rror") ? (true, "\(mine) first") : (false, r.out.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
     static func currentSSID(_ iface: String) -> String? {
         let out = shell("/usr/sbin/ipconfig", ["getsummary", iface]).out
         for line in out.components(separatedBy: "\n") {

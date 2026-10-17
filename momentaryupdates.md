@@ -177,7 +177,13 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 
 > there must be some bug. I always see en0 as device, but I'm changing the devices. What is the n0? Why is the persistence
 
-**Status:** open.
+> please check the latest screenshot. This is the device under EM17. You should make its name available
+
+**Status:** fixed v12 18.10.2026. en0 is macOS's own name for the Wi-Fi card. The keeper asked once, at its start, which
+device is the Wi-Fi; at the login of 17.10.2026 23:40 the answer was empty and stayed so, and every connection was
+shown by its raw device name. Now it asks every time (CoreWLAN first), and a device is shown by the name a person
+knows: the Wi-Fi network's name ("mantra", or "Wi-Fi" when macOS hides it), any other device by its hardware port,
+the name in System Settings → Network ("AX88179B" for the USB-C LAN on en17).
 
 ## 18.10.2026, request 24 (v12)
 
@@ -186,5 +192,7 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 > for test now, try to switch between LAN connection and Wi-Fi connection. I just connected to USB-C my LAN interface. There is a cable in, so it should also give internet
 
 > or even better, when I confirm that what are actually my connection, they need to be graded out if they are not available
+
+> yes, very nice. But at the same time I have also Wi-Fi enabled, which is right now what is active is Mantra. But also something needs to be grayed out because it's not available at this moment
 
 **Status:** open.
