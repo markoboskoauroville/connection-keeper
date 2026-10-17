@@ -2,6 +2,7 @@
 // that change it (join a Wi-Fi, switch the Wi-Fi power). No Location permission is needed:
 // `ipconfig getsummary` names the SSID where CoreWLAN would ask for it.
 import Foundation
+import CoreWLAN
 
 @discardableResult
 func shell(_ path: String, _ args: [String], timeout: TimeInterval = 20) -> (status: Int32, out: String) {
@@ -33,13 +34,29 @@ enum Probe {
 }
 
 enum Net {
+    // Asked of macOS every time (v12, Marko 18.10.2026: "I always see en0 as device, but I'm changing the devices"): the
+    // keeper used to ask once at its start, the answer was empty at the login of 17.10.2026, and every connection was
+    // "en0" from then on. CoreWLAN first; networksetup only when CoreWLAN knows no Wi-Fi.
     static func wifiInterface() -> String? {
+        if let n = CWWiFiClient.shared().interfaceNames()?.sorted().first { return n }
         let out = shell("/usr/sbin/networksetup", ["-listallhardwareports"]).out
         let lines = out.components(separatedBy: "\n")
         for (i, line) in lines.enumerated() where line.contains("Hardware Port: Wi-Fi") && i + 1 < lines.count {
             return lines[i + 1].replacingOccurrences(of: "Device:", with: "").trimmingCharacters(in: .whitespaces)
         }
         return nil
+    }
+
+    // The name a person knows: the Wi-Fi network's name ("mantra"), or "Wi-Fi" when macOS hides it; for any other
+    // device its hardware port ("iPhone USB", "AX88179B", "Thunderbolt Bridge"), never "en0".
+    static func displayName(_ iface: String) -> String {
+        if iface == wifiInterface() { return currentSSID(iface) ?? "Wi-Fi" }
+        let lines = shell("/usr/sbin/networksetup", ["-listallhardwareports"]).out.components(separatedBy: "\n")
+        for (i, line) in lines.enumerated() where line.trimmingCharacters(in: .whitespaces) == "Device: \(iface)" && i > 0 {
+            let port = lines[i - 1].replacingOccurrences(of: "Hardware Port:", with: "").trimmingCharacters(in: .whitespaces)
+            if !port.isEmpty { return port }
+        }
+        return iface
     }
 
     static func currentSSID(_ iface: String) -> String? {

@@ -178,3 +178,9 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 > there must be some bug. I always see en0 as device, but I'm changing the devices. What is the n0? Why is the persistence
 
 **Status:** open.
+
+## 18.10.2026, request 24 (v12)
+
+> App should check all internet connections and offer only the one which is online now. Offline doesn't make sense to offer. Make it live, real app please
+
+**Status:** open.

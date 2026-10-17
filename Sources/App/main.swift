@@ -583,8 +583,7 @@ final class Stripe: NSObject {
 
     func currentNow() -> String? {
         guard let i = iface else { return nil }
-        if i == Net.wifiInterface() { return Net.currentSSID(i) }
-        return i
+        return Net.displayName(i)
     }
 
     @objc func showConnections() {

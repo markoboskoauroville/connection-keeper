@@ -66,7 +66,7 @@ final class Keeper {
     var failures = 0
     var diedAt: Date?                       // when the current trouble began
     var manual = false                      // a switch Marko asked for: no red alert
-    lazy var wifiIface: String? = Net.wifiInterface()
+    var wifiIface: String? { Net.wifiInterface() }   // asked every time (v12: a lazy answer stuck empty since a login)
 
     init() {
         dryRun = dryRunFlag || cfg.dryRun
@@ -95,7 +95,7 @@ final class Keeper {
         state.dryRun = dryRun
         if let iface = Net.defaultRouteInterface() ?? wifiIface {
             state.currentInterface = iface
-            state.current = iface == wifiIface ? Net.currentSSID(iface) : iface
+            state.current = Net.displayName(iface)
         }
         state.save()
     }
