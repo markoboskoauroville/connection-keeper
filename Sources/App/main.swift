@@ -63,7 +63,7 @@ func speedSample() -> String {
     let u = SpeedUnit.current
     let digits = (u == .autoBits || u == .autoBytes) ? 5 : 9
     let n = String(repeating: "8", count: digits) + " " + String(repeating: "M", count: u.unitWidth)
-    return "↓ \(n) (88.8)  ↑ \(n) (88.8)"
+    return "\(n)  (88.8)  \(n)  (88.8)"     // testPart is seven places: " (88.8)"
 }
 
 // v12 (Marko 18.10.2026: "you're using too much of my real estate ... remove internet ... just in parentheses. Put the
@@ -181,6 +181,9 @@ final class Stripe: NSObject {
         _ = fixWidth(data, max(textWidth("888.8 GB left", monoFont), textWidth("checking data…", monoFont)))
         // "When I click on download speed, it tests download speed" (request 16): the live speed starts the test too
         speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testSpeedByHand)))
+        speed.maximumNumberOfLines = 1
+        speed.cell?.wraps = false
+        speed.lineBreakMode = .byClipping
         speed.toolTip = speedTip()
         data.font = monoFont
         ping.font = monoFont
@@ -311,14 +314,20 @@ final class Stripe: NSObject {
     }
 
     // THE SPEED TEST (v11): the last speedtest.net result beside the live speed; a click tests in front of him.
-    func speedLine(_ down: Double?, _ up: Double?) -> String {
+    // v12 (Marko 18.10.2026: "I don't need arrows ... Green number means download, red number means upload"): no
+    // arrows, the download half green, the upload half red; all red in the failover alert as every other word.
+    func setSpeed(_ down: Double?, _ up: Double?) {
         let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
-        return "↓ \(down.map(rate) ?? dash) \(testPart(lastTest?.down_mbps, mark: testMark))  ↑ \(up.map(rate) ?? dash) \(testPart(lastTest?.up_mbps, mark: testMark))"
+        let d = "\(down.map(rate) ?? dash) \(testPart(lastTest?.down_mbps, mark: testMark))"
+        let u = "\(up.map(rate) ?? dash) \(testPart(lastTest?.up_mbps, mark: testMark))"
+        let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: red ? Ink.red : Ink.green])
+        t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: Ink.red]))
+        speed.attributedStringValue = t
     }
 
     func speedTip() -> String {
         "Internet only: the bytes through the router to the internet (the default route), per second. Traffic inside the local network is not counted.\n"
-            + "In parentheses: the last speedtest.net result, \(SpeedUnit.current.isBits ? "Mbit/s" : "MB/s")"
+            + "Green: download, red: upload. In parentheses: the last speedtest.net result, \(SpeedUnit.current.isBits ? "Mbit/s" : "MB/s")"
             + (lastTest.map { String(format: " (%.2f ↓ %.2f ↑ Mbit/s, ping %.0f ms)", $0.down_mbps, $0.up_mbps, $0.ping_ms ?? 0) } ?? "")
             + ".\nClick: test on speedtest.net in a Firefox window you watch."
     }
@@ -488,20 +497,20 @@ final class Stripe: NSObject {
                 let c = Traffic.internet(iface)
                 DispatchQueue.main.async {
                     self.sampling = false
-                    guard let c else { self.speed.stringValue = self.speedLine(nil, nil); self.lastCounters = nil; return }
+                    guard let c else { self.setSpeed(nil, nil); self.lastCounters = nil; return }
                     let dt = Date().timeIntervalSince(self.lastSample)
                     if let last = self.lastCounters, dt > 0 {
                         // a route made again (network change) starts its counters at 0: show nothing for that second
                         let down = c.rx >= last.rx ? Double(c.rx - last.rx) / dt : 0
                         let up = c.tx >= last.tx ? Double(c.tx - last.tx) / dt : 0
-                        self.speed.stringValue = self.speedLine(down, up)
+                        self.setSpeed(down, up)
                     }
                     self.lastCounters = c
                     self.lastSample = Date()
                 }
             }
         } else if iface == nil {
-            speed.stringValue = speedLine(nil, nil)
+            setSpeed(nil, nil)
         }
 
         state = KeeperState.load()

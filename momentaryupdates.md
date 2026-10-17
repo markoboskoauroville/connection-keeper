@@ -144,3 +144,20 @@ reply, which led to the router-sms fix (each look reloads the page); after it 23
 > also, I don't need arrowsness to do speed because we're going to do color coding. Green number means download, red number means upload. That's all
 
 **Status:** open.
+
+## 18.10.2026, request 20 (v12)
+
+> after this update, please push all the code to the repository. Now you can take the screenshot. We have two lines, line is never breaking. Please write that in manifest. We don't break lines in this application, one line only
+
+**Status:** done 18.10.2026: the speed text is one line (no wrapping, clipped, its width measured on the widest text);
+the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
+
+## 18.10.2026, request 21 (v12)
+
+> in the time of the run, you need to do all the tests, so speed test is happening, sms test is happening, only ping test is not happening. Also ping as soon as application start
+
+> so when starting the new session, you put three dots for everything that is not pasted
+
+> not tested
+
+**Status:** open.
