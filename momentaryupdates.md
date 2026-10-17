@@ -141,4 +141,6 @@ reply, which led to the router-sms fix (each look reloads the page); after it 23
 
 > also, I don't need text checked two minutes ago fall over. I don't need that's extra. Remove and reduce as much as possible size of this banner by reducing spaces. Also, 98.5 GB left. Nice, but time when we tested it's not important. Remove it please
 
+> also, I don't need arrowsness to do speed because we're going to do color coding. Green number means download, red number means upload. That's all
+
 **Status:** open.

@@ -114,6 +114,8 @@ final class Stripe: NSObject {
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
     var failoverWidth: NSLayoutConstraint!
+    var checkedPipe: NSTextField!
+    var failoverPipe: NSTextField!
     var checkedWidth: NSLayoutConstraint!
     var noOther = false                         // the keeper says NO OTHER CONNECTION: the status is red
     var red = false                             // the failover alert is on: every word is red
@@ -176,7 +178,7 @@ final class Stripe: NSObject {
         data.alignment = .left
         data.translatesAutoresizingMaskIntoConstraints = false
         data.setContentHuggingPriority(.required, for: .horizontal)
-        _ = fixWidth(data, max(textWidth("888.8 GB left · 88:88", monoFont), textWidth("checking data…", monoFont)))
+        _ = fixWidth(data, max(textWidth("888.8 GB left", monoFont), textWidth("checking data…", monoFont)))
         // "When I click on download speed, it tests download speed" (request 16): the live speed starts the test too
         speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testSpeedByHand)))
         speed.toolTip = speedTip()
@@ -216,11 +218,17 @@ final class Stripe: NSObject {
             p.setContentHuggingPriority(.required, for: .horizontal)
             return p
         }
+        checkedPipe = pipe()
+        failoverPipe = pipe()
         for b in [connButton, ping, gear] { b.setContentHuggingPriority(.required, for: .horizontal) }
-        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, pipe(), checked, pipe(), failover, ok])
+        // v12 (Marko 18.10.2026: "I don't need text checked two minutes ago ... reduce as much as possible size of this
+        // banner by reducing spaces"): "checked … ago" and "failover … ago" are gone from the normal stripe; the status
+        // place shows only when it has something to say (NO OTHER CONNECTION, a ping answer, a switch), the failover
+        // place only in the red alert. Closer items, smaller margins.
+        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
         row.orientation = .horizontal
-        row.spacing = 6
-        row.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 8)
+        row.spacing = 3
+        row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(row)
         NSLayoutConstraint.activate([
@@ -437,6 +445,10 @@ final class Stripe: NSObject {
     // The stripe keeps its left edge and takes the width its words need.
     func fit() {
         guard let row = panel.contentView?.subviews.first else { return }
+        let t = checked.stringValue
+        let quiet = t.isEmpty || t.hasPrefix("checked ") || t == "keeper not running"
+        if checked.isHidden != quiet { checked.isHidden = quiet; checkedPipe.isHidden = quiet }
+        if failover.isHidden == red { failover.isHidden = !red; failoverPipe.isHidden = !red }
         row.layoutSubtreeIfNeeded()
         if abs(row.fittingSize.width - panel.frame.width) < 1 { return }
         let origin = panel.frame.origin
