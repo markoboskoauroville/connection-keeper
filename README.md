@@ -106,3 +106,11 @@ The speed on the stripe, now labelled **internet**, counts only what goes throug
 kernel's byte counters of the default route (`nettop -m route`, "default -> en0 -> 192.168.1.1"), TCP and UDP. v1 to
 v9 counted everything on en0, so a transfer to the phone at 192.168.1.103 showed as internet speed. Measured during a
 150 MB adb push to the phone (3.6–3.9 MB/s on the local network): en0 3605–3924 kB/s out, the stripe 0–26 kB/s.
+
+## The data check in front of his eyes (v11, 18.10.2026)
+
+A click on the data item (or ⚙ → Check data) now runs `router-sms balance --visible --json`: a Firefox window opens
+on the router, logs in (the password typed dot by dot), writes STANJE to 13880 letter by letter, sends it, waits in
+the Inbox, opens Telemach's reply when it comes and holds it on the screen for 15 s, then closes; the stripe shows
+the result. The same script every time, no AI. Nothing else may stay logged in to the router meanwhile (it allows one
+session; MANTRA_MANIFEST modules/tp-link-router.md).

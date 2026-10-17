@@ -3,6 +3,8 @@
 // scenes"). The stripe runs the command `router-sms balance --json` (repo router-sms, ~/Developer/ROUTER_SMS): a
 // headless Firefox sends STANJE to 13880 through the TP-Link router and reads Telemach's reply. No AI, no window.
 // The last answer is kept in data-balance.json and shown at start.
+// v11 (Marko 18.10.2026, request 15: "like invisible hand ... do it in front of my eyes"): the command runs with
+// --visible, so the same script does every step in a Firefox window he watches (log in, SMS, the reply), then closes it.
 import AppKit
 
 struct DataBalance: Codable {
@@ -22,7 +24,7 @@ struct DataBalance: Codable {
         String(format: "Telemach, at %@: %.2f MB used of %.2f MB, %.2f MB left", at, used_mb, total_mb, left_mb)
             + (eur.map { String(format: "; account %.2f EUR", $0) } ?? "")
             + (checked.map { "\nasked \($0)" } ?? "") + (seconds.map { String(format: " (%.0f s)", $0) } ?? "")
-            + "\nClick: send STANJE to 13880 now (one SMS)."
+            + "\nClick: send STANJE to 13880 now in a Firefox window you watch (one SMS)."
     }
 
     static let file = Paths.support.appendingPathComponent("data-balance.json")
@@ -45,7 +47,7 @@ struct DataBalance: Codable {
         guard FileManager.default.isExecutableFile(atPath: command) else {
             return .failure(Fail(errorDescription: "router-sms is not installed (~/Developer/ROUTER_SMS)"))
         }
-        let r = shell(command, ["balance", "--json"], timeout: 150)
+        let r = shell(command, ["balance", "--visible", "--json"], timeout: 150)
         let last = r.out.split(separator: "\n").last.map(String.init) ?? ""
         if let d = last.data(using: .utf8), let b = try? JSONDecoder().decode(DataBalance.self, from: d) {
             b.save()

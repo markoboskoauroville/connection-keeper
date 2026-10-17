@@ -97,4 +97,16 @@ words (540 instead of 797 points in the normal state; docs/v7-stripe.png). Red a
 
 > my connection keeper application has problems sending SMS and receiving SMS. Please let's change it. When I click to check the available beta, you need to create action to open Chrome browser, go to this address, type this password and be inside, and send SMS by using Claude plugin. And then like invisible hand, it's needed to do it in front of my eyes using this interface http://192.168.1.1/ pasword is [the router password]
 
-(The password is written here as "the router's password"; it is kept in the login keychain, never in the repository.)
+(The password is not repeated here; the script reads it from ~/Downloads/API/tplink.md.)
+
+Then, in the same session:
+
+> can also work in Firefox if you can easily remote control the Firefox. There is already some kind of way to control Firefox, I think that's even better. Let's try with Firefox so I can also see you log in everything remotely. I think the script can do it without launching Claude once. It's done the same script only does it over and over again
+
+> anyhow, I want to see as some person is doing it. I want to see how you open the Firefox, write SMS, and when the answer comes you switch exactly to that message and open the message for me
+
+**Status:** built v11 18.10.2026 with router-sms v2 `--visible`: a Firefox window he watches, the password and the
+SMS typed letter by letter, the reply opened and held 15 s. No Claude (the AI may not type the router password; the
+script does). Proven without an SMS (`router-sms inbox --visible`, 20–30 s). The warm router-sms server is stopped:
+it held the router's only session and was why the check failed ("no New Message form"). The first real check is
+Marko's click on the stripe.
