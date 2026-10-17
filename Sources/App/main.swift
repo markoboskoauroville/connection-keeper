@@ -27,6 +27,7 @@ enum Ink {
     static let amber = NSColor(calibratedRed: 0.98, green: 0.72, blue: 0.20, alpha: 1)
     static let red = NSColor(calibratedRed: 0.95, green: 0.33, blue: 0.30, alpha: 1)
     static let grey = NSColor(calibratedWhite: 0.40, alpha: 1)
+    static let yellow = NSColor(calibratedRed: 1.0, green: 0.86, blue: 0.20, alpha: 1)   // v12: the ping section (Marko)
 }
 
 // v9 (Marko 14.10.2026: "the whole status line is breathing. So I'm trying to click on the settings icon and it's
@@ -166,7 +167,7 @@ final class Stripe: NSObject {
         ping.target = self
         ping.action = #selector(pingNow)
         ping.font = .monospacedDigitSystemFont(ofSize: 12, weight: .regular)
-        ping.contentTintColor = Ink.text
+        ping.contentTintColor = Ink.yellow
         ping.alignment = .left
         ping.translatesAutoresizingMaskIntoConstraints = false
         ping.toolTip = "Press: ping now and say on the stripe whether the internet is alive"
@@ -178,7 +179,7 @@ final class Stripe: NSObject {
         data.alignment = .left
         data.translatesAutoresizingMaskIntoConstraints = false
         data.setContentHuggingPriority(.required, for: .horizontal)
-        _ = fixWidth(data, max(textWidth("888.8 GB left", monoFont), textWidth("checking data…", monoFont)))
+        _ = fixWidth(data, textWidth("888.8 GB left", monoFont))
         // "When I click on download speed, it tests download speed" (request 16): the live speed starts the test too
         speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testSpeedByHand)))
         speed.maximumNumberOfLines = 1
@@ -256,9 +257,13 @@ final class Stripe: NSObject {
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData(); self?.newDay() }
         // At every start, behind the scenes (request 17): the data left, then the speed test, one after the other so
         // the two Firefoxes never share the 4G line's measurement.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-            self?.checkData(visible: false) { self?.testSpeed(visible: false) }
-        }
+        // v12 (Marko 18.10.2026: "you need to do all the tests ... Also ping as soon as application start ... three dots
+        // inside parenthesis" for what is not tested yet): at once the ping, the data, then the speed; until each answers
+        // its place says (...).
+        testMark = "..."
+        setSpeed(nil, nil)
+        pingNow()
+        checkData(visible: false) { [weak self] in self?.testSpeed(visible: false) }
         NotificationCenter.default.addObserver(forName: DataBalanceNote.checkNow, object: nil, queue: .main) { [weak self] _ in self?.checkDataByHand() }
     }
 
@@ -284,7 +289,7 @@ final class Stripe: NSObject {
     func checkData(visible: Bool, then: (() -> Void)? = nil) {
         if dataBusy { then?(); return }
         dataBusy = true
-        data.title = "checking data…"
+        data.title = "(...) GB left"
         data.contentTintColor = Ink.amber
         fit()
         let t0 = Date()
@@ -344,7 +349,7 @@ final class Stripe: NSObject {
     func testSpeed(visible: Bool) {
         if webBusy { return }
         webBusy = true
-        testMark = "…"
+        testMark = "..."
         appendLog("\(logStamp()) SPEEDTEST asked\(visible ? " in front of him" : " behind the scenes")")
         DispatchQueue.global().async {
             let r = WebSpeed.run(visible: visible)
@@ -418,7 +423,7 @@ final class Stripe: NSObject {
             if red {
                 red = false
                 for b in [connButton, gear] { b.contentTintColor = Ink.text }
-                if Date() >= pingHeld { ping.contentTintColor = Ink.text }
+                if Date() >= pingHeld { ping.contentTintColor = Ink.yellow }
                 speed.textColor = Ink.text; failover.textColor = Ink.text; failover.font = speed.font
                 ok.isHidden = true
                 showData()
@@ -670,8 +675,8 @@ final class Stripe: NSObject {
     @objc func pingNow() {
         let cfg = Config.load()
         pingHeld = Date().addingTimeInterval(60)
-        ping.title = "pinging…"
-        ping.contentTintColor = Ink.amber
+        ping.title = "ping (...)"
+        ping.contentTintColor = Ink.yellow
         checked.stringValue = "pinging \(cfg.pingHost)…"
         checked.textColor = Ink.amber
         dot.color = Ink.amber
@@ -684,7 +689,7 @@ final class Stripe: NSObject {
                 case .online(_, let ms):
                     self.ping.title = ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
                     self.checked.stringValue = ms != nil ? "ALIVE ✓  \(at)" : "ALIVE ✓  web only (ping blocked)"
-                    self.ping.contentTintColor = Ink.green; self.checked.textColor = Ink.green; self.dot.color = Ink.green
+                    self.ping.contentTintColor = Ink.yellow; self.checked.textColor = Ink.green; self.dot.color = Ink.green
                 case .captive:
                     self.ping.title = "ping ✗"
                     self.checked.stringValue = "NOT ALIVE ✗  captive portal  \(at)"
@@ -697,7 +702,7 @@ final class Stripe: NSObject {
                 self.pingHeld = Date().addingTimeInterval(20)
                 self.applyAlert()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 20.5) {
-                    if Date() >= self.pingHeld { self.ping.contentTintColor = Ink.text; self.refresh() }
+                    if Date() >= self.pingHeld { self.ping.contentTintColor = Ink.yellow; self.refresh() }
                 }
             }
         }

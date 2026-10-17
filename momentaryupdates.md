@@ -166,3 +166,9 @@ the rule is in MANTRA_MANIFEST modules/one-line-stripe.md; everything pushed.
 > color ping section yelloiw
 
 **Status:** open.
+
+## 18.10.2026, request 22 (v12)
+
+> also for the device used for connecting to the network, every Wi-Fi device will be green. Every LAN port hardware port or maybe tethering through phone will be yellow. Green and yellow, so we are also doing the thing with network devices
+
+**Status:** open.
