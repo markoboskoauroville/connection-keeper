@@ -188,7 +188,7 @@ extension Stripe {
     func sampleLines(_ all: [String: (rx: UInt64, tx: UInt64)], dt: Double) {
         let tests = WebSpeedByConnection.all(), aggTest = AggTest.load()
         let joined = Set(agg?.lines.map(\.device) ?? [])
-        var sumDown = 0.0, sumUp = 0.0
+        var sumDown = 0.0, sumUp = 0.0, allDown = 0.0, allUp = 0.0
         func rates(_ last: (rx: UInt64, tx: UInt64)?, _ c: (rx: UInt64, tx: UInt64)?) -> (Double, Double)? {
             guard let last, let c, dt > 0 else { return nil }
             return (c.rx >= last.rx ? Double(c.rx - last.rx) / dt : 0, c.tx >= last.tx ? Double(c.tx - last.tx) / dt : 0)
@@ -200,10 +200,14 @@ extension Stripe {
             r.lastBytes = c
             r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil, mark: lineTesting.contains(o.name) ? "..." : nil)
             if joined.contains(o.iface), let v { sumDown += v.0; sumUp += v.1 }
+            if o.sameAs == nil, let v { allDown += v.0; allUp += v.1 }
         }
         if let i = iface, joined.contains(i), let v = rates(aggMainLast, all[i]) { sumDown += v.0; sumUp += v.1 }
         if let i = iface { aggMainLast = all[i] }
         let on = Aggregation.on && agg != nil
+        // v14: under mantra_networkaggregate the first row is the real lines added; utun99's own counters count every
+        // byte twice (into hev and back out), 163 Mbit/s over lines carrying 82.8 (18.10.2026)
+        if iface == Aggregation.tunnelDevice { setSpeed(allDown, allUp) }
         aggRow.setSpeed(on ? sumDown : nil, on ? sumUp : nil, test: aggTest.map { ($0.joined, $0.joinedUp) }, dim: !on,
                         mark: lineTesting.contains("JOINED") ? "..." : nil)
     }

@@ -609,12 +609,12 @@ final class Stripe: NSObject {
             sampling = true
             DispatchQueue.global().async {
                 let all = Traffic.internetAll()
-                // the virtual device has no default route of its own (two half routes): its interface counters
-                let c = all?[iface] ?? (iface == Aggregation.tunnelDevice ? Traffic.counters(iface).map { (UInt64($0.rx), UInt64($0.tx)) } : nil)
+                let c = all?[iface]
                 DispatchQueue.main.async {
                     self.sampling = false
                     let dt = Date().timeIntervalSince(self.lastSample)
                     if let all { self.sampleLines(all, dt: dt) }
+                    if iface == Aggregation.tunnelDevice { self.lastSample = Date(); return }   // set from the lines
                     guard let c else { self.setSpeed(nil, nil); self.lastCounters = nil; return }
                     if let last = self.lastCounters, dt > 0 {
                         // a route made again (network change) starts its counters at 0: show nothing for that second

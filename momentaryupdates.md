@@ -247,7 +247,7 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 
 > I did aggregate the This as you said joined. Give me minimize uh icon on the upper right corner so I can also minimize status if I need to And then when I switch to it with Any switcher like command tab, it should come up, it should not stay on the dock. So make that because usually things stay on the dock even if I switch to them. Then I need to go to the window and then I need to manually open them. That's very annoying behavior from macOS. I don't like this. We overwrite this. Minimize with mouse. Yeah. And then finding it with command tab and coming back to door position please.
 
-**Status:** started 18.10.2026.
+**Status:** v13/v14 built 18.10.2026: "–" in the stripe's top-right corner hides it; the app is in Command-Tab and the Dock only while hidden; switching to it brings the stripe back to the same place and takes it out of the Dock again (proven through Accessibility: back at X 3016, Y 31). Marko's own Command-Tab not yet seen.
 
 ## 18.10.2026, request 30 (the stripe on the Mac display; a click on any row's speed tests it, the joined row too)
 
@@ -255,25 +255,25 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 
 > and you should compare now in this test phase
 
-**Status:** started 18.10.2026.
+**Status:** built 18.10.2026: a click on a line's speed tests that line alone (down and up), a click on JOINED's tests every line and then all joined; the results in parentheses. The JOINED words fit (seen on the Mac display). Compared: cable 30.6/24.8, Something 40.0/18.9, joined 49.1 (+23%) down and 44.2 (+78%) up.
 
 ## 18.10.2026, request 31 (remember the last position and the last display)
 
 > please make sure the app itself remembers its last position and its last display
 
-**Status:** started 18.10.2026.
+**Status:** built 18.10.2026: the display by name and the top-left corner on it, saved on every move; a stripe partly off its display is nudged back inside THAT display. Proven: moved, restarted, came back to the same place on the Mac display.
 
 ## 18.10.2026, request 32 (the minimize button on the edge)
 
 > also, minimus lion is in a strange position. It's not on the edge. Those kind of things are always on the edge
 
-**Status:** started 18.10.2026.
+**Status:** built 18.10.2026: the "–" is pinned to the stripe's top-right corner, whatever the rows' width (seen).
 
 ## 18.10.2026, request 33 (a virtual network device: mantra_networkaggregate)
 
 > now you need to create virtual LAN device, so in the macOS I can select this device and macOS will not know about aggregation. It will just use it as normal, and this device is doing aggregation. So I want to see in my status of connection where I'm connected to our aggregate, mantra_aggregate. It's called mantra_networkaggregate
 
-**Status:** started 18.10.2026.
+**Status:** v14 built and installed 18.10.2026 (the free helper, `sudo ./tunnel.sh install` by Marko at 10:26): the stripe's first row reads mantra_networkaggregate; plain downloads with no proxy at 76.1 Mbit/s over both lines (new connections alternate 3/3 between the two public IPs); name lookups, UDP, the web, the keeper fine; the server killed: the device gone in 5 s, the web straight on the cable, back in 10 s when the server returned; ticks off: down in 2 s, on: up in 10 s.
 
 > We can't pay. We can only do with free whatever we can do. So we go with free helper
 
