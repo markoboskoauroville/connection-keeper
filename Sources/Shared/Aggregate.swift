@@ -21,7 +21,42 @@ enum Aggregation {
             try? JSONEncoder().encode(newValue).write(to: selection)
         }
     }
-    static var on: Bool { !selected.isEmpty }
+    static var on: Bool { aggregateMode && !selected.isEmpty }
+
+    // THE MODE (request 34, Marko 18.10.2026: "After the last update, I don't have any connections ... make it simple to
+    // switch mode in the application to aggregate or one connection. To simply and quickly overwrite our aggregation
+    // services"). One connection: the helper's flag gone (utun99 down within 2 s), macOS's proxy off, the server stopped
+    // and kept from starting at login, so nothing of the aggregation is left between the Mac and its line. Aggregate: the
+    // server on and the ticked lines joined. The ticks are kept either way.
+    static let modeFile = Paths.support.appendingPathComponent("mode")
+    static var aggregateMode: Bool {
+        get {
+            if let m = try? String(contentsOf: modeFile, encoding: .utf8) { return m.hasPrefix("aggregate") }
+            return FileManager.default.fileExists(atPath: tunnelFlag.path)
+        }
+        set {
+            try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
+            try? (newValue ? "aggregate\n" : "one\n").write(to: modeFile, atomically: true, encoding: .utf8)
+        }
+    }
+
+    @discardableResult
+    static func setMode(_ aggregate: Bool) -> [String] {
+        aggregateMode = aggregate
+        let domain = "gui/\(getuid())", agent = "\(domain)/\(CKAggregateLabel)"
+        let plist = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/\(CKAggregateLabel).plist").path
+        if aggregate {
+            shell("/bin/launchctl", ["enable", agent])
+            shell("/bin/launchctl", ["bootstrap", domain, plist])       // fails harmlessly when it is loaded already
+            shell("/bin/launchctl", ["kickstart", agent])
+            return ["mode aggregate, server started"] + (selected.isEmpty ? ["no line ticked: nothing joined yet"] : apply(true))
+        }
+        var said = apply(false)
+        if !tunnelInstalled || systemProxyIsOn() { said += systemProxy(false) }
+        shell("/bin/launchctl", ["bootout", agent])
+        shell("/bin/launchctl", ["disable", agent])
+        return ["mode one connection"] + said + ["server stopped"]
+    }
 
     // THE VIRTUAL DEVICE (v14, request 33): when the root helper ck-tunnel is installed, aggregation on means the device
     // utun99, shown as mantra_networkaggregate, carries all internet traffic, and macOS's proxy setting stays off; the

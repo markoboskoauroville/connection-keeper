@@ -156,3 +156,11 @@ The Firefox download (Video Download Helper, HLS, 1.6 GB) survived the 09:42 cha
 - **The server must answer at once**: it used to find its lines (10-20 s) before accepting; through the device the
   whole Mac would wait. Now it accepts at once and the first connections wait for the lines.
 - **UDP reply race**: the reply thread read the client's address before the wait, so the first reply was dropped.
+
+## 18.10.2026, v15: a fail-open check must test the road, not the door
+
+v14's helper took the device down only when the aggregation server stopped answering on 127.0.0.1:8857. The server kept
+answering while nothing got out, so every page hung and Marko restarted the Mac; the tunnel-on flag survived the restart
+and brought the device back. The check is now a real HEAD to 1.1.1.1 / 1.0.0.1 through the device, and the routes being
+taken away again and again counts as failure too (fighting macOS is worse than off). And there is one switch, ONE LINE ⇄
+JOINED, that takes every piece of the aggregation away without a password.

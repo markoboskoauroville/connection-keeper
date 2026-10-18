@@ -285,7 +285,7 @@ final class Stripe: NSObject {
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
         aggRow = LineRow(leadWidth: gear.fittingSize.width + 3, nameWidth: connWidth.constant)
-        aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
+        aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
         aggRow.speed.toolTip = "All joined lines' live speed added; in parentheses the last joined test, down and up.\nClick: test every line alone, then all joined, to compare (about 40 s)."
         let column = NSStackView(views: [row, aggRow.view])
@@ -703,6 +703,7 @@ final class Stripe: NSObject {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.minimumWidth = 460
+        addModeSection(menu)
         let cfg = Config.load()
         let wifi = Net.wifiInterface()
         let active = Net.activeInterfaces().filter { $0 != wifi }

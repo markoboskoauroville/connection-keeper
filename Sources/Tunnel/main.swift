@@ -60,6 +60,36 @@ func serverAnswers() -> Bool {
     return err == 0
 }
 
+// TRAFFIC MUST PASS (request 34, 18.10.2026: after v14 Marko had no connection at all until he restarted the Mac; the
+// server answered on 127.0.0.1, so the old check saw nothing wrong while every page hung). While up, a real request
+// goes out through the device every 10 s: HEAD to Cloudflare's 1.1.1.1 and 1.0.0.1 by address (no DNS), any answer
+// within 4 s is a pass. Two misses in a row: the device comes down and stays down for five minutes.
+func trafficPasses() -> Bool {
+    for ip in ["1.1.1.1", "1.0.0.1"] {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { continue }
+        defer { close(fd) }
+        var a = sockaddr_in(); a.sin_family = sa_family_t(AF_INET); a.sin_port = UInt16(80).bigEndian; a.sin_addr.s_addr = inet_addr(ip)
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+        let r = withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+        if r != 0 {
+            guard errno == EINPROGRESS else { continue }
+            var p = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            guard poll(&p, 1, 4000) == 1 else { continue }
+            var err: Int32 = 0; var len = socklen_t(MemoryLayout<Int32>.size)
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len)
+            guard err == 0 else { continue }
+        }
+        let req = "HEAD / HTTP/1.1\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n"
+        _ = req.withCString { send(fd, $0, strlen($0), 0) }
+        var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+        guard poll(&p, 1, 4000) == 1 else { continue }
+        var buf = [UInt8](repeating: 0, count: 64)
+        if recv(fd, &buf, buf.count, 0) > 0 { return true }
+    }
+    return false
+}
+
 func routesPresent() -> Bool {
     let out = run("/usr/sbin/netstat", ["-rn", "-f", "inet"]).out
     return out.components(separatedBy: "\n").filter { $0.contains(device) && ($0.hasPrefix("0/1") || $0.hasPrefix("128.0/1")) }.count == 2
@@ -146,6 +176,17 @@ log("ck-tunnel started, flag \(flag)")
 deleteRoutes()                         // a crash may have left them
 writeState("off")
 var misses = 0
+var blocked = 0, sinceUp = 0
+var readds: [Date] = []
+var restUntil = Date.distantPast         // after a fail-open the device rests five minutes before it may come up again
+
+func rest(_ why: String) {
+    down(why)
+    restUntil = Date().addingTimeInterval(300)
+    writeState("off resting: \(why)")
+    log("resting five minutes before trying again")
+}
+
 while true {
     if let endAt, Date() >= endAt { down("the test run is over"); exit(0) }
     let want = FileManager.default.fileExists(atPath: flag)
@@ -155,10 +196,26 @@ while true {
         if !p.isRunning { down("hev-socks5-tunnel stopped (status \(p.terminationStatus))") }
         else if !want { down("aggregation off") }
         else if misses >= 3 { down("the aggregation server does not answer") }
-        else if !routesPresent() { addRoutes(); log("routes were gone (a network change): added again") }
-        else { addScopedDefaults() }                   // a line that became the main one meanwhile
-    } else if want && answers {
+        else if !routesPresent() {
+            // macOS took them away again and again (12:17–12:19 on 18.10.2026, every 2.5 s): fighting it is worse than off
+            readds = readds.filter { $0 > Date().addingTimeInterval(-60) } + [Date()]
+            if readds.count > 4 { readds = []; rest("the routes keep vanishing (\(device) fights a network change)") }
+            else { addRoutes(); log("routes were gone (a network change): added again") }
+        } else {
+            addScopedDefaults()                        // a line that became the main one meanwhile
+            sinceUp += 1
+            if sinceUp == 2 || sinceUp % 5 == 0 {
+                if trafficPasses() { blocked = 0 }
+                else {
+                    blocked += 1
+                    log("traffic did not pass through \(device) (\(blocked) of 2)")
+                    if blocked >= 2 { blocked = 0; rest("traffic does not pass through \(device)") }
+                }
+            }
+        }
+    } else if want && answers && Date() >= restUntil {
         up()
+        sinceUp = 0; blocked = 0
     }
     sleep(2)
 }
