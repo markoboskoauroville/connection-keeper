@@ -242,3 +242,9 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > on the status line, it's basically the user dashboard. When the user opens the connection, he can select multiple connections or deselect them. If he deselects everything, then it means we are exiting aggregation mode
 
 **Status:** v13 built 18.10.2026: JOIN tick boxes in the drop-down (the menu stays open), any tick turns aggregation on (macOS's SOCKS proxy → the server), none turns it off; the proxy switch proven without a password. Not yet ticked by Marko.
+
+## 18.10.2026, request 29 (minimize, and back with Command-Tab)
+
+> I did aggregate the This as you said joined. Give me minimize uh icon on the upper right corner so I can also minimize status if I need to And then when I switch to it with Any switcher like command tab, it should come up, it should not stay on the dock. So make that because usually things stay on the dock even if I switch to them. Then I need to go to the window and then I need to manually open them. That's very annoying behavior from macOS. I don't like this. We overwrite this. Minimize with mouse. Yeah. And then finding it with command tab and coming back to door position please.
+
+**Status:** started 18.10.2026.

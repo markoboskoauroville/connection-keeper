@@ -17,7 +17,7 @@
 import Foundation
 import Darwin
 
-let speedURL = "https://speed.cloudflare.com/__down?bytes=200000000"   // cut by time; never 200 MB
+let speedURL = "https://speed.cloudflare.com/__down?bytes=50000000"   // cut by time; Cloudflare answers 403 above about 100 MB
 
 func log(_ s: String) {
     let f = ISO8601DateFormatter(); f.timeZone = .current
@@ -28,7 +28,7 @@ func log(_ s: String) {
 
 final class Uplink {
     let iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?
-    var mbps: Double = 10, alive = true, active = 0, connections = 0, bytesDown = 0, bytesUp = 0
+    var mbps: Double = 10, alive = true, misses = 0, active = 0, connections = 0, bytesDown = 0, bytesUp = 0
     init(iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?) {
         self.iface = iface; self.name = name; self.gateway = gateway; self.gatewayMAC = gatewayMAC; self.publicIP = publicIP
     }
@@ -60,13 +60,16 @@ enum Lines {
 
     // Every device with an address and a router (only the ticked ones when any is ticked), one per line out of the house. Of two devices on the same line the
     // cable is kept (steadier than the Wi-Fi). Devices with no internet are left out.
-    static func discover() -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
+    // A device stays a line while it has an address and a router; whether it answers is the health check's word (a
+    // single lost ping on a full 4G line dropped Something for a minute in the middle of the first joined test,
+    // 18.10.2026). `known`: the public IPs found before, kept when a lookup fails under load.
+    static func discover(known: [String: String] = [:]) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
         let wifi = Net.wifiInterface()
         let ticked = Set(Aggregation.selected)
         var found: [Uplink] = []
         for i in Net.activeInterfaces() {
-            guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i), Net.onlineVia(i) != nil else { continue }
-            found.append(Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i)))
+            guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
+            found.append(Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i]))
         }
         found.sort { ($0.iface == wifi ? 1 : 0) < ($1.iface == wifi ? 1 : 0) }
         var lines: [Uplink] = [], ignored: [(Uplink, Uplink)] = []
@@ -161,11 +164,15 @@ final class Server {
     let started = Date()
 
     func refresh() {
-        let d = Lines.discover()
+        lock.lock()
+        let known = Dictionary(lines.compactMap { u in u.publicIP.map { (u.iface, $0) } }, uniquingKeysWith: { a, _ in a })
+        lock.unlock()
+        let d = Lines.discover(known: known)
         lock.lock()
         // Counters stay with a line that is still there.
         for u in d.lines {
             if let old = lines.first(where: { $0.iface == u.iface && $0.publicIP == u.publicIP }) {
+                u.alive = old.alive; u.misses = old.misses
                 u.active = old.active; u.connections = old.connections; u.bytesDown = old.bytesDown; u.bytesUp = old.bytesUp
             }
         }
@@ -181,32 +188,37 @@ final class Server {
     func health() {
         lock.lock(); let ls = lines; lock.unlock()
         for u in ls {
-            let alive = Net.onlineVia(u.iface) != nil || Net.onlineVia(u.iface, host: "8.8.8.8") != nil
+            let answered = Net.onlineVia(u.iface) != nil || Net.onlineVia(u.iface, host: "8.8.8.8") != nil
             lock.lock()
+            u.misses = answered ? 0 : u.misses + 1
+            let alive = answered || u.misses < 2              // dead after two silent checks in a row, not one lost ping
             if alive != u.alive { log("\(u.name) \(alive ? "is back" : "does not answer: new connections go to the others")") }
             u.alive = alive
             lock.unlock()
         }
     }
 
-    // The line for a new connection: the one with the fewest connections for its speed; the dead ones last.
-    func order() -> [Uplink] {
-        lock.lock(); defer { lock.unlock() }
-        return lines.sorted { a, b in
-            if a.alive != b.alive { return a.alive }
-            return Double(a.active + 1) / a.mbps < Double(b.active + 1) / b.mbps
-        }
-    }
-
     // Out through the best line; if it cannot reach the host, through the next (a dead line is skipped this way too).
     func open(_ host: String, _ port: UInt16) -> (Int32, Uplink)? {
-        for u in order() {
+        // The line is reserved before dialling, so connections arriving together spread over the lines (they all saw
+        // "0 active" and took the same line in the first joined test).
+        var tried = Set<String>()
+        while true {
+            lock.lock()
+            let alive = lines.filter { !tried.contains($0.iface) }
+            guard let u = alive.min(by: { a, b in
+                if a.alive != b.alive { return a.alive }
+                return Double(a.active + 1) / a.mbps < Double(b.active + 1) / b.mbps
+            }) else { lock.unlock(); return nil }
+            u.active += 1
+            lock.unlock()
             if let fd = dial(host, port, via: u.iface) {
-                lock.lock(); u.active += 1; u.connections += 1; lock.unlock()
+                lock.lock(); u.connections += 1; lock.unlock()
                 return (fd, u)
             }
+            lock.lock(); u.active -= 1; lock.unlock()
+            tried.insert(u.iface)
         }
-        return nil
     }
 
     func run() {
@@ -391,7 +403,7 @@ func test(seconds: Int) {
     AggTest(at: Date(), alone: Dictionary(uniqueKeysWithValues: d.lines.map { ($0.name, alone[$0.publicIP ?? $0.iface] ?? 0) }), joined: r.mbps, mb: spent).save()
     let best = alone.values.max() ?? 0
     print(String(format: "joined through the server: %.1f Mbit/s (best line alone %.1f, the lines added %.1f): %@", r.mbps, best, sum,
-                 r.mbps > best * 1.1 ? String(format: "%.0f%% faster than the best line alone", (r.mbps / best - 1) * 100) : "not faster"))
+                 best > 0 && r.mbps > best * 1.1 ? String(format: "%.0f%% faster than the best line alone", (r.mbps / best - 1) * 100) : "not faster"))
     print(String(format: "SIM data spent: %.0f MB", spent))
 }
 
