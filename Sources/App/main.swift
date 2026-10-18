@@ -122,6 +122,8 @@ final class Stripe: NSObject {
     static let failoverNormal = textWidth("failover 59 min ago", .monospacedDigitSystemFont(ofSize: 12, weight: .regular))
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
+    let minimize = NSButton(title: "–", target: nil, action: nil)   // v13, request 29
+    var minimizedFrame: NSRect?
     var failoverWidth: NSLayoutConstraint!
     var checkedPipe: NSTextField!
     var failoverPipe: NSTextField!
@@ -246,7 +248,15 @@ final class Stripe: NSObject {
         // banner by reducing spaces"): "checked … ago" and "failover … ago" are gone from the normal stripe; the status
         // place shows only when it has something to say (NO OTHER CONNECTION, a ping answer, a switch), the failover
         // place only in the red alert. Closer items, smaller margins.
-        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
+        // v13 (request 29: "Give me minimize ... icon on the upper right corner"): "–" at the right end.
+        minimize.isBordered = false
+        minimize.target = self
+        minimize.action = #selector(minimizeStripe)
+        minimize.font = .systemFont(ofSize: 15, weight: .bold)
+        minimize.contentTintColor = Ink.dim
+        minimize.toolTip = "Hide the stripe; Command-Tab to Connection Keeper (or its Dock icon) brings it back to this place"
+        minimize.setContentHuggingPriority(.required, for: .horizontal)
+        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, minimize])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -293,6 +303,9 @@ final class Stripe: NSObject {
         setSpeed(nil, nil)
         pingNow()
         checkData(visible: false) { [weak self] in self?.testSpeed(visible: false) }
+        for n in [NSApplication.didBecomeActiveNotification, NSApplication.didUnhideNotification] {
+            NotificationCenter.default.addObserver(forName: n, object: nil, queue: .main) { [weak self] _ in self?.restoreStripe() }
+        }
         NotificationCenter.default.addObserver(forName: DataBalanceNote.checkNow, object: nil, queue: .main) { [weak self] _ in self?.checkDataByHand() }
     }
 
@@ -486,6 +499,29 @@ final class Stripe: NSObject {
         FailoverAlert.clear()
         appendLog("\(logStamp()) ALERT acknowledged on the stripe (OK): \(a.line)")
         applyAlert()
+    }
+
+    // MINIMIZE (v13, Marko 18.10.2026: "when I switch to it with ... command tab, it should come up, it should not stay on
+    // the dock ... coming back to [the] position"): no Dock miniaturizing. The stripe is taken off the screen and the
+    // app becomes an ordinary one only while hidden, so Command-Tab and the Dock know it; the moment it is switched to,
+    // the stripe is back where it was and the app leaves the Dock and Command-Tab again.
+    @objc func minimizeStripe() {
+        minimizedFrame = panel.frame
+        panel.orderOut(nil)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.hide(nil)
+        appendLog("\(logStamp()) stripe minimized: Command-Tab brings it back")
+    }
+
+    func restoreStripe() {
+        guard let f = minimizedFrame else { return }
+        minimizedFrame = nil
+        panel.setFrame(f, display: true)
+        keepOnScreen()
+        applyOnTop()
+        panel.orderFrontRegardless()
+        NSApp.setActivationPolicy(.accessory)
+        appendLog("\(logStamp()) stripe back from minimized")
     }
 
     // The stripe keeps its left and top edges and takes the size its words and rows need.

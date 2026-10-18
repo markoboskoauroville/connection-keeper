@@ -248,3 +248,11 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > I did aggregate the This as you said joined. Give me minimize uh icon on the upper right corner so I can also minimize status if I need to And then when I switch to it with Any switcher like command tab, it should come up, it should not stay on the dock. So make that because usually things stay on the dock even if I switch to them. Then I need to go to the window and then I need to manually open them. That's very annoying behavior from macOS. I don't like this. We overwrite this. Minimize with mouse. Yeah. And then finding it with command tab and coming back to door position please.
 
 **Status:** started 18.10.2026.
+
+## 18.10.2026, request 30 (the stripe on the Mac display; a click on any row's speed tests it, the joined row too)
+
+> I change the position of this window to be on the Mac display at the top. Take screenshots, and if something is cut off from the interface, please fix it   also, I want to have speed test when I click on the number for upload or download, same as with individuals, the same clicking applies to combinations so I can compare
+
+> and you should compare now in this test phase
+
+**Status:** started 18.10.2026.
