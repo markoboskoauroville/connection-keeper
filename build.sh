@@ -11,12 +11,14 @@ APP="build/$NAME.app"
 
 rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/Daemon/*.swift -o "$APP/Contents/MacOS/connection-keeperd"
+swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/Aggregate/*.swift -o "$APP/Contents/MacOS/ck-aggregate"
 swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/App/*.swift -framework AppKit -o "$APP/Contents/MacOS/Connection Keeper"
 sed "s/__VERSION__/$V/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 swift Tools/make_icon.swift build/AppIcon.iconset "$V"
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 
 codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.keeper "$APP/Contents/MacOS/connection-keeperd"
+codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.aggregate "$APP/Contents/MacOS/ck-aggregate"
 codesign --force -s "Mantra Apps" "$APP"
 codesign --verify --deep "$APP"
 

@@ -116,3 +116,22 @@ The Firefox download (Video Download Helper, HLS, 1.6 GB) survived the 09:42 cha
   sample had six. One line is a manifest rule now (modules/one-line-stripe.md).
 - **speedtest.net 2026 has no stable class names**: GO is a button whose text is "GO", the numbers are read from the
   page's words after DOWNLOAD Mbps / UPLOAD Mbps / Ping ms, and the test is over when the address becomes /result/<id>.
+
+## 18.10.2026 (v13, aggregation)
+
+- **Joining connections, not packets**: without a machine outside the house, the most one Mac can do is give each new
+  TCP connection to a different line (bound with IP_BOUND_IF). That doubles anything that opens many connections
+  (browsers, speed tests, parallel downloads), but one single download or one video stream stays on one line. Joining
+  one connection over two lines needs a server outside (a VPS running an MPTCP or bonding tunnel such as
+  OpenMPTCProuter, glorytun or engarde, the way Speedify works). That is the next step, and it costs a monthly VPS.
+- **The same router is one line**: cable + Wi-Fi through the TP-Link gave the same public IP (86.33.x, Telemach).
+  `ck-aggregate` groups devices by public IP or router MAC and keeps the cable.
+- **"\r\n" is one Character in Swift**: `text.prefix { $0 != "\r" }` never stops at the end of an HTTP line. Use
+  `components(separatedBy: "\r\n")`.
+- **macOS keeps a default route per device**: `nettop -m route` lists `default -> en0` and `default -> en17` with their
+  own counters, so every row of the stripe gets its own live internet speed from one nettop call.
+- **networksetup changes the SOCKS proxy without a password** (proven 18.10.2026 on 13 services, on and off again).
+- **A proxy that dies takes the internet with it**: the stripe watches the server and switches macOS's proxy off
+  after 15 s of silence. The LaunchAgent is `Standard`, not `Background` (Background throttles a proxy's I/O).
+- **The stripe grew taller**: "back on screen" put the origin at maxY − 40, which only works for 30 points of height.
+  It is maxY − height − 10 now, and the top must be under the menu bar.

@@ -200,3 +200,19 @@ Test the ladder without touching the network:
 - The router-sms warm server is unloaded and must stay so (one router session).
 - Never proven: the red alert's look with the v12 hidden places (`--simulate-failover`), the yellow colour on a cable
   or tethered phone (no cable plugged in on 18.10.2026).
+
+## State on 18.10.2026 (v13): aggregation
+
+- `Sources/Aggregate/main.swift`: `ck-aggregate` (serve / uplinks / test / on / off). It finds the lines (devices with
+  a router that answer a ping through themselves), groups them by public IP or router MAC (one per group, the cable
+  first), and gives every new connection to the line with the fewest connections for its speed. If a line cannot reach
+  the host, the next line is tried. Health check every 20 s, lines found again every 60 s or at once when the ticks change.
+- `Sources/Shared/Aggregate.swift`: the ticks (`aggregate-selection.json` in Application Support/connection-keeper),
+  the server's /status, the last test (`aggregate-test.json`), macOS's SOCKS proxy on/off.
+- `Sources/App/Lines.swift`: the stripe's extra rows, the JOINED row, the JOIN ticks, the server watcher.
+- `launchd/com.mantra.connectionkeeper.aggregate.plist`; `agent.sh load` loads both agents, `unload` stops both and
+  switches the proxy off. Log: `~/Library/Logs/connection-keeper-aggregate.log`.
+- **Never proven:** two really different lines (the Mac's Wi-Fi on Something, the cable on mantra), so the speed gain is
+  not measured yet; Marko's ticks; a whole day with the proxy on; Chrome with QUIC (Chrome turns QUIC off behind a SOCKS
+  proxy, which is what we want). One single download stays on one line: the next step is a server outside (LESSONS).
+- Every start of the stripe still runs the data SMS and a speedtest.net test (about 100 MB of SIM data).

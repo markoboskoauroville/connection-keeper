@@ -138,6 +138,15 @@ final class Stripe: NSObject {
     var settings: SettingsWindow?
     var here: String?
     var pingHeld = Date.distantPast             // the answer of a pressed ping stays on the stripe until then
+    // v13 (requests 27, 28): a row per other connection and the aggregation row (Lines.swift)
+    var lineRows: [String: LineRow] = [:]
+    var aggRow: LineRow!
+    var others: [OtherLine] = []
+    var agg: AggStatus?
+    var aggMainLast: (rx: UInt64, tx: UInt64)?
+    var scanning = false
+    var serverMisses = 0
+    var proxyDropped = false
 
     override init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 30),
@@ -242,18 +251,27 @@ final class Stripe: NSObject {
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(row)
+        row.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
+        aggRow = LineRow(leadWidth: gear.fittingSize.width + 3, nameWidth: connWidth.constant)
+        aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
+        let column = NSStackView(views: [row, aggRow.view])
+        column.orientation = .vertical
+        column.alignment = .leading
+        column.spacing = 0
+        column.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
+        column.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(column)
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            row.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            row.centerYAnchor.constraint(equalTo: root.centerYAnchor),
+            column.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            column.topAnchor.constraint(equalTo: root.topAnchor),
         ])
-        panel.setContentSize(NSSize(width: row.fittingSize.width, height: 30))
+        panel.setContentSize(column.fittingSize)
 
         panel.setFrameAutosaveName("ConnectionKeeperStripe")
         if !panel.setFrameUsingName("ConnectionKeeperStripe"), let screen = NSScreen.main {
             let f = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: f.midX - panel.frame.width / 2, y: f.maxY - 40))
+            panel.setFrameOrigin(NSPoint(x: f.midX - panel.frame.width / 2, y: f.maxY - panel.frame.height - 10))
         }
         keepOnScreen()
         panel.orderFrontRegardless()
@@ -263,6 +281,9 @@ final class Stripe: NSObject {
         refresh()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData(); self?.newDay() }
+        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.scanLines() }
+        layoutLines()
+        scanLines()
         // At every start, behind the scenes (request 17): the data left, then the speed test, one after the other so
         // the two Firefoxes never share the 4G line's measurement.
         // v12 (Marko 18.10.2026: "you need to do all the tests ... Also ping as soon as application start ... three dots
@@ -467,18 +488,19 @@ final class Stripe: NSObject {
         applyAlert()
     }
 
-    // The stripe keeps its left edge and takes the width its words need.
+    // The stripe keeps its left and top edges and takes the size its words and rows need.
     func fit() {
-        guard let row = panel.contentView?.subviews.first else { return }
+        guard let column = panel.contentView?.subviews.first else { return }
         let t = checked.stringValue
         let quiet = t.isEmpty || t.hasPrefix("checked ") || t == "keeper not running"
         if checked.isHidden != quiet { checked.isHidden = quiet; checkedPipe.isHidden = quiet }
         if failover.isHidden == red { failover.isHidden = !red; failoverPipe.isHidden = !red }
-        row.layoutSubtreeIfNeeded()
-        if abs(row.fittingSize.width - panel.frame.width) < 1 { return }
-        let origin = panel.frame.origin
-        panel.setContentSize(NSSize(width: row.fittingSize.width, height: 30))
-        panel.setFrameOrigin(origin)
+        column.layoutSubtreeIfNeeded()
+        let size = column.fittingSize
+        if abs(size.width - panel.frame.width) < 1 && abs(size.height - panel.frame.height) < 1 { return }
+        let x = panel.frame.minX, top = panel.frame.maxY
+        panel.setContentSize(size)
+        panel.setFrameOrigin(NSPoint(x: x, y: top - size.height))
         keepOnScreen()
     }
 
@@ -488,12 +510,12 @@ final class Stripe: NSObject {
         let f = panel.frame
         let visible = NSScreen.screens.contains { s in
             let i = s.visibleFrame.intersection(f)
-            return !i.isNull && i.width >= min(80, f.width) && i.height >= f.height / 2
+            return !i.isNull && i.width >= min(80, f.width) && i.height >= f.height / 2 && f.maxY <= s.visibleFrame.maxY + 2   // v13: the first row never under the menu bar
         }
         if visible { return }
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let v = screen.visibleFrame
-        panel.setFrameOrigin(NSPoint(x: v.midX - f.width / 2, y: v.maxY - 40))
+        panel.setFrameOrigin(NSPoint(x: v.midX - f.width / 2, y: v.maxY - f.height - 10))
         appendLog("\(logStamp()) stripe was off every screen (x \(Int(f.minX)), y \(Int(f.minY))); brought back to \(screen.localizedName)")
     }
 
@@ -510,11 +532,13 @@ final class Stripe: NSObject {
         if let iface, !sampling {
             sampling = true
             DispatchQueue.global().async {
-                let c = Traffic.internet(iface)
+                let all = Traffic.internetAll()
+                let c = all?[iface]
                 DispatchQueue.main.async {
                     self.sampling = false
-                    guard let c else { self.setSpeed(nil, nil); self.lastCounters = nil; return }
                     let dt = Date().timeIntervalSince(self.lastSample)
+                    if let all { self.sampleLines(all, dt: dt) }
+                    guard let c else { self.setSpeed(nil, nil); self.lastCounters = nil; return }
                     if let last = self.lastCounters, dt > 0 {
                         // a route made again (network change) starts its counters at 0: show nothing for that second
                         let down = c.rx >= last.rx ? Double(c.rx - last.rx) / dt : 0
@@ -659,6 +683,7 @@ final class Stripe: NSObject {
                 menu.update()
             }
         }
+        addJoinSection(menu)
         menu.addItem(.separator())
         let check = NSMenuItem(title: "Check now", action: #selector(checkNow), keyEquivalent: "")
         check.target = self

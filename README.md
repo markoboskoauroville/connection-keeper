@@ -141,3 +141,29 @@ the data and the speed test run at once behind the scenes, and each place says (
 
 The speed test's Firefox keeps one profile, `~/Library/Application Support/connection-keeper/firefox`: an add-on
 installed there once (uBlock Origin, against the advertisements) stays for every test.
+
+## Aggregation: two lines at once (v13, 18.10.2026)
+
+The app has a third program, `ck-aggregate`, the **aggregation server**: a proxy on 127.0.0.1:8857 (SOCKS5 and HTTP on
+one port, the LaunchAgent `com.mantra.connectionkeeper.aggregate`). Every new connection goes out through one of the
+joined lines, bound to its device, and the faster line gets more of them. A browser, a download manager or a speed test
+opens many connections at once, so it uses both lines together. One single connection still stays on one line.
+
+Only lines that leave the house through **different** devices are joined: the cable and the Wi-Fi through the same
+TP-Link (the same public IP or the same router MAC) are one line, and the Wi-Fi is ignored (request 25).
+
+**The stripe** has one row per connection, and the **JOINED** row at the bottom (request 27): each row shows its own
+live speed, its ping and whether it is joined. The JOINED row shows the lines joined, their speeds added, the
+connections the server holds, and the last joined test against the best single line.
+
+**The drop-down selects** (request 28): under JOIN, a tick box for every connection online now (the menu stays open).
+Any tick turns aggregation on, which points macOS's SOCKS proxy at the server. No tick turns aggregation off, and the
+proxy goes back off. If the server stops answering for 15 s, the stripe switches the proxy off at once, restarts the
+server, and switches the proxy on again when the server answers.
+
+```
+ck-aggregate uplinks      which lines are different, which are ignored
+ck-aggregate test [s]     each line alone, then all through the server (s seconds each, default 6; SIM data is printed)
+ck-aggregate on | off     macOS's proxy → the server, or off (the ticks do this)
+```
+(`/Applications/Connection Keeper (Mantra).app/Contents/MacOS/ck-aggregate`; the server's words: `curl 127.0.0.1:8857/status`.)

@@ -229,16 +229,16 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 
 > please find a repository with this Swift app. We are doing it's called Connection Keeper and work on aggregating the devices. Now there are two devices online here in my home. My famous Wi-Fi from Nothing phone is called something, and there is TP-Link Wi-Fi which is called just mantra. They are both available here for you to test connections, test the speed, and see if individual speeds are actually faster with aggregation. Start to build aggregation server and everything needed for this to work
 
-**Status:** started 18.10.2026.
+**Status:** v13 built 18.10.2026: ck-aggregate (SOCKS5 + HTTP on 127.0.0.1:8857, a connection per line, weighted by speed, the same line ignored), LaunchAgent, `test`. SOCKS, CONNECT and plain HTTP proven through it; the same-line rule proven (mantra Wi-Fi = cable). Waits for the Wi-Fi on Something to measure the two lines alone and joined.
 
 ## 18.10.2026, request 27 (the stripe: one line per connection + the aggregation line)
 
 > now we will have user interface change, so when you connect to the new device you need to add one more line. I have two status lines for each individual connection, and at the bottom you need to add a third line which is status of the aggregation with speeds and everything. So I need to monitor everything separately. Three lines for now, if we have multiple, even more than two, then there are more lines
 
-**Status:** started 18.10.2026.
+**Status:** v13 built 18.10.2026: a row per other connection (its own live speed, ping, joined or not) and the JOINED row at the bottom; seen on screen (AX88179B, mantra "same line", JOINED off).
 
 ## 18.10.2026, request 28 (the drop-down selects the connections to join)
 
 > on the status line, it's basically the user dashboard. When the user opens the connection, he can select multiple connections or deselect them. If he deselects everything, then it means we are exiting aggregation mode
 
-**Status:** started 18.10.2026.
+**Status:** v13 built 18.10.2026: JOIN tick boxes in the drop-down (the menu stays open), any tick turns aggregation on (macOS's SOCKS proxy → the server), none turns it off; the proxy switch proven without a password. Not yet ticked by Marko.

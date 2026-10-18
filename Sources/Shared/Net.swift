@@ -253,19 +253,22 @@ struct Traffic {
     // ("default -> en0 -> 192.168.1.1") carries only what goes out through the router to the internet, TCP and UDP
     // (measured: a 20 MB download +20.4 MB, 3 MB of UDP to 1.1.1.1 +3.08 MB, a 24 MB adb push to the phone +0).
     // `nettop -m route` prints them; IPv4 and IPv6 default routes of the interface are summed.
-    static func internet(_ iface: String) -> (rx: UInt64, tx: UInt64)? {
+    static func internet(_ iface: String) -> (rx: UInt64, tx: UInt64)? { internetAll()?[iface] }
+
+    // v13 (request 27, a stripe line per connection): every device's default route from one nettop call. macOS keeps a
+    // default route per device (scoped), so a second line used by the aggregation server has its own counters.
+    static func internetAll() -> [String: (rx: UInt64, tx: UInt64)]? {
         let r = shell("/usr/bin/nettop", ["-x", "-n", "-L", "1", "-m", "route"], timeout: 5)
         guard r.status == 0 else { return nil }
-        var rx: UInt64 = 0, tx: UInt64 = 0, found = false
+        var all: [String: (rx: UInt64, tx: UInt64)] = [:]
         for line in r.out.split(separator: "\n") {
             let f = line.split(separator: ",", omittingEmptySubsequences: false)
             guard f.count > 3 else { continue }
             let route = f[1].split(separator: " ").map(String.init)      // ["default", "->", "en0", "->", "192.168.1.1"]
-            guard route.count >= 3, route[0] == "default", route[2] == iface else { continue }
-            rx &+= UInt64(f[2]) ?? 0
-            tx &+= UInt64(f[3]) ?? 0
-            found = true
+            guard route.count >= 3, route[0] == "default" else { continue }
+            let old = all[route[2]] ?? (0, 0)
+            all[route[2]] = (old.rx &+ (UInt64(f[2]) ?? 0), old.tx &+ (UInt64(f[3]) ?? 0))
         }
-        return found ? (rx, tx) : nil
+        return all
     }
 }
