@@ -230,3 +230,9 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > please find a repository with this Swift app. We are doing it's called Connection Keeper and work on aggregating the devices. Now there are two devices online here in my home. My famous Wi-Fi from Nothing phone is called something, and there is TP-Link Wi-Fi which is called just mantra. They are both available here for you to test connections, test the speed, and see if individual speeds are actually faster with aggregation. Start to build aggregation server and everything needed for this to work
 
 **Status:** started 18.10.2026.
+
+## 18.10.2026, request 27 (the stripe: one line per connection + the aggregation line)
+
+> now we will have user interface change, so when you connect to the new device you need to add one more line. I have two status lines for each individual connection, and at the bottom you need to add a third line which is status of the aggregation with speeds and everything. So I need to monitor everything separately. Three lines for now, if we have multiple, even more than two, then there are more lines
+
+**Status:** started 18.10.2026.
