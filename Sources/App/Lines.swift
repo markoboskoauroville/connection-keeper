@@ -148,11 +148,11 @@ extension Stripe {
         }
         // The aggregation row: always the last.
         guard let a = aggRow else { return }
-        a.name.stringValue = Aggregation.on ? "JOINED" : "ONE LINE"
-        a.name.toolTip = "Click: switch between one connection and aggregation (JOINED)"
+        a.name.stringValue = Aggregation.on ? "AGGREGATE CONNECTION" : "ONE CONNECTION"   // request 35, his words
+        a.name.toolTip = "Click: switch between one connection and aggregate connection"
         if !Aggregation.on {
             a.dot.color = Ink.grey; a.name.textColor = Ink.text
-            a.info.stringValue = Aggregation.selected.isEmpty ? "one connection · tick lines in ▾ to join" : "one connection · click ONE LINE to join"
+            a.info.stringValue = Aggregation.selected.isEmpty ? "tick lines in ▾ to aggregate" : "click ONE CONNECTION to aggregate"
             a.info.textColor = Ink.dim
             a.ping.stringValue = ""
         } else if let st = agg {
@@ -236,7 +236,7 @@ extension Stripe {
         }
     }
 
-    // ONE CLICK, THE OTHER MODE (request 34): ONE LINE ⇄ JOINED on the stripe's last row, and the two choices on top of ▾.
+    // ONE CLICK, THE OTHER MODE (request 34; request 35 named them): ONE CONNECTION ⇄ AGGREGATE CONNECTION on the stripe's last row, and the two choices on top of ▾.
     @objc func toggleMode() { switchMode(!Aggregation.on) }
     @objc func pickOne() { switchMode(false) }
     @objc func pickAggregate() { switchMode(true) }
@@ -256,14 +256,14 @@ extension Stripe {
             appendLog("\(logStamp()) MODE \(aggregate ? "aggregate" : "one connection"): " + said.joined(separator: "; "))
             DispatchQueue.main.async { self.layoutLines(); self.scanLines() }
         }
-        show(aggregate ? "aggregate: joining the lines…" : "one connection: aggregation off", aggregate ? Ink.amber : Ink.green, for: 8)
+        show(aggregate ? "aggregate connection: joining the lines…" : "one connection: aggregation off", aggregate ? Ink.amber : Ink.green, for: 8)
         layoutLines()
     }
 
     func addModeSection(_ menu: NSMenu) {
         let on = Aggregation.on
         for (title, sel, picked) in [("One connection   the Mac straight on its line, aggregation off", #selector(pickOne), !on),
-                                     ("Aggregate   join the ticked lines (\(Aggregation.tunnelName))", #selector(pickAggregate), on)] {
+                                     ("Aggregate connection   join the ticked lines (\(Aggregation.tunnelName))", #selector(pickAggregate), on)] {
             let i = NSMenuItem(title: title, action: sel, keyEquivalent: "")
             i.target = self
             i.state = picked ? .on : .off

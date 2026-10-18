@@ -682,7 +682,7 @@ final class Stripe: NSObject {
     // The connection's name gets the width of the longest name in the list, so a switch does not move the rest.
     func connectionWidth() -> CGFloat {
         let f = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        let names = Config.load().connections.map { $0.name } + ["no network", Aggregation.tunnelName]
+        let names = Config.load().connections.map { $0.name } + ["no network", Aggregation.tunnelName, "AGGREGATE CONNECTION"]
         return (names.map { textWidth($0 + " ▾", f) }.max() ?? 80) + 8
     }
 

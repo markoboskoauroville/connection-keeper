@@ -289,4 +289,4 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 
 > In the connection keeper application one line is not worded correctly. It should say one connection and  aggregate connection.
 
-**Status:** asked 18.10.2026.
+**Status:** done 18.10.2026 (v16): the stripe's last row says ONE CONNECTION or AGGREGATE CONNECTION (a click switches), the drop-down "One connection" / "Aggregate connection"; the name column made wide enough for the longer word. Seen on screen: ONE CONNECTION · click ONE CONNECTION to aggregate.
