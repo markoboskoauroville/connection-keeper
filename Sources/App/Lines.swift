@@ -21,7 +21,7 @@ final class LineRow {
     let name: NSTextField
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
     let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
-    let info = label(textWidth("8 lines · 888 conn · 8.8× best, up 8.8×", monoFont), font: monoFont)
+    let info = label(textWidth("8 lines · 888 conn · 88.8× best, up 88.8×  ", monoFont), font: monoFont)
     var lastBytes: (rx: UInt64, tx: UInt64)?
 
     init(leadWidth: CGFloat, nameWidth: CGFloat) {

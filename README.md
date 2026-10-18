@@ -167,3 +167,28 @@ ck-aggregate test [s]     each line alone, then all through the server (s second
 ck-aggregate on | off     macOS's proxy → the server, or off (the ticks do this)
 ```
 (`/Applications/Connection Keeper (Mantra).app/Contents/MacOS/ck-aggregate`; the server's words: `curl 127.0.0.1:8857/status`.)
+
+## mantra_networkaggregate: the virtual device (v14, 18.10.2026)
+
+macOS uses a virtual network device, **mantra_networkaggregate** (utun99), as its connection and knows nothing about
+aggregation; the device does it. A small root helper, `ck-tunnel` (the LaunchDaemon
+`com.mantra.connectionkeeper.tunnel`), runs hev-socks5-tunnel (MIT) on utun99 and sends all IPv4 internet traffic
+into it with two half routes. hev hands every connection, TCP and UDP, to the aggregation server, which sends it out
+over the joined lines. It is free: a real Network Extension would need a paid Apple developer account.
+
+Install once, with your password (it copies the helper out of the installed app into /Library/PrivilegedHelperTools):
+
+```
+sudo ./tunnel.sh install        # sudo ./tunnel.sh uninstall to remove it; ./tunnel.sh status
+```
+
+After that the JOIN ticks switch the device: any tick and it carries the internet (the stripe's first row reads
+mantra_networkaggregate, the lines have rows under it); no tick and the Mac is straight on its lines. If the server
+stops answering for 6 s, the helper removes its routes by itself, so the internet never dies with it.
+
+On a fresh clone the build fetches hev-socks5-tunnel 2.19.0 once and checks its fingerprint (it is not kept in the
+repository).
+
+Proven 18.10.2026 (a 5-minute test run): plain downloads with no proxy set, 73.8 Mbit/s through the device, both lines
+carrying (cable 19.4 MB + Something 34.7 MB in 6 s); name lookups, UDP to 1.1.1.1, the web and the keeper all fine;
+the stripe showed cable 26.0 + Something 54.1 = JOINED 80.1 Mbit/s live.

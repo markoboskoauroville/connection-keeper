@@ -146,3 +146,13 @@ The Firefox download (Video Download Helper, HLS, 1.6 GB) survived the 09:42 cha
   counts only connections that moved bytes in the last 5 s, and a measured speed is averaged with the one before.
 - **First honest result, 18.10.2026 09:50**: cable 30.6/24.8, Something 40.0/18.9, joined 49.1 down (+23%) and
   44.2 up (+78%) Mbit/s, both lines carrying.
+- **The free virtual device**: a Network Extension (a device listed in System Settings) needs a paid Apple developer
+  account, and GitHub can only sign with certificates Apple issued. The free road is a root helper with a utun device
+  (hev-socks5-tunnel) and two half routes 0/1 + 128/1; the default route stays, so the keeper's view is unchanged.
+- **The main line has no road of its own**: macOS gives every line but the main one a default route bound to its
+  device (flag I). With the half routes up, sockets bound to the cable found no road and the cable counted as dead for
+  the whole first test run. The helper adds `route add -ifscope en17 default <router>` while the device is up.
+- **A utun carries TCP and UDP, not ping**: the keeper's ping is pinned to the real line (`ping -b`).
+- **The server must answer at once**: it used to find its lines (10-20 s) before accepting; through the device the
+  whole Mac would wait. Now it accepts at once and the first connections wait for the lines.
+- **UDP reply race**: the reply thread read the client's address before the wait, so the first reply was dropped.

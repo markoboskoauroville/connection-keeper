@@ -65,12 +65,31 @@ func routesPresent() -> Bool {
     return out.components(separatedBy: "\n").filter { $0.contains(device) && ($0.hasPrefix("0/1") || $0.hasPrefix("128.0/1")) }.count == 2
 }
 
+// THE MAIN LINE NEEDS ITS OWN ROAD (18.10.2026, the first test run): macOS gives every line but the main one a default
+// route bound to its device (flag I); the main line (the cable, en17) has only the general default route, and the two
+// half routes win over it, so the server's sockets bound to the cable found no road and the cable counted as dead the
+// whole time the device was up. While up, every line with a router but no bound default route gets one.
+var scoped: [String] = []
+
+func addScopedDefaults() {
+    for line in run("/usr/sbin/netstat", ["-rn", "-f", "inet"]).out.components(separatedBy: "\n") where line.hasPrefix("default") {
+        let f = line.split(separator: " ").map(String.init)
+        guard f.count >= 4, !f[2].contains("I"), let iface = f.last, iface != device, !iface.hasPrefix("utun"), !scoped.contains(iface) else { continue }
+        if run("/sbin/route", ["-q", "-n", "add", "-ifscope", iface, "default", f[1]]).status == 0 {
+            scoped.append(iface); log("\(iface): its own default route through \(f[1]) while the device is up")
+        }
+    }
+}
+
 func addRoutes() {
+    addScopedDefaults()
     for h in halves { run("/sbin/route", ["-q", "-n", "add", "-net", h, "-interface", device]) }
 }
 
 func deleteRoutes() {
     for h in halves { run("/sbin/route", ["-q", "-n", "delete", "-net", h, "-interface", device]) }
+    for i in scoped { run("/sbin/route", ["-q", "-n", "delete", "-ifscope", i, "default"]) }
+    scoped = []
 }
 
 func writeState(_ s: String) {
@@ -137,6 +156,7 @@ while true {
         else if !want { down("aggregation off") }
         else if misses >= 3 { down("the aggregation server does not answer") }
         else if !routesPresent() { addRoutes(); log("routes were gone (a network change): added again") }
+        else { addScopedDefaults() }                   // a line that became the main one meanwhile
     } else if want && answers {
         up()
     }
