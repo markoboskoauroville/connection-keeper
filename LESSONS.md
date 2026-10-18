@@ -135,3 +135,14 @@ The Firefox download (Video Download Helper, HLS, 1.6 GB) survived the 09:42 cha
   after 15 s of silence. The LaunchAgent is `Standard`, not `Background` (Background throttles a proxy's I/O).
 - **The stripe grew taller**: "back on screen" put the origin at maxY − 40, which only works for 30 points of height.
   It is maxY − height − 10 now, and the top must be under the menu bar.
+- **Bind the address too, not only the device**: with IP_BOUND_IF alone, 4 of 6 connections through the server hung
+  for the full dial timeout (8 s) before the next line took them. Binding the socket to the device's own IPv4 address
+  as well (what `curl --interface` does) brought every dial to about 0.1 s.
+- **Count on the wire**: curl's upload count through a local proxy counts what the proxy took into its buffers (64.8
+  Mbit/s "joined" over lines adding up to 38). The test counts each line's own route bytes (nettop), alone and joined.
+- **Test servers ration us**: after a few rounds Cloudflare slowed downloads to 0.5 Mbit/s and OVH and Hetzner
+  answered 429. The download test spreads its streams over four servers (two Hetzner sites, OVH, Tele2).
+- **Open is not busy**: Chrome held 31 idle connections through the server and they counted as load. The server
+  counts only connections that moved bytes in the last 5 s, and a measured speed is averaged with the one before.
+- **First honest result, 18.10.2026 09:50**: cable 30.6/24.8, Something 40.0/18.9, joined 49.1 down (+23%) and
+  44.2 up (+78%) Mbit/s, both lines carrying.

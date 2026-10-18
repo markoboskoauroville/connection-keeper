@@ -18,7 +18,10 @@
 import Foundation
 import Darwin
 
-let speedURL = "https://proof.ovh.net/files/1Gb.dat"   // cut by time; Cloudflare slowed our downloads to 0.5 Mbit/s after a few tests (18.10.2026)
+// Cut by time. Spread over four servers: after a few rounds on 18.10.2026 Cloudflare slowed our downloads to 0.5 Mbit/s
+// and OVH answered 429 Too Many Requests; one stream per server and round keeps every one of them quiet.
+let speedURLs = ["https://fsn1-speed.hetzner.com/1GB.bin", "https://nbg1-speed.hetzner.com/1GB.bin",
+                 "https://proof.ovh.net/files/1Gb.dat", "http://speedtest.tele2.net/1GB.zip"]
 
 func log(_ s: String) {
     let f = ISO8601DateFormatter(); f.timeZone = .current
@@ -121,8 +124,25 @@ func sendAll(_ fd: Int32, _ bytes: [UInt8]) -> Bool {
     return true
 }
 
-// A TCP connection to host:port that leaves through this one device (IP_BOUND_IF), or nil after `timeout` seconds.
-func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 8) -> Int32? {
+// The device's own IPv4 address, from the kernel's table (no process per connection).
+func ipv4(of iface: String) -> in_addr? {
+    var ifap: UnsafeMutablePointer<ifaddrs>?
+    guard getifaddrs(&ifap) == 0, let first = ifap else { return nil }
+    defer { freeifaddrs(ifap) }
+    var p: UnsafeMutablePointer<ifaddrs>? = first
+    while let a = p {
+        if let addr = a.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET), String(cString: a.pointee.ifa_name) == iface {
+            return addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr }
+        }
+        p = a.pointee.ifa_next
+    }
+    return nil
+}
+
+// A TCP connection to host:port that leaves through this one device, or nil after `timeout` seconds. The socket is
+// bound to the device (IP_BOUND_IF) AND to its address, as `curl --interface` does: with IP_BOUND_IF alone four of
+// six connections hung until the timeout on 18.10.2026.
+func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 5) -> Int32? {
     var hints = addrinfo(); hints.ai_socktype = SOCK_STREAM; hints.ai_family = AF_UNSPEC
     var res: UnsafeMutablePointer<addrinfo>?
     guard getaddrinfo(host, String(port), &hints, &res) == 0, let first = res else { return nil }
@@ -137,6 +157,11 @@ func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 8)
         if fd < 0 { continue }
         let v6 = a.pointee.ai_family == AF_INET6
         guard setsockopt(fd, v6 ? IPPROTO_IPV6 : IPPROTO_IP, v6 ? IPV6_BOUND_IF_ : IP_BOUND_IF_, &index, socklen_t(MemoryLayout<UInt32>.size)) == 0 else { close(fd); continue }
+        if !v6, let src = ipv4(of: iface) {
+            var sa = sockaddr_in(); sa.sin_family = sa_family_t(AF_INET); sa.sin_len = UInt8(MemoryLayout<sockaddr_in>.size); sa.sin_addr = src
+            let b = withUnsafePointer(to: &sa) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
+            if b != 0 { close(fd); continue }
+        }
         let flags = fcntl(fd, F_GETFL)
         _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
         var ok = connect(fd, a.pointee.ai_addr, a.pointee.ai_addrlen) == 0
@@ -388,11 +413,11 @@ func measure(_ how: [String], streams: Int, seconds: Int, up: Bool = false, ifac
     var procs: [(Process, Pipe)] = []
     let before = Traffic.internetAll()
     let t0 = Date()
-    for _ in 0..<streams {
+    for i in 0..<streams {
         let p = Process(), pipe = Pipe()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
         p.arguments = ["-s", "-o", "/dev/null", "-m", String(seconds), "-w", up ? "%{size_upload}" : "%{size_download}"] + how
-            + (up ? ["--data-binary", "@" + uploadFile.path, uploadURL] : [speedURL])
+            + (up ? ["--data-binary", "@" + uploadFile.path, uploadURL] : [speedURLs[i % speedURLs.count]])
         p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
         try? p.run(); procs.append((p, pipe))
     }
