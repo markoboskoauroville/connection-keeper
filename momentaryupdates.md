@@ -236,3 +236,9 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > now we will have user interface change, so when you connect to the new device you need to add one more line. I have two status lines for each individual connection, and at the bottom you need to add a third line which is status of the aggregation with speeds and everything. So I need to monitor everything separately. Three lines for now, if we have multiple, even more than two, then there are more lines
 
 **Status:** started 18.10.2026.
+
+## 18.10.2026, request 28 (the drop-down selects the connections to join)
+
+> on the status line, it's basically the user dashboard. When the user opens the connection, he can select multiple connections or deselect them. If he deselects everything, then it means we are exiting aggregation mode
+
+**Status:** started 18.10.2026.
