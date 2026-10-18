@@ -187,7 +187,10 @@ enum Net {
 
     // ping first; a blocked ping is not an outage, so an HTTP probe decides before "offline".
     static func probe(pingHost: String, httpURL: String) -> Probe {
-        let r = shell("/sbin/ping", ["-c", "3", "-i", "0.5", "-t", "6", "-q", pingHost], timeout: 10)
+        // v14: pinned to the real line under the default route; the virtual device mantra_networkaggregate carries
+        // TCP and UDP only, so an unpinned ping through it would never answer.
+        let pin = defaultRouteInterface().map { ["-b", $0] } ?? []
+        let r = shell("/sbin/ping", pin + ["-c", "3", "-i", "0.5", "-t", "6", "-q", pingHost], timeout: 10)
         if r.status == 0 {
             var avg: Double?
             if let line = r.out.components(separatedBy: "\n").first(where: { $0.contains("round-trip") }),

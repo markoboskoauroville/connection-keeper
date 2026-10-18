@@ -92,7 +92,7 @@ extension Stripe {
     // On, and the server has not answered for 15 s: macOS's proxy off at once, or every page would hang; the agent is
     // kicked to start again, and the proxy comes back on when the server answers.
     func watchServer(_ st: AggStatus?) {
-        guard Aggregation.on else { serverMisses = 0; return }
+        guard Aggregation.on, !Aggregation.tunnelInstalled else { serverMisses = 0; return }   // the helper watches it itself
         if st == nil {
             serverMisses += 1
             if serverMisses == 3 {
@@ -233,7 +233,7 @@ extension Stripe {
     // THE JOIN TICKS (request 28). Rows are views, so a tick does not close the menu.
     func addJoinSection(_ menu: NSMenu) {
         var names: [(String, Bool)] = []
-        if let i = iface { names.append((Net.displayName(i), true)) }
+        if let i = iface, i != Aggregation.tunnelDevice { names.append((Net.displayName(i), true)) }
         for o in others where !names.contains(where: { $0.0 == o.name }) { names.append((o.name, o.ms != nil)) }
         menu.addItem(.separator())
         let head = NSMenuItem(title: "JOIN (aggregation): tick the connections, none = off", action: nil, keyEquivalent: "")
@@ -268,7 +268,7 @@ extension Stripe {
             proxyDropped = false; serverMisses = 0
             DispatchQueue.global().async {
                 if now { shell("/bin/launchctl", ["kickstart", "gui/\(getuid())/\(CKAggregateLabel)"]) }
-                let said = Aggregation.systemProxy(now)
+                let said = Aggregation.apply(now)
                 appendLog("\(logStamp()) AGGREGATION \(now ? "on" : "off"): " + said.joined(separator: "; "))
             }
         }

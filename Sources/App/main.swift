@@ -595,7 +595,9 @@ final class Stripe: NSObject {
 
     func reading() {
         if tick % 5 == 0 {
-            let now = Net.defaultRouteInterface()
+            // v14: while the virtual device carries the internet, the first row is mantra_networkaggregate; the real
+            // lines (the cable, the Wi-Fi) get rows of their own under it.
+            let now = Aggregation.tunnelUp ? Aggregation.tunnelDevice : Net.defaultRouteInterface()
             if now != iface { iface = now; lastCounters = nil }
             if !(state?.isFresh ?? false) { here = currentNow() }
         }
@@ -607,7 +609,8 @@ final class Stripe: NSObject {
             sampling = true
             DispatchQueue.global().async {
                 let all = Traffic.internetAll()
-                let c = all?[iface]
+                // the virtual device has no default route of its own (two half routes): its interface counters
+                let c = all?[iface] ?? (iface == Aggregation.tunnelDevice ? Traffic.counters(iface).map { (UInt64($0.rx), UInt64($0.tx)) } : nil)
                 DispatchQueue.main.async {
                     self.sampling = false
                     let dt = Date().timeIntervalSince(self.lastSample)
@@ -631,8 +634,9 @@ final class Stripe: NSObject {
         let alive = state?.isFresh ?? false
         let cfg = Config.load()
         let current = alive ? state?.current : here
-        connButton.title = (current ?? "no network") + " ▾"
-        if !red && !noOther { connButton.contentTintColor = iface == nil ? Ink.dim : isWiFi(iface) ? Ink.green : Ink.yellow }
+        let tunnel = iface == Aggregation.tunnelDevice
+        connButton.title = (tunnel ? Aggregation.tunnelName : current ?? "no network") + " ▾"
+        if !red && !noOther { connButton.contentTintColor = iface == nil ? Ink.dim : tunnel || isWiFi(iface) ? Ink.green : Ink.yellow }
 
         if Date() < pingHeld { return }            // a pressed ping's answer is being shown
 
@@ -678,7 +682,7 @@ final class Stripe: NSObject {
     // The connection's name gets the width of the longest name in the list, so a switch does not move the rest.
     func connectionWidth() -> CGFloat {
         let f = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        let names = Config.load().connections.map { $0.name } + ["no network"]
+        let names = Config.load().connections.map { $0.name } + ["no network", Aggregation.tunnelName]
         return (names.map { textWidth($0 + " ▾", f) }.max() ?? 80) + 8
     }
 

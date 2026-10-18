@@ -23,6 +23,28 @@ enum Aggregation {
     }
     static var on: Bool { !selected.isEmpty }
 
+    // THE VIRTUAL DEVICE (v14, request 33): when the root helper ck-tunnel is installed, aggregation on means the device
+    // utun99, shown as mantra_networkaggregate, carries all internet traffic, and macOS's proxy setting stays off; the
+    // helper follows this flag. Without the helper, the proxy setting as in v13.
+    static let tunnelFlag = Paths.support.appendingPathComponent("tunnel-on")
+    static let tunnelDevice = "utun99", tunnelName = "mantra_networkaggregate"
+    static var tunnelInstalled: Bool { FileManager.default.fileExists(atPath: "/Library/LaunchDaemons/com.mantra.connectionkeeper.tunnel.plist") }
+    static var tunnelUp: Bool {
+        ((try? String(contentsOfFile: "/Library/PrivilegedHelperTools/com.mantra.connectionkeeper.tunnel/state", encoding: .utf8)) ?? "").hasPrefix("on")
+    }
+
+    // The one switch the ticks throw.
+    @discardableResult
+    static func apply(_ on: Bool) -> [String] {
+        if tunnelInstalled {
+            if on { FileManager.default.createFile(atPath: tunnelFlag.path, contents: Data()) }
+            else { try? FileManager.default.removeItem(at: tunnelFlag) }
+            let off = systemProxyIsOn() ? systemProxy(false) : []
+            return ["\(tunnelName) \(on ? "asked up" : "asked down")"] + off
+        }
+        return systemProxy(on)
+    }
+
     // The server's own words (GET /status), or nil when it does not answer within a second.
     static func status() -> AggStatus? {
         let r = shell("/usr/bin/curl", ["-s", "-m", "1", "http://127.0.0.1:\(aggPort)/status"], timeout: 2)
