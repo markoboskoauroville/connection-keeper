@@ -278,3 +278,9 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > We can't pay. We can only do with free whatever we can do. So we go with free helper
 
 (request 33, decided 18.10.2026: the free root helper with a utun device, no Apple developer account.)
+
+## 18.10.2026, request 34 (after v14 no connections: one simple switch, aggregate or one connection)
+
+> After you update, start to work on connection keeper. After the last update, I don't have any connections. I need to restart the whole computer. Something is wrong with this aggregation, something is blocked. So please make it simple to switch mode in the application to aggregate or one connection. To simply and quickly overwrite our aggregation services, so I can continue working.
+
+**Status:** asked 18.10.2026.
