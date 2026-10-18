@@ -274,3 +274,7 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > now you need to create virtual LAN device, so in the macOS I can select this device and macOS will not know about aggregation. It will just use it as normal, and this device is doing aggregation. So I want to see in my status of connection where I'm connected to our aggregate, mantra_aggregate. It's called mantra_networkaggregate
 
 **Status:** started 18.10.2026.
+
+> We can't pay. We can only do with free whatever we can do. So we go with free helper
+
+(request 33, decided 18.10.2026: the free root helper with a utun device, no Apple developer account.)
