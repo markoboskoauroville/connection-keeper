@@ -262,3 +262,9 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > please make sure the app itself remembers its last position and its last display
 
 **Status:** started 18.10.2026.
+
+## 18.10.2026, request 32 (the minimize button on the edge)
+
+> also, minimus lion is in a strange position. It's not on the edge. Those kind of things are always on the edge
+
+**Status:** started 18.10.2026.
