@@ -31,6 +31,26 @@ enum Ink {
     static let yellow = NSColor(calibratedRed: 1.0, green: 0.86, blue: 0.20, alpha: 1)   // v12: the ping section (Marko)
 }
 
+// WHERE THE STRIPE STANDS (v13, Marko 18.10.2026: "make sure the app itself remembers its last position and its last
+// display"): the display by its name and the stripe's top-left corner on it, so a taller or shorter stripe and a
+// re-arranged desk still find the same place. NSWindow's autosave kept the whole frame and lost the place when the
+// stripe changed height.
+enum StripePlace {
+    static let key = "stripePlace"
+    static func save(_ panel: NSPanel) {
+        let f = panel.frame
+        guard let s = NSScreen.screens.first(where: { $0.frame.contains(NSPoint(x: f.midX, y: f.maxY - 1)) }) ?? panel.screen else { return }
+        UserDefaults.standard.set(["screen": s.localizedName, "x": f.minX - s.frame.minX, "top": s.frame.maxY - f.maxY], forKey: key)
+    }
+    static func restore(_ panel: NSPanel) -> Bool {
+        guard let p = UserDefaults.standard.dictionary(forKey: key), let name = p["screen"] as? String,
+              let x = p["x"] as? Double, let top = p["top"] as? Double,
+              let s = NSScreen.screens.first(where: { $0.localizedName == name }) else { return false }
+        panel.setFrameOrigin(NSPoint(x: s.frame.minX + x, y: s.frame.maxY - top - panel.frame.height))
+        return true
+    }
+}
+
 // v9 (Marko 14.10.2026: "the whole status line is breathing. So I'm trying to click on the settings icon and it's
 // moving"): every item has a FIXED width, sized for its widest text, so changing numbers never move anything; the
 // stripe changes width only when its state changes (red, NO OTHER CONNECTION, a message), and keeps its left edge.
@@ -149,6 +169,7 @@ final class Stripe: NSObject {
     var scanning = false
     var serverMisses = 0
     var proxyDropped = false
+    var lineTesting = Set<String>()             // request 30: the rows being tested now ("JOINED" for all)
 
     override init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 30),
@@ -256,7 +277,7 @@ final class Stripe: NSObject {
         minimize.contentTintColor = Ink.dim
         minimize.toolTip = "Hide the stripe; Command-Tab to Connection Keeper (or its Dock icon) brings it back to this place"
         minimize.setContentHuggingPriority(.required, for: .horizontal)
-        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, minimize])
+        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -265,25 +286,37 @@ final class Stripe: NSObject {
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
         aggRow = LineRow(leadWidth: gear.fittingSize.width + 3, nameWidth: connWidth.constant)
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
+        aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
+        aggRow.speed.toolTip = "All joined lines' live speed added; in parentheses the last joined test, down and up.\nClick: test every line alone, then all joined, to compare (about 40 s)."
         let column = NSStackView(views: [row, aggRow.view])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 0
-        column.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 0)
+        column.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 22)   // the right 22 points: the "–"
         column.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(column)
+        // request 32 ("Those kind of things are always on the edge"): the "–" in the top-right corner of the whole stripe
+        minimize.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(minimize)
         NSLayoutConstraint.activate([
             column.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             column.topAnchor.constraint(equalTo: root.topAnchor),
+            minimize.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -6),
+            minimize.centerYAnchor.constraint(equalTo: row.centerYAnchor),
         ])
         panel.setContentSize(column.fittingSize)
 
-        panel.setFrameAutosaveName("ConnectionKeeperStripe")
-        if !panel.setFrameUsingName("ConnectionKeeperStripe"), let screen = NSScreen.main {
+        if !StripePlace.restore(panel) && panel.setFrameUsingName("ConnectionKeeperStripe") { StripePlace.save(panel) }   // the v12 place, once
+        else if !StripePlace.restore(panel), let screen = NSScreen.main {
             let f = screen.visibleFrame
             panel.setFrameOrigin(NSPoint(x: f.midX - panel.frame.width / 2, y: f.maxY - panel.frame.height - 10))
         }
         keepOnScreen()
+        // Every move by his hand is remembered at once (request 31); moves the stripe makes itself keep the top-left.
+        NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: panel, queue: .main) { [weak self] _ in
+            guard let self, self.minimizedFrame == nil else { return }
+            StripePlace.save(self.panel)
+        }
         panel.orderFrontRegardless()
 
         showData()
@@ -542,13 +575,18 @@ final class Stripe: NSObject {
 
     // Never lost off the screens (14.10.2026 the saved place was x = -2247, on no display: the stripe was invisible).
     // At least 80 points of it stay on some screen, otherwise it goes to the top middle of the main screen.
+    // v13 (request 31): a stripe that is partly off its display is nudged back inside THAT display (its whole frame, the
+    // menu bar strip included: he puts it at the very top of the Mac's display); only a stripe on no display at all goes
+    // to the main one. Before, a top edge 1 point into the menu bar strip sent it to the BenQ (four times on 18.10.2026).
     func keepOnScreen() {
         let f = panel.frame
-        let visible = NSScreen.screens.contains { s in
-            let i = s.visibleFrame.intersection(f)
-            return !i.isNull && i.width >= min(80, f.width) && i.height >= f.height / 2 && f.maxY <= s.visibleFrame.maxY + 2   // v13: the first row never under the menu bar
+        if let s = NSScreen.screens.max(by: { $0.frame.intersection(f).width * $0.frame.intersection(f).height < $1.frame.intersection(f).width * $1.frame.intersection(f).height }),
+           !s.frame.intersection(f).isNull {
+            let r = s.frame
+            let x = min(max(f.minX, r.minX), r.maxX - f.width), y = min(max(f.minY, r.minY), r.maxY - f.height)
+            if x != f.minX || y != f.minY { panel.setFrameOrigin(NSPoint(x: x, y: y)) }
+            return
         }
-        if visible { return }
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
         let v = screen.visibleFrame
         panel.setFrameOrigin(NSPoint(x: v.midX - f.width / 2, y: v.maxY - f.height - 10))

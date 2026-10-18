@@ -12,12 +12,13 @@
 //
 //   ck-aggregate serve           the server (the LaunchAgent runs this)
 //   ck-aggregate uplinks         which lines are different, which are ignored
-//   ck-aggregate test [s]        each line alone, then both through the server, s seconds each (default 6)
+//   ck-aggregate test [s]        each line alone, then all through the server, down and up, s seconds each (default 6)
+//   ck-aggregate test-line <n>   one line alone, down and up (a click on its row's speed)
 //   ck-aggregate on | off        macOS's SOCKS proxy on every network service → the server, or back off
 import Foundation
 import Darwin
 
-let speedURL = "https://speed.cloudflare.com/__down?bytes=50000000"   // cut by time; Cloudflare answers 403 above about 100 MB
+let speedURL = "https://proof.ovh.net/files/1Gb.dat"   // cut by time; Cloudflare slowed our downloads to 0.5 Mbit/s after a few tests (18.10.2026)
 
 func log(_ s: String) {
     let f = ISO8601DateFormatter(); f.timeZone = .current
@@ -29,6 +30,10 @@ func log(_ s: String) {
 final class Uplink {
     let iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?
     var mbps: Double = 10, alive = true, misses = 0, active = 0, connections = 0, bytesDown = 0, bytesUp = 0
+    // BUSY, not open (18.10.2026: Chrome alone held 31 idle connections through the server and they counted as load):
+    // the connections being dialled plus those that moved bytes in the last 5 s, by their client socket.
+    var pending = 0, seen: [Int32: Date] = [:]
+    func busy(_ now: Date) -> Int { pending + seen.values.filter { now.timeIntervalSince($0) < 5 }.count }
     init(iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?) {
         self.iface = iface; self.name = name; self.gateway = gateway; self.gatewayMAC = gatewayMAC; self.publicIP = publicIP
     }
@@ -88,7 +93,7 @@ enum Lines {
     }
     static func saveSpeeds(_ m: [String: Double]) {
         try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
-        var all = savedSpeeds(); m.forEach { all[$0] = $1 }
+        var all = savedSpeeds(); m.forEach { k, v in all[k] = all[k].map { ($0 + v) / 2 } ?? v }   // one 4G dip never starves a line
         try? JSONEncoder().encode(all).write(to: Aggregation.speeds)
     }
 }
@@ -199,24 +204,25 @@ final class Server {
     }
 
     // Out through the best line; if it cannot reach the host, through the next (a dead line is skipped this way too).
-    func open(_ host: String, _ port: UInt16) -> (Int32, Uplink)? {
+    func open(_ host: String, _ port: UInt16, for c: Int32) -> (Int32, Uplink)? {
         // The line is reserved before dialling, so connections arriving together spread over the lines (they all saw
         // "0 active" and took the same line in the first joined test).
         var tried = Set<String>()
         while true {
             lock.lock()
+            let now = Date()
             let alive = lines.filter { !tried.contains($0.iface) }
             guard let u = alive.min(by: { a, b in
                 if a.alive != b.alive { return a.alive }
-                return Double(a.active + 1) / a.mbps < Double(b.active + 1) / b.mbps
+                return Double(a.busy(now) + 1) / a.mbps < Double(b.busy(now) + 1) / b.mbps
             }) else { lock.unlock(); return nil }
-            u.active += 1
+            u.active += 1; u.pending += 1
             lock.unlock()
             if let fd = dial(host, port, via: u.iface) {
-                lock.lock(); u.connections += 1; lock.unlock()
+                lock.lock(); u.connections += 1; u.pending -= 1; u.seen[c] = Date(); lock.unlock()
                 return (fd, u)
             }
-            lock.lock(); u.active -= 1; lock.unlock()
+            lock.lock(); u.active -= 1; u.pending -= 1; lock.unlock()
             tried.insert(u.iface)
         }
     }
@@ -271,7 +277,7 @@ final class Server {
         }
         guard let p = readExact(c, 2) else { close(c); return }
         let port = UInt16(p[0]) << 8 | UInt16(p[1])
-        guard let (out, u) = open(host, port) else { _ = sendAll(c, [5, 4, 0, 1, 0, 0, 0, 0, 0, 0]); close(c); return }
+        guard let (out, u) = open(host, port, for: c) else { _ = sendAll(c, [5, 4, 0, 1, 0, 0, 0, 0, 0, 0]); close(c); return }
         guard sendAll(c, [5, 0, 0, 1, 0, 0, 0, 0, 0, 0]) else { finish(c, out, u, 0, 0); return }
         relay(c, out, u)
     }
@@ -289,7 +295,7 @@ final class Server {
         if line[0] == "CONNECT" {
             let hp = line[1].split(separator: ":", omittingEmptySubsequences: false)
             let host = hp.dropLast().joined(separator: ":").trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-            guard let port = UInt16(hp.last ?? ""), let (out, u) = open(host, port) else {
+            guard let port = UInt16(hp.last ?? ""), let (out, u) = open(host, port, for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }
             guard sendAll(c, Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8)) else { finish(c, out, u, 0, 0); return }
@@ -304,7 +310,7 @@ final class Server {
             let path = (url.path.isEmpty ? "/" : url.path) + (url.query.map { "?\($0)" } ?? "")
             var rest = text.components(separatedBy: "\r\n").dropFirst().filter { !$0.lowercased().hasPrefix("proxy-connection:") && !$0.lowercased().hasPrefix("connection:") }
             rest.insert("Connection: close", at: rest.count - 2)
-            guard let (out, u) = open(host, UInt16(url.port ?? 80)) else {
+            guard let (out, u) = open(host, UInt16(url.port ?? 80), for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }
             let req = "\(line[0]) \(path) \(line.count > 2 ? line[2] : "HTTP/1.1")\r\n" + rest.joined(separator: "\r\n")
@@ -318,29 +324,37 @@ final class Server {
     // Both directions copied until each side has said it is done; the bytes counted on the line.
     func relay(_ c: Int32, _ out: Int32, _ u: Uplink) {
         let group = DispatchGroup()
-        var up = 0, down = 0
+        var up = 0, down = 0, done = false
         func pump(_ from: Int32, _ to: Int32, _ count: @escaping (Int) -> Void) {
-            var buf = [UInt8](repeating: 0, count: 65536), total = 0
+            var buf = [UInt8](repeating: 0, count: 65536), total = 0, touched = Date()
             while true {
                 let n = buf.withUnsafeMutableBytes { recv(from, $0.baseAddress, 65536, 0) }
                 if n <= 0 { break }
                 if !sendAll(to, Array(buf[0..<n])) { break }
                 total += n
-                if total >= 1_048_576 { count(total); total = 0 }
+                if total >= 1_048_576 || Date().timeIntervalSince(touched) > 1 { count(total); total = 0; touched = Date() }
             }
             count(total)
             shutdown(to, SHUT_WR)
+            // One side has finished; the other gets 30 s to finish too, then the connection is ended (a peer that never
+            // closes would hold its line's thread and socket for ever).
+            DispatchQueue.global().asyncAfter(deadline: .now() + 30) { [self] in
+                lock.lock()                                    // under the lock: `done` is set before the sockets close
+                if !done { shutdown(to, SHUT_RDWR); shutdown(from, SHUT_RDWR) }
+                lock.unlock()
+            }
         }
         group.enter()
-        Thread.detachNewThread { [self] in pump(c, out) { n in self.lock.lock(); up += n; u.bytesUp += n; self.lock.unlock() }; group.leave() }
-        pump(out, c) { n in self.lock.lock(); down += n; u.bytesDown += n; self.lock.unlock() }
+        Thread.detachNewThread { [self] in pump(c, out) { n in self.lock.lock(); up += n; u.bytesUp += n; u.seen[c] = Date(); self.lock.unlock() }; group.leave() }
+        pump(out, c) { n in self.lock.lock(); down += n; u.bytesDown += n; u.seen[c] = Date(); self.lock.unlock() }
         group.wait()
+        lock.lock(); done = true; lock.unlock()
         finish(c, out, u, up, down)
     }
 
     func finish(_ c: Int32, _ out: Int32, _ u: Uplink, _ up: Int, _ down: Int) {
+        lock.lock(); u.active -= 1; u.seen[c] = nil; lock.unlock()
         close(c); close(out)
-        lock.lock(); u.active -= 1; lock.unlock()
     }
 
     func status() -> String {
@@ -357,53 +371,88 @@ final class Server {
 
 // MARK: the test
 
-// `streams` downloads at once for `seconds`, through one device or through the server; Mbit/s and MB spent.
-func measure(_ how: [String], streams: Int, seconds: Int) -> (mbps: Double, mb: Double) {
+// v13 (request 30: "speed test when I click on the number for upload or download ... the same clicking applies to
+// combinations so I can compare"): download and upload, each line alone, then all lines through the server.
+let uploadFile = Paths.support.appendingPathComponent("upload-50MB.bin")
+let uploadURL = "https://speed.cloudflare.com/__up"
+
+// `streams` transfers at once for `seconds`, through one device or through the server; Mbit/s, MB spent and each
+// line's share. The bytes are those macOS counts on each line's own default route (`ifaces`), what really went over
+// the air: curl's own upload count through the server counted what the server took into its buffers, so the first
+// joined upload read 64.8 Mbit/s over two lines that add up to 38 (18.10.2026).
+func measure(_ how: [String], streams: Int, seconds: Int, up: Bool = false, ifaces: [String]) -> (mbps: Double, mb: Double, share: [String: Double]) {
+    if up && !FileManager.default.fileExists(atPath: uploadFile.path) {
+        try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: uploadFile.path, contents: Data(count: 50_000_000))
+    }
     var procs: [(Process, Pipe)] = []
+    let before = Traffic.internetAll()
     let t0 = Date()
     for _ in 0..<streams {
         let p = Process(), pipe = Pipe()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
-        p.arguments = ["-s", "-o", "/dev/null", "-m", String(seconds), "-w", "%{size_download}"] + how + [speedURL]
+        p.arguments = ["-s", "-o", "/dev/null", "-m", String(seconds), "-w", up ? "%{size_upload}" : "%{size_download}"] + how
+            + (up ? ["--data-binary", "@" + uploadFile.path, uploadURL] : [speedURL])
         p.standardOutput = pipe; p.standardError = FileHandle.nullDevice
         try? p.run(); procs.append((p, pipe))
     }
-    var bytes = 0.0
+    var curlBytes = 0.0
     for (p, pipe) in procs {
         let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         p.waitUntilExit()
-        bytes += Double(out.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+        curlBytes += Double(out.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
     }
     let secs = max(Date().timeIntervalSince(t0), 0.1)
-    return (bytes * 8 / secs / 1e6, bytes / 1e6)
+    var share: [String: Double] = [:]
+    if let before, let after = Traffic.internetAll() {
+        for i in ifaces {
+            guard let a = after[i], let b = before[i] else { continue }
+            let n = up ? (a.tx >= b.tx ? a.tx - b.tx : 0) : (a.rx >= b.rx ? a.rx - b.rx : 0)
+            share[i] = Double(n) * 8 / secs / 1e6
+        }
+    }
+    let bytes = share.isEmpty ? curlBytes : share.values.reduce(0, +) * secs * 1e6 / 8
+    return (bytes * 8 / secs / 1e6, bytes / 1e6, share)
 }
 
-func test(seconds: Int) {
-    let d = Lines.discover()
+func faster(_ joined: Double, _ best: Double) -> String {
+    best > 0 && joined > best * 1.1 ? String(format: "%.0f%% faster than the best line alone", (joined / best - 1) * 100) : "not faster"
+}
+
+// `only`: one line by its name (a click on its row); nil: every line alone, then joined (a click on JOINED).
+func test(seconds: Int, only: String? = nil) {
+    let d = Lines.discover(), lines = d.lines.filter { only == nil || $0.name == only }
     for (u, kept) in d.ignored { print("ignored: \(u.name) (\(u.iface)) is the same line as \(kept.name) (public IP \(u.publicIP ?? "?"))") }
-    guard !d.lines.isEmpty else { print("no line answers"); return }
-    var spent = 0.0, alone: [String: Double] = [:], sum = 0.0
-    for u in d.lines {
-        let r = measure(["--interface", u.iface], streams: 4, seconds: seconds)
-        spent += r.mb; sum += r.mbps; alone[u.publicIP ?? u.iface] = r.mbps
-        print(String(format: "%@ (%@, %@) alone: %.1f Mbit/s", u.name, u.iface, u.publicIP ?? "?", r.mbps))
+    guard !lines.isEmpty else { print(only.map { "\($0) is not a line now" } ?? "no line"); exit(1) }
+    let old = AggTest.load()
+    var spent = 0.0, alone = old?.alone ?? [:], aloneUp = old?.aloneUp ?? [:], speeds: [String: Double] = [:]
+    for u in lines {
+        let dn = measure(["--interface", u.iface], streams: 4, seconds: seconds, ifaces: [u.iface])
+        let up = measure(["--interface", u.iface], streams: 4, seconds: seconds, up: true, ifaces: [u.iface])
+        spent += dn.mb + up.mb; alone[u.name] = dn.mbps; aloneUp[u.name] = up.mbps; speeds[u.publicIP ?? u.iface] = dn.mbps
+        print(String(format: "%@ (%@, %@) alone: down %.1f, up %.1f Mbit/s", u.name, u.iface, u.publicIP ?? "?", dn.mbps, up.mbps))
     }
-    Lines.saveSpeeds(alone)
-    guard d.lines.count > 1 else {
-        AggTest(at: Date(), alone: Dictionary(uniqueKeysWithValues: d.lines.map { ($0.name, alone[$0.publicIP ?? $0.iface] ?? 0) }), joined: sum, mb: spent).save()
-        print(String(format: "only one line: nothing to join (%.0f MB spent)", spent)); return }
+    Lines.saveSpeeds(speeds)
+    guard only == nil, lines.count > 1 else {
+        AggTest(at: Date(), alone: alone, aloneUp: aloneUp, joined: old?.joined ?? 0, joinedUp: old?.joinedUp, mb: spent).save()
+        print(String(format: "SIM data spent: %.0f MB", spent)); return
+    }
     // The server, in this process unless the LaunchAgent's is running already.
     if shell("/usr/bin/curl", ["-s", "-m", "2", "http://127.0.0.1:\(aggPort)/status"], timeout: 3).status != 0 {
         Thread.detachNewThread { Server().run() }
         sleep(2)
         while shell("/usr/bin/curl", ["-s", "-m", "2", "http://127.0.0.1:\(aggPort)/status"], timeout: 3).status != 0 { sleep(1) }
     }
-    let r = measure(["-x", "socks5h://127.0.0.1:\(aggPort)"], streams: 4 * d.lines.count, seconds: seconds)
-    spent += r.mb
-    AggTest(at: Date(), alone: Dictionary(uniqueKeysWithValues: d.lines.map { ($0.name, alone[$0.publicIP ?? $0.iface] ?? 0) }), joined: r.mbps, mb: spent).save()
-    let best = alone.values.max() ?? 0
-    print(String(format: "joined through the server: %.1f Mbit/s (best line alone %.1f, the lines added %.1f): %@", r.mbps, best, sum,
-                 best > 0 && r.mbps > best * 1.1 ? String(format: "%.0f%% faster than the best line alone", (r.mbps / best - 1) * 100) : "not faster"))
+    let via = ["-x", "socks5h://127.0.0.1:\(aggPort)"]
+    let dn = measure(via, streams: 4 * lines.count, seconds: seconds, ifaces: lines.map(\.iface))
+    let up = measure(via, streams: 4 * lines.count, seconds: seconds, up: true, ifaces: lines.map(\.iface))
+    func split(_ m: [String: Double]) -> String { lines.map { String(format: "%@ %.1f", $0.name, m[$0.iface] ?? 0) }.joined(separator: " + ") }
+    spent += dn.mb + up.mb
+    AggTest(at: Date(), alone: alone, aloneUp: aloneUp, joined: dn.mbps, joinedUp: up.mbps, mb: spent).save()
+    let names = Set(lines.map(\.name))
+    let bestDn = alone.filter { names.contains($0.key) }.values.max() ?? 0, bestUp = aloneUp.filter { names.contains($0.key) }.values.max() ?? 0
+    print(String(format: "joined through the server: down %.1f Mbit/s (%@; best line alone %.1f): %@", dn.mbps, split(dn.share), bestDn, faster(dn.mbps, bestDn)))
+    print(String(format: "joined through the server: up %.1f Mbit/s (%@; best line alone %.1f): %@", up.mbps, split(up.share), bestUp, faster(up.mbps, bestUp)))
     print(String(format: "SIM data spent: %.0f MB", spent))
 }
 
@@ -415,7 +464,8 @@ case "uplinks":
     for u in d.lines { print("line: \(u.name) (\(u.iface)) gateway \(u.gateway ?? "?") \(u.gatewayMAC ?? "?") public \(u.publicIP ?? "?") \(Int(u.mbps)) Mbit/s") }
     for (u, k) in d.ignored { print("ignored: \(u.name) (\(u.iface)), the same line as \(k.name)") }
 case "test": test(seconds: argv.count > 1 ? Int(argv[1]) ?? 6 : 6)
+case "test-line" where argv.count > 1: test(seconds: argv.count > 2 ? Int(argv[2]) ?? 6 : 6, only: argv[1])
 case "on": Aggregation.systemProxy(true).forEach { print($0) }
 case "off": Aggregation.systemProxy(false).forEach { print($0) }
-default: print("usage: ck-aggregate serve | uplinks | test [seconds] | on | off"); exit(2)
+default: print("usage: ck-aggregate serve | uplinks | test [seconds] | test-line <name> [seconds] | on | off"); exit(2)
 }

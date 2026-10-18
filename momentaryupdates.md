@@ -268,3 +268,9 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > also, minimus lion is in a strange position. It's not on the edge. Those kind of things are always on the edge
 
 **Status:** started 18.10.2026.
+
+## 18.10.2026, request 33 (a virtual network device: mantra_networkaggregate)
+
+> now you need to create virtual LAN device, so in the macOS I can select this device and macOS will not know about aggregation. It will just use it as normal, and this device is doing aggregation. So I want to see in my status of connection where I'm connected to our aggregate, mantra_aggregate. It's called mantra_networkaggregate
+
+**Status:** started 18.10.2026.

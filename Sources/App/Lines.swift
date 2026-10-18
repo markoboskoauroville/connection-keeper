@@ -21,7 +21,7 @@ final class LineRow {
     let name: NSTextField
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
     let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
-    let info = label(textWidth("JOINED 8 lines · 888 conn · test 888.8 = 8.8× best", monoFont), font: monoFont)
+    let info = label(textWidth("8 lines · 888 conn · 8.8× best, up 8.8×", monoFont), font: monoFont)
     var lastBytes: (rx: UInt64, tx: UInt64)?
 
     init(leadWidth: CGFloat, nameWidth: CGFloat) {
@@ -32,6 +32,8 @@ final class LineRow {
         lead.translatesAutoresizingMaskIntoConstraints = false
         lead.widthAnchor.constraint(equalToConstant: leadWidth).isActive = true
         speed.lineBreakMode = .byClipping
+        speed.maximumNumberOfLines = 1
+        speed.cell?.wraps = false
         ping.textColor = Ink.yellow
         info.textColor = Ink.dim
         view = NSStackView(views: [dot, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), info])
@@ -43,10 +45,10 @@ final class LineRow {
     }
 
     // Download green, upload red, each with a test in parentheses, as on the first row.
-    func setSpeed(_ down: Double?, _ up: Double?, test: (Double, Double?)?, dim: Bool = false) {
+    func setSpeed(_ down: Double?, _ up: Double?, test: (Double, Double?)?, dim: Bool = false, mark: String? = nil) {
         let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
-        let d = "\(down.map(rate) ?? dash) \(testPart(test?.0, mark: nil))"
-        let u = "\(up.map(rate) ?? dash) \(test?.1 == nil ? "       " : testPart(test?.1, mark: nil))"
+        let d = "\(down.map(rate) ?? dash) \(testPart(test?.0, mark: mark))"
+        let u = "\(up.map(rate) ?? dash) \(test?.1 == nil && mark == nil ? "       " : testPart(test?.1, mark: mark))"
         let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: dim ? Ink.grey : Ink.green])
         t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: dim ? Ink.grey : Ink.red]))
         speed.attributedStringValue = t
@@ -118,6 +120,7 @@ extension Stripe {
         for o in others where lineRows[o.iface] == nil {
             let r = LineRow(leadWidth: lead, nameWidth: nameW)
             r.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
+            r.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
             lineRows[o.iface] = r
             column.insertArrangedSubview(r.view, at: column.arrangedSubviews.count - 1)
             changed = true
@@ -140,8 +143,8 @@ extension Stripe {
             r.info.stringValue = o.sameAs.map { "same line as \($0): not joined" }
                 ?? (Aggregation.on && line != nil ? String(format: "joined · %d conn · %.0f MB", line!.active, line!.mbDown + line!.mbUp)
                     : ok ? "not joined" : "no internet")
-            r.speed.toolTip = "Its own live speed (its default route), and in parentheses its last test alone"
-            if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: !ok) }
+            r.speed.toolTip = "Its own live speed (its default route); in parentheses its last test alone, down and up.\nClick: test this line now (Cloudflare, about 6 s each way)."
+            if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: !ok, mark: lineTesting.contains(o.name) ? "..." : nil) }
         }
         // The aggregation row: always the last.
         guard let a = aggRow else { return }
@@ -157,8 +160,13 @@ extension Stripe {
             a.ping.stringValue = "\(alive.count) of \(st.lines.count) up"
             a.ping.textColor = alive.count == st.lines.count ? Ink.yellow : Ink.amber
             let conn = st.lines.reduce(0) { $0 + $1.active }
-            var words = "\(st.lines.map(\.name).joined(separator: " + ")) · \(conn) conn"
-            if let t = aggTest, let best = t.alone.values.max(), best > 0 { words += String(format: " · test %.1f = %.1f× best", t.joined, t.joined / best) }
+            // v13 (request 30, the end was cut): the names are on the rows above; here only the numbers
+            var words = "\(st.lines.count) lines · \(conn) conn"
+            let names = Set(st.lines.map(\.name))
+            if let t = aggTest, let best = t.alone.filter({ names.contains($0.key) }).values.max(), best > 0 {
+                words += String(format: " · %.1f× best", t.joined / best)
+                if let up = t.joinedUp, let bestUp = t.aloneUp?.filter({ names.contains($0.key) }).values.max(), bestUp > 0 { words += String(format: ", up %.1f×", up / bestUp) }
+            }
             a.info.stringValue = words; a.info.textColor = Ink.text
         } else {
             a.dot.color = Ink.red; a.name.textColor = Ink.red
@@ -171,7 +179,7 @@ extension Stripe {
     }
 
     func lineTest(_ name: String, _ tests: [String: WebSpeed], _ aggTest: AggTest?) -> (Double, Double?)? {
-        if let a = aggTest?.alone[name] { return (a, nil) }
+        if let a = aggTest?.alone[name] { return (a, aggTest?.aloneUp?[name]) }
         if let w = tests[name] { return (w.down_mbps, w.up_mbps) }
         return nil
     }
@@ -190,13 +198,36 @@ extension Stripe {
             let c = all[o.iface]
             let v = rates(r.lastBytes, c)
             r.lastBytes = c
-            r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil)
+            r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil, mark: lineTesting.contains(o.name) ? "..." : nil)
             if joined.contains(o.iface), let v { sumDown += v.0; sumUp += v.1 }
         }
         if let i = iface, joined.contains(i), let v = rates(aggMainLast, all[i]) { sumDown += v.0; sumUp += v.1 }
         if let i = iface { aggMainLast = all[i] }
         let on = Aggregation.on && agg != nil
-        aggRow.setSpeed(on ? sumDown : nil, on ? sumUp : nil, test: aggTest.map { ($0.joined, nil) }, dim: !on)
+        aggRow.setSpeed(on ? sumDown : nil, on ? sumUp : nil, test: aggTest.map { ($0.joined, $0.joinedUp) }, dim: !on,
+                        mark: lineTesting.contains("JOINED") ? "..." : nil)
+    }
+
+    // A CLICK ON A ROW'S SPEED (request 30: "the same clicking applies to combinations so I can compare"): that line
+    // alone, down and up, behind the scenes; on JOINED every line alone and then all of them through the server. The
+    // first row keeps its speedtest.net test in Firefox. "(...)" while it runs, the numbers in parentheses after.
+    @objc func testRowSpeed(_ g: NSClickGestureRecognizer) {
+        let name: String
+        if g.view === aggRow.speed { name = "JOINED" }
+        else if let o = others.first(where: { lineRows[$0.iface]?.speed === g.view }), o.sameAs == nil { name = o.name }
+        else { return }
+        if !lineTesting.isEmpty { return }                  // one test at a time: two would share the lines
+        lineTesting.insert(name)
+        appendLog("\(logStamp()) LINE TEST asked on the stripe: \(name == "JOINED" ? "every line alone, then joined" : name + " alone")")
+        let bin = Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/ck-aggregate").path
+        DispatchQueue.global().async {
+            let r = shell(bin, name == "JOINED" ? ["test", "6"] : ["test-line", name, "6"], timeout: 120)
+            DispatchQueue.main.async {
+                self.lineTesting.remove(name)
+                appendLog("\(logStamp()) LINE TEST \(name): " + r.out.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: "; "))
+                self.layoutLines()
+            }
+        }
     }
 
     // THE JOIN TICKS (request 28). Rows are views, so a tick does not close the menu.

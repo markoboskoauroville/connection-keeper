@@ -61,9 +61,9 @@ struct AggLine: Codable {
 struct AggIgnored: Codable { let name: String, device: String, sameLineAs: String }
 struct AggStatus: Codable { let version: Int, port: Int, lines: [AggLine], ignored: [AggIgnored] }
 
-// The last `ck-aggregate test`: each line alone and all of them joined through the server, in Mbit/s.
+// The last `ck-aggregate test`: each line alone and all of them joined through the server, down and up, in Mbit/s.
 struct AggTest: Codable {
-    let at: Date, alone: [String: Double], joined: Double, mb: Double
+    let at: Date, alone: [String: Double], aloneUp: [String: Double]?, joined: Double, joinedUp: Double?, mb: Double
     static func load() -> AggTest? {
         guard let d = try? Data(contentsOf: Aggregation.lastTest) else { return nil }
         let j = JSONDecoder(); j.dateDecodingStrategy = .iso8601
