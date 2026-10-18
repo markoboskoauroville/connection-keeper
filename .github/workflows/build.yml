@@ -1,0 +1,54 @@
+name: Build Swift app
+
+# Builds "Connection Keeper (Mantra).app" (the stripe + the keeper) on a macOS
+# runner, to prove the Swift still compiles. Uses build.sh's CI path (CK_CI=1):
+# ad-hoc codesign, no install to /Applications, produces the .app zip as an
+# artifact. Runs on every push/PR that touches the Swift, and on demand.
+
+on:
+  push:
+    branches: [ "main", "claude/**" ]
+    paths:
+      - "Sources/**"
+      - "Resources/**"
+      - "Tools/make_icon.swift"
+      - "build.sh"
+      - ".github/workflows/build.yml"
+  pull_request:
+    paths:
+      - "Sources/**"
+      - "Resources/**"
+      - "Tools/make_icon.swift"
+      - "build.sh"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version || true
+          echo "CKVersion: $(grep -E '^let CKVersion' Sources/Shared/Model.swift)"
+
+      - name: Build (CI, ad-hoc signed)
+        run: CK_CI=1 ./build.sh
+
+      - name: Verify the binaries
+        run: |
+          APP="build/Connection Keeper (Mantra).app"
+          file "$APP/Contents/MacOS/Connection Keeper"
+          file "$APP/Contents/MacOS/connection-keeperd"
+          codesign --verify --deep --strict "$APP" && echo "codesign OK (ad-hoc)"
+
+      - name: Upload app zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: connection-keeper-app
+          path: build/*-connection-keeper-v*.zip
+          if-no-files-found: error

@@ -16,6 +16,17 @@ sed "s/__VERSION__/$V/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 swift Tools/make_icon.swift build/AppIcon.iconset "$V"
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 
+# CI (GitHub Actions macOS runner): the "Mantra Apps" identity and /Applications are not there.
+# Ad-hoc sign so the .app is valid, make the zip, and stop before touching /Applications.
+if [ -n "${CK_CI:-}" ]; then
+  codesign --force -s - -i com.mantra.connectionkeeper.keeper "$APP/Contents/MacOS/connection-keeperd"
+  codesign --force -s - "$APP"
+  codesign --verify --deep "$APP"
+  ditto -c -k --keepParent "$APP" "build/$V-connection-keeper-v$V.zip"
+  echo "CI built v$V: $APP and build/$V-connection-keeper-v$V.zip (ad-hoc signed, not installed)"
+  exit 0
+fi
+
 codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.keeper "$APP/Contents/MacOS/connection-keeperd"
 codesign --force -s "Mantra Apps" "$APP"
 codesign --verify --deep "$APP"
