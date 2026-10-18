@@ -256,3 +256,9 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > and you should compare now in this test phase
 
 **Status:** started 18.10.2026.
+
+## 18.10.2026, request 31 (remember the last position and the last display)
+
+> please make sure the app itself remembers its last position and its last display
+
+**Status:** started 18.10.2026.
