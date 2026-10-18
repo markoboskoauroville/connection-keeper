@@ -216,3 +216,17 @@ Test the ladder without touching the network:
   not measured yet; Marko's ticks; a whole day with the proxy on; Chrome with QUIC (Chrome turns QUIC off behind a SOCKS
   proxy, which is what we want). One single download stays on one line: the next step is a server outside (LESSONS).
 - Every start of the stripe still runs the data SMS and a speedtest.net test (about 100 MB of SIM data).
+
+## State on 18.10.2026 (v16): the mode switch
+
+- `Aggregation.aggregateMode` (Shared/Aggregate.swift) is the file `mode` in Application Support ("one" / "aggregate"; missing
+  = the old flag decides). `Aggregation.on` = aggregate mode AND lines ticked. `setMode` does the whole switch: on =
+  launchctl enable + bootstrap + kickstart of com.mantra.connectionkeeper.aggregate, then `apply(true)`; off = `apply(false)`,
+  the proxy off, bootout + disable of the agent.
+- App/Lines.swift: `toggleMode` on the last row's name, `addModeSection` at the top of ▾; ticking none still means off.
+- Tunnel/main.swift: `trafficPasses()` (two Cloudflare addresses by IP, 4 s each), checked 4 s after up and every 10 s;
+  `rest()` = down + five minutes before up is allowed; route re-adds counted per minute.
+- On 18.10.2026 at 12:40 the Mac is on ONE CONNECTION, the tunnel-on flag removed, the helper not running (still v14 in
+  /Library/PrivilegedHelperTools until Marko runs `sudo ./tunnel.sh install`).
+- Never proven: the v15 helper as root (needs his sudo); a fail-open triggered for real; AGGREGATE CONNECTION on screen.
+  AX88179B (the USB-C cable) showed "no internet" at 12:36, not looked into.

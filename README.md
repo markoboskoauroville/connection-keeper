@@ -192,3 +192,13 @@ repository).
 Proven 18.10.2026 (a 5-minute test run): plain downloads with no proxy set, 73.8 Mbit/s through the device, both lines
 carrying (cable 19.4 MB + Something 34.7 MB in 6 s); name lookups, UDP to 1.1.1.1, the web and the keeper all fine;
 the stripe showed cable 26.0 + Something 54.1 = JOINED 80.1 Mbit/s live.
+
+## One connection or aggregate connection (v15–v16, 18.10.2026)
+
+After v14 the Mac lost the internet until a restart, and the restart brought the device straight back. Now one click on the
+stripe's last row switches between **ONE CONNECTION** and **AGGREGATE CONNECTION**; the drop-down starts with the same two
+choices. One connection takes every part of the aggregation away without a password: the helper's flag (utun99 down
+within 2 s), macOS's SOCKS proxy, and the aggregation server, which is also kept from starting at login. The ticked lines
+are kept for the next time. The root helper ck-tunnel now sends a real request (HEAD to 1.1.1.1 / 1.0.0.1) through the
+device every 10 s; two misses, or macOS taking its routes away five times in a minute, and it lets go and rests five
+minutes. The new helper is installed with `sudo ./tunnel.sh install`.
