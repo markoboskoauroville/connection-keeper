@@ -13,6 +13,16 @@ rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/Daemon/*.swift -o "$APP/Contents/MacOS/connection-keeperd"
 swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/Aggregate/*.swift -o "$APP/Contents/MacOS/ck-aggregate"
 swiftc -O -swift-version 5 Sources/Tunnel/*.swift -o "$APP/Contents/MacOS/ck-tunnel"
+# hev-socks5-tunnel (MIT, github.com/heiher/hev-socks5-tunnel) for the virtual device: fetched once, pinned by its
+# fingerprint, never kept in this repository (on the Download Monitor first; 316 KB of SIM data).
+HEV=Resources/tunnel/hev-socks5-tunnel
+HEVSHA=c72e2d99b698542105e10777a5105a60bb04f4d80bfbf95f20f3365cb77e5d47
+if [ "$(shasum -a 256 "$HEV" 2>/dev/null | cut -d' ' -f1)" != "$HEVSHA" ]; then
+  python3 ~/Developer/DOWNLOAD_MONITOR/dlmon.py add hev-socks5-tunnel --name "hev-socks5-tunnel 2.19.0" --want-mb 0.3 --file "$PWD/$HEV" --info "Connection Keeper build" || true
+  curl -sL -o "$HEV" https://github.com/heiher/hev-socks5-tunnel/releases/download/2.19.0/hev-socks5-tunnel-darwin-arm64
+  [ "$(shasum -a 256 "$HEV" | cut -d' ' -f1)" = "$HEVSHA" ] || { echo "hev-socks5-tunnel: wrong fingerprint, not used"; rm -f "$HEV"; exit 1; }
+  chmod +x "$HEV"
+fi
 mkdir -p "$APP/Contents/Resources/tunnel" && cp Resources/tunnel/hev-socks5-tunnel Resources/tunnel/LICENSE "$APP/Contents/Resources/tunnel/"
 swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/App/*.swift -framework AppKit -o "$APP/Contents/MacOS/Connection Keeper"
 sed "s/__VERSION__/$V/g" Resources/Info.plist > "$APP/Contents/Info.plist"
