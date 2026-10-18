@@ -233,6 +233,7 @@ final class Server {
         // The line is reserved before dialling, so connections arriving together spread over the lines (they all saw
         // "0 active" and took the same line in the first joined test).
         var tried = Set<String>()
+        for _ in 0..<100 { lock.lock(); let none = lines.isEmpty; lock.unlock(); if !none { break }; usleep(200_000) }
         while true {
             lock.lock()
             let now = Date()
@@ -260,7 +261,9 @@ final class Server {
         addr.sin_family = sa_family_t(AF_INET); addr.sin_port = aggPort.bigEndian; addr.sin_addr.s_addr = inet_addr("127.0.0.1")
         let b = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
         guard b == 0, listen(s, 256) == 0 else { log("port \(aggPort) is taken: \(String(cString: strerror(errno)))"); exit(1) }
-        refresh()
+        // Answering at once: finding the lines takes 10-20 s (pings, public IPs), and with the virtual device the whole
+        // Mac waits for the server after each restart. The first connections wait for the lines in open().
+        Thread.detachNewThread { [self] in refresh() }
         Thread.detachNewThread { [self] in while true { sleep(20); health() } }
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
         Thread.detachNewThread { [self] in
@@ -288,7 +291,7 @@ final class Server {
 
     func socks(_ c: Int32) {
         guard let hello = readExact(c, 2), let _ = readExact(c, Int(hello[1])), sendAll(c, [5, 0]),
-              let req = readExact(c, 4), req[1] == 1 else { close(c); return }
+              let req = readExact(c, 4), req[1] == 1 || req[1] == 3 else { close(c); return }
         var host = ""
         switch req[3] {
         case 1: guard let a = readExact(c, 4) else { close(c); return }; host = a.map(String.init).joined(separator: ".")
@@ -302,9 +305,116 @@ final class Server {
         }
         guard let p = readExact(c, 2) else { close(c); return }
         let port = UInt16(p[0]) << 8 | UInt16(p[1])
+        if req[1] == 3 { udp(c); return }
         guard let (out, u) = open(host, port, for: c) else { _ = sendAll(c, [5, 4, 0, 1, 0, 0, 0, 0, 0, 0]); close(c); return }
         guard sendAll(c, [5, 0, 0, 1, 0, 0, 0, 0, 0, 0]) else { finish(c, out, u, 0, 0); return }
         relay(c, out, u)
+    }
+
+    // UDP (v14, for the virtual device mantra_networkaggregate: name lookups, QUIC, calls): SOCKS5 UDP ASSOCIATE. A UDP
+    // socket on 127.0.0.1 for the client and one UDP socket out through ONE line: the whole association stays on it,
+    // since a QUIC connection or a call must keep its path. It lives as long as the client's TCP connection. IPv4 only.
+    func udp(_ c: Int32) {
+        for _ in 0..<100 { lock.lock(); let none = lines.isEmpty; lock.unlock(); if !none { break }; usleep(200_000) }
+        lock.lock()
+        let now = Date()
+        let pick = lines.filter(\.alive).min { Double($0.busy(now) + 1) / $0.mbps < Double($1.busy(now) + 1) / $1.mbps } ?? lines.first
+        if let u = pick { u.active += 1; u.connections += 1; u.seen[c] = now }
+        lock.unlock()
+        let fail: [UInt8] = [5, 1, 0, 1, 0, 0, 0, 0, 0, 0]
+        guard let u = pick else { _ = sendAll(c, fail); close(c); return }
+        let local = socket(AF_INET, SOCK_DGRAM, 0), out = socket(AF_INET, SOCK_DGRAM, 0)
+        func done() { close(local); close(out); lock.lock(); u.active -= 1; u.seen[c] = nil; lock.unlock(); close(c) }
+        var la = sockaddr_in(); la.sin_family = sa_family_t(AF_INET); la.sin_len = UInt8(MemoryLayout<sockaddr_in>.size); la.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var index = if_nametoindex(u.iface)
+        var oa = sockaddr_in(); oa.sin_family = sa_family_t(AF_INET); oa.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        if let src = ipv4(of: u.iface) { oa.sin_addr = src }
+        let size = socklen_t(MemoryLayout<sockaddr_in>.size)
+        guard local >= 0, out >= 0,
+              withUnsafePointer(to: &la, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(local, $0, size) } }) == 0,
+              setsockopt(out, IPPROTO_IP, IP_BOUND_IF_, &index, socklen_t(MemoryLayout<UInt32>.size)) == 0,
+              withUnsafePointer(to: &oa, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(out, $0, size) } }) == 0 else {
+            _ = sendAll(c, fail); done(); return
+        }
+        var len = size
+        _ = withUnsafeMutablePointer(to: &la) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(local, $0, &len) } }
+        let lp = UInt16(bigEndian: la.sin_port)
+        guard sendAll(c, [5, 0, 0, 1, 127, 0, 0, 1, UInt8(lp >> 8), UInt8(lp & 255)]) else { done(); return }
+
+        var running = true, client: sockaddr_in?, names: [String: in_addr] = [:]
+        let box = NSLock(), group = DispatchGroup()
+        func flush(_ up: inout Int, _ down: inout Int) {
+            lock.lock(); u.bytesUp += up; u.bytesDown += down; u.seen[c] = Date(); lock.unlock(); up = 0; down = 0
+        }
+        // client → the internet: [0, 0, frag, atyp, address, port, data]
+        group.enter()
+        Thread.detachNewThread { [self] in
+            var buf = [UInt8](repeating: 0, count: 65536), up = 0, none = 0, last = Date()
+            while true {
+                box.lock(); let go = running; box.unlock()
+                if !go { break }
+                var pfd = pollfd(fd: local, events: Int16(POLLIN), revents: 0)
+                if poll(&pfd, 1, 1000) != 1 { continue }
+                var from = sockaddr_in(); var fl = size
+                let n = buf.withUnsafeMutableBytes { b in withUnsafeMutablePointer(to: &from) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(local, b.baseAddress, 65536, 0, $0, &fl) } } }
+                guard n > 10, buf[2] == 0 else { continue }                      // fragments are not supported (none are sent)
+                box.lock(); client = from; box.unlock()
+                var dst = sockaddr_in(); dst.sin_family = sa_family_t(AF_INET); dst.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+                var at = 4
+                switch buf[3] {
+                case 1: memcpy(&dst.sin_addr, Array(buf[4..<8]), 4); at = 8
+                case 3:
+                    let l = Int(buf[4]); guard n > 5 + l + 2 else { continue }
+                    let name = String(decoding: buf[5..<(5 + l)], as: UTF8.self); at = 5 + l
+                    if let a = names[name] { dst.sin_addr = a } else {
+                        var hints = addrinfo(); hints.ai_family = AF_INET; hints.ai_socktype = SOCK_DGRAM
+                        var res: UnsafeMutablePointer<addrinfo>?
+                        guard getaddrinfo(name, nil, &hints, &res) == 0, let r = res else { continue }
+                        let a = r.pointee.ai_addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee.sin_addr }
+                        freeaddrinfo(r); names[name] = a; dst.sin_addr = a
+                    }
+                default: none += 1; continue                                     // IPv6: the sender falls back to IPv4
+                }
+                dst.sin_port = (UInt16(buf[at]) << 8 | UInt16(buf[at + 1])).bigEndian
+                let data = at + 2
+                let sent = buf.withUnsafeBytes { b in withUnsafePointer(to: &dst) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { sendto(out, b.baseAddress! + data, n - data, 0, $0, size) } } }
+                if sent > 0 { up += sent }
+                if Date().timeIntervalSince(last) > 1 { var d = 0; flush(&up, &d); last = Date() }
+            }
+            var d = 0; flush(&up, &d)
+            group.leave()
+        }
+        // the internet → client, with the sender's address in front
+        group.enter()
+        Thread.detachNewThread { [self] in
+            var buf = [UInt8](repeating: 0, count: 65536), down = 0, last = Date()
+            while true {
+                box.lock(); let go = running; box.unlock()
+                if !go { break }
+                var pfd = pollfd(fd: out, events: Int16(POLLIN), revents: 0)
+                if poll(&pfd, 1, 1000) != 1 { continue }
+                var from = sockaddr_in(); var fl = size
+                let n = buf.withUnsafeMutableBytes { b in withUnsafeMutablePointer(to: &from) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(out, b.baseAddress, 65536, 0, $0, &fl) } } }
+                box.lock(); let to = client; box.unlock()        // after the packet: the first reply comes within the wait
+                guard n > 0, var dest = to else { continue }
+                var packet: [UInt8] = [0, 0, 0, 1]
+                withUnsafeBytes(of: from.sin_addr) { packet += $0 }
+                let port = UInt16(bigEndian: from.sin_port)
+                packet += [UInt8(port >> 8), UInt8(port & 255)]
+                packet += buf[0..<n]
+                let sent = packet.withUnsafeBytes { b in withUnsafePointer(to: &dest) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { sendto(local, b.baseAddress, packet.count, 0, $0, size) } } }
+                if sent > 0 { down += n }
+                if Date().timeIntervalSince(last) > 1 { var u0 = 0; flush(&u0, &down); last = Date() }
+            }
+            var u0 = 0; flush(&u0, &down)
+            group.leave()
+        }
+        // The association ends with the client's TCP connection.
+        var b: UInt8 = 0
+        while recv(c, &b, 1, 0) > 0 {}
+        box.lock(); running = false; box.unlock()
+        group.wait()
+        done()
     }
 
     func http(_ c: Int32) {
