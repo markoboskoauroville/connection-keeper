@@ -140,7 +140,7 @@ extension Stripe {
         for o in others {
             guard let r = lineRows[o.iface] else { continue }
             let ok = o.ms != nil
-            r.name.stringValue = o.name
+            r.name.stringValue = Net.shown(o.name, o.iface)
             r.name.textColor = !ok ? Ink.grey : o.wifi ? Ink.green : Ink.yellow
             r.dot.color = !ok ? Ink.grey : Aggregation.on && joined.contains(o.iface) ? Ink.green : Ink.dim
             r.ping.stringValue = o.ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
@@ -300,17 +300,17 @@ extension Stripe {
 
     // THE JOIN TICKS (request 28). Rows are views, so a tick does not close the menu.
     func addJoinSection(_ menu: NSMenu) {
-        var names: [(String, Bool)] = []
-        if let i = iface, i != Aggregation.tunnelDevice { names.append((Net.displayName(i), true)) }
-        for o in others where !names.contains(where: { $0.0 == o.name }) { names.append((o.name, o.ms != nil)) }
+        var names: [(String, Bool, String)] = []
+        if let i = iface, i != Aggregation.tunnelDevice { names.append((Net.displayName(i), true, i)) }
+        for o in others where !names.contains(where: { $0.0 == o.name }) { names.append((o.name, o.ms != nil, o.iface)) }
         menu.addItem(.separator())
         let head = NSMenuItem(title: "JOIN (aggregation): tick the connections, none = off", action: nil, keyEquivalent: "")
         head.isEnabled = false
         menu.addItem(head)
         let ticked = Set(Aggregation.selected)
-        for (name, ok) in names {
+        for (name, ok, dev) in names {
             let same = others.first { $0.name == name }?.sameAs
-            let b = NSButton(checkboxWithTitle: name + (same.map { "   (same line as \($0), ignored)" } ?? ""), target: self, action: #selector(toggleJoin(_:)))
+            let b = NSButton(checkboxWithTitle: Net.shown(name, dev) + (same.map { "   (same line as \($0), ignored)" } ?? ""), target: self, action: #selector(toggleJoin(_:)))
             b.state = ticked.contains(name) ? .on : .off
             b.isEnabled = ok
             b.identifier = NSUserInterfaceItemIdentifier(name)

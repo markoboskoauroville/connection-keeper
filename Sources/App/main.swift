@@ -635,7 +635,7 @@ final class Stripe: NSObject {
         let cfg = Config.load()
         let current = alive ? state?.current : here
         let tunnel = iface == Aggregation.tunnelDevice
-        connButton.title = (tunnel ? Aggregation.tunnelName : current ?? "no network") + " ▾"
+        connButton.title = (tunnel ? Aggregation.tunnelName : current.map { Net.shown($0, iface) } ?? "no network") + " ▾"
         if !red && !noOther { connButton.contentTintColor = iface == nil ? Ink.dim : tunnel || isWiFi(iface) ? Ink.green : Ink.yellow }
 
         if Date() < pingHeld { return }            // a pressed ping's answer is being shown
@@ -682,7 +682,7 @@ final class Stripe: NSObject {
     // The connection's name gets the width of the longest name in the list, so a switch does not move the rest.
     func connectionWidth() -> CGFloat {
         let f = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        let names = Config.load().connections.map { $0.name } + ["no network", Aggregation.tunnelName, "AGGREGATE CONNECTION"]
+        let names = Config.load().connections.map { $0.name + " (USB)" } + ["no network", Aggregation.tunnelName, "AGGREGATE CONNECTION"]
         return (names.map { textWidth($0 + " ▾", f) }.max() ?? 80) + 8
     }
 
@@ -747,7 +747,7 @@ final class Stripe: NSObject {
                     }
                     // v12 (Marko: "add to live connection in parentheses (LIVE) ... this is clearer"): the one carrying the internet
                     let f = NSFont.menuFont(ofSize: 0)
-                    let t = NSMutableAttributedString(string: "\(r.name)\(live ? " (LIVE)" : "")   \(words)",
+                    let t = NSMutableAttributedString(string: "\(r.kind == "lan" ? Net.shown(r.name, r.dev) : r.name)\(live ? " (LIVE)" : "")   \(words)",
                                                       attributes: [.foregroundColor: ok ? color : Ink.grey, .font: f])
                     // the last speed test on this connection: download green, upload red (grey when not available)
                     if let w = tests[r.name] {

@@ -76,6 +76,25 @@ enum Net {
     }
 
     // The devices that have an address now (Wi-Fi, a cable, a USB adapter, a tethered phone), not the Mac's own.
+    // ON USB (request 37, Marko 19.10.2026: "AX is also on USB, so you can add USB in parentheses as well"): the
+    // devices whose network interface hangs under a USB device in the I/O registry, asked at most every 10 s. Only for
+    // the words on screen: the ticks and the settings keep the plain name.
+    private static var usbCache: (at: Date, set: Set<String>)?
+    static func usbDevices() -> Set<String> {
+        if let c = usbCache, Date().timeIntervalSince(c.at) < 10 { return c.set }
+        let out = shell("/usr/sbin/ioreg", ["-w0", "-r", "-c", "IOUSBHostDevice", "-l"], timeout: 5).out
+        var s = Set<String>()
+        for line in out.components(separatedBy: "\n") where line.contains("\"BSD Name\" = \"en") {
+            if let r = line.range(of: #"en[0-9]+"#, options: .regularExpression) { s.insert(String(line[r])) }
+        }
+        usbCache = (Date(), s)
+        return s
+    }
+    static func shown(_ name: String, _ iface: String?) -> String {
+        guard let iface, !name.hasSuffix("(USB)"), usbDevices().contains(iface) else { return name }
+        return name + " (USB)"
+    }
+
     static func activeInterfaces() -> [String] {
         let all = shell("/sbin/ifconfig", ["-l"], timeout: 5).out.split(separator: " ").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         let skip = ["lo", "gif", "stf", "utun", "awdl", "llw", "anpi", "ap", "bridge"]
