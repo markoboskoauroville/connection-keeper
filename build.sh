@@ -24,6 +24,9 @@ if [ "$(shasum -a 256 "$HEV" 2>/dev/null | cut -d' ' -f1)" != "$HEVSHA" ]; then
   chmod +x "$HEV"
 fi
 mkdir -p "$APP/Contents/Resources/tunnel" && cp Resources/tunnel/hev-socks5-tunnel Resources/tunnel/LICENSE "$APP/Contents/Resources/tunnel/"
+# ck-phone (v17, request 36): the phone's half of a phone line over USB, a SOCKS5 server for Android (arm64)
+mkdir -p "$APP/Contents/Resources/phone"
+(cd Sources/Phone && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "../../$APP/Contents/Resources/phone/ck-phone" main.go)
 swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/App/*.swift -framework AppKit -o "$APP/Contents/MacOS/Connection Keeper"
 sed "s/__VERSION__/$V/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 swift Tools/make_icon.swift build/AppIcon.iconset "$V"

@@ -164,3 +164,11 @@ answering while nothing got out, so every page hung and Marko restarted the Mac;
 and brought the device back. The check is now a real HEAD to 1.1.1.1 / 1.0.0.1 through the device, and the routes being
 taken away again and again counts as failure too (fighting macOS is worse than off). And there is one switch, ONE LINE ⇄
 JOINED, that takes every piece of the aggregation away without a password.
+
+## 19.10.2026, v17: a phone over USB without tethering (request 36)
+
+- **macOS speaks NCM, not RNDIS; Android tethers with RNDIS.** Android 12+ can be told `settings put global tether_force_usb_functions 1` (NCM), but the phone's USB gadget HAL must support it: the Nothing A142 (MediaTek) logs "Could not set unsupported function for the GadgetHal" and its `tetherableNcmRegexs` is empty (`dumpsys tethering`). Look there first; it cannot be changed without root. Setting it also turns USB tethering off, so put it back (`settings delete`).
+- **adb is a network cable too.** A static Go SOCKS5 server run from adb's shell (`setsid nohup … &` in /data/local/tmp) survives the shell and goes out through the phone's internet; `adb forward` brings it to the Mac. 36–45 Mbit/s, ping ~55 ms. TCP only.
+- **Android has no /etc/resolv.conf**: a GOOS=linux binary must be given its resolvers (1.1.1.1, 8.8.8.8).
+- **curl through adb lies about uploads** (157 Mbit/s on 4G: adb's buffers); count a phone line on the phone's own /proc/net/dev (ccmni*, rmnet_data*, wlan*). And /proc/net/dev lines have no leading space for long names: split on ":" first.
+- **A test that starts its own server must wait until the server knows every line**: a phone's public-IP lookup takes ~9 s and the first joined test read 0.0.

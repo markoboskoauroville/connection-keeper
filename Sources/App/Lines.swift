@@ -23,6 +23,7 @@ final class LineRow {
     let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
     let info = label(textWidth("8 lines · 888 conn · 88.8× best, up 88.8×  ", monoFont), font: monoFont)
     var lastBytes: (rx: UInt64, tx: UInt64)?
+    var lastAt: Date?, lastRate: (Double, Double)?      // a phone row: when the server's counters were read, the rate
 
     init(leadWidth: CGFloat, nameWidth: CGFloat) {
         name = label(nameWidth, font: .systemFont(ofSize: 12, weight: .semibold))
@@ -78,6 +79,11 @@ extension Stripe {
                 if gw.isEmpty { continue }
                 found.append(OtherLine(iface: i, name: Net.displayName(i), wifi: i == wifi, ms: Net.onlineVia(i),
                                        sameAs: st?.ignored.first { $0.device == i }?.sameLineAs))
+            }
+            // v17 (request 36): a phone on a USB cable, its line over adb (its server started here if need be)
+            for p in Phones.list() {
+                if let note = Phones.ensure(p) { appendLog("\(logStamp()) PHONE \(p.name): \(note)") }
+                found.append(OtherLine(iface: p.device, name: p.name, wifi: false, ms: Phones.online(p), sameAs: nil))
             }
             DispatchQueue.main.async {
                 self.scanning = false
@@ -146,6 +152,19 @@ extension Stripe {
             r.speed.toolTip = "Its own live speed (its default route); in parentheses its last test alone, down and up.\nClick: test this line now (Cloudflare, about 6 s each way)."
             if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: !ok, mark: lineTesting.contains(o.name) ? "..." : nil) }
         }
+        // A phone row's live speed: the server's bytes on it between two scans (the Mac has no counter for adb).
+        for o in others where Phones.isPhone(o.iface) {
+            guard let r = lineRows[o.iface] else { continue }
+            let l = agg?.lines.first { $0.device == o.iface }
+            let c = l.map { (rx: UInt64($0.mbDown * 1e6), tx: UInt64($0.mbUp * 1e6)) }
+            var v: (Double, Double)?
+            if let c, let last = r.lastBytes, let at = r.lastAt {
+                let dt = max(Date().timeIntervalSince(at), 0.5)
+                v = (c.rx >= last.rx ? Double(c.rx - last.rx) / dt : 0, c.tx >= last.tx ? Double(c.tx - last.tx) / dt : 0)
+            }
+            r.lastBytes = c; r.lastAt = Date(); r.lastRate = v
+            r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil, mark: lineTesting.contains(o.name) ? "..." : nil)
+        }
         // The aggregation row: always the last.
         guard let a = aggRow else { return }
         a.name.stringValue = Aggregation.on ? "AGGREGATE CONNECTION" : "ONE CONNECTION"   // request 35, his words
@@ -197,6 +216,13 @@ extension Stripe {
         }
         for o in others {
             guard let r = lineRows[o.iface] else { continue }
+            if Phones.isPhone(o.iface) {                    // its speed is set in layoutLines from the server's counters
+                if let v = r.lastRate {
+                    if joined.contains(o.iface) { sumDown += v.0; sumUp += v.1 }
+                    allDown += v.0; allUp += v.1
+                }
+                continue
+            }
             let c = all[o.iface]
             let v = rates(r.lastBytes, c)
             r.lastBytes = c

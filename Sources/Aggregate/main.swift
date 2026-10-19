@@ -32,6 +32,7 @@ func log(_ s: String) {
 
 final class Uplink {
     let iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?
+    var phone: Phone?                                    // v17: a phone over USB (adb), dialled as a SOCKS5 proxy
     var mbps: Double = 10, alive = true, misses = 0, active = 0, connections = 0, bytesDown = 0, bytesUp = 0
     // BUSY, not open (18.10.2026: Chrome alone held 31 idle connections through the server and they counted as load):
     // the connections being dialled plus those that moved bytes in the last 5 s, by their client socket.
@@ -78,6 +79,13 @@ enum Lines {
         for i in Net.activeInterfaces() {
             guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
             found.append(Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i]))
+        }
+        // v17 (request 36): every phone on a USB cable with its server answering is a line of its own.
+        for p in Phones.list() where ticked.isEmpty || ticked.contains(p.name) {
+            if let note = Phones.ensure(p) { log("\(p.name): \(note)") }
+            guard Phones.answers(p) else { continue }
+            let u = Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: Phones.publicIP(p) ?? known[p.device])
+            u.phone = p; found.append(u)
         }
         found.sort { ($0.iface == wifi ? 1 : 0) < ($1.iface == wifi ? 1 : 0) }
         var lines: [Uplink] = [], ignored: [(Uplink, Uplink)] = []
@@ -218,7 +226,8 @@ final class Server {
     func health() {
         lock.lock(); let ls = lines; lock.unlock()
         for u in ls {
-            let answered = Net.onlineVia(u.iface) != nil || Net.onlineVia(u.iface, host: "8.8.8.8") != nil
+            let answered = u.phone.map { p in Phones.online(p) != nil || Phones.online(p, host: "8.8.8.8") != nil }
+                ?? (Net.onlineVia(u.iface) != nil || Net.onlineVia(u.iface, host: "8.8.8.8") != nil)
             lock.lock()
             u.misses = answered ? 0 : u.misses + 1
             let alive = answered || u.misses < 2              // dead after two silent checks in a row, not one lost ping
@@ -244,7 +253,7 @@ final class Server {
             }) else { lock.unlock(); return nil }
             u.active += 1; u.pending += 1
             lock.unlock()
-            if let fd = dial(host, port, via: u.iface) {
+            if let fd = u.phone.map({ Phones.dial(host, port, via: $0.port) }) ?? dial(host, port, via: u.iface) {
                 lock.lock(); u.connections += 1; u.pending -= 1; u.seen[c] = Date(); lock.unlock()
                 return (fd, u)
             }
@@ -318,7 +327,7 @@ final class Server {
         for _ in 0..<100 { lock.lock(); let none = lines.isEmpty; lock.unlock(); if !none { break }; usleep(200_000) }
         lock.lock()
         let now = Date()
-        let pick = lines.filter(\.alive).min { Double($0.busy(now) + 1) / $0.mbps < Double($1.busy(now) + 1) / $1.mbps } ?? lines.first
+        let pick = lines.filter { $0.alive && $0.phone == nil }.min { Double($0.busy(now) + 1) / $0.mbps < Double($1.busy(now) + 1) / $1.mbps } ?? lines.first { $0.phone == nil }   // adb carries TCP only: UDP never goes to a phone
         if let u = pick { u.active += 1; u.connections += 1; u.seen[c] = now }
         lock.unlock()
         let fail: [UInt8] = [5, 1, 0, 1, 0, 0, 0, 0, 0, 0]
@@ -521,7 +530,11 @@ func measure(_ how: [String], streams: Int, seconds: Int, up: Bool = false, ifac
         FileManager.default.createFile(atPath: uploadFile.path, contents: Data(count: 50_000_000))
     }
     var procs: [(Process, Pipe)] = []
-    let before = Traffic.internetAll()
+    let phones = ifaces.filter(Phones.isPhone)
+    func phoneCounts() -> [String: (rx: UInt64, tx: UInt64)] {
+        Dictionary(uniqueKeysWithValues: phones.compactMap { d in Phones.counters(String(d.dropFirst(4))).map { (d, $0) } })
+    }
+    let before = Traffic.internetAll(), phonesBefore = phoneCounts()
     let t0 = Date()
     for i in 0..<streams {
         let p = Process(), pipe = Pipe()
@@ -538,6 +551,7 @@ func measure(_ how: [String], streams: Int, seconds: Int, up: Bool = false, ifac
         curlBytes += Double(out.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
     }
     let secs = max(Date().timeIntervalSince(t0), 0.1)
+    let phonesAfter = phoneCounts()
     var share: [String: Double] = [:]
     if let before, let after = Traffic.internetAll() {
         for i in ifaces {
@@ -545,6 +559,12 @@ func measure(_ how: [String], streams: Int, seconds: Int, up: Bool = false, ifac
             let n = up ? (a.tx >= b.tx ? a.tx - b.tx : 0) : (a.rx >= b.rx ? a.rx - b.rx : 0)
             share[i] = Double(n) * 8 / secs / 1e6
         }
+    }
+    // v17: a phone line has no counter on the Mac: the phone's own, read over adb
+    for d in phones {
+        guard let a = phonesAfter[d], let b = phonesBefore[d] else { continue }
+        let n = up ? (a.tx >= b.tx ? a.tx - b.tx : 0) : (a.rx >= b.rx ? a.rx - b.rx : 0)
+        share[d] = Double(n) * 8 / secs / 1e6
     }
     let bytes = share.isEmpty ? curlBytes : share.values.reduce(0, +) * secs * 1e6 / 8
     return (bytes * 8 / secs / 1e6, bytes / 1e6, share)
@@ -562,8 +582,9 @@ func test(seconds: Int, only: String? = nil) {
     let old = AggTest.load()
     var spent = 0.0, alone = old?.alone ?? [:], aloneUp = old?.aloneUp ?? [:], speeds: [String: Double] = [:]
     for u in lines {
-        let dn = measure(["--interface", u.iface], streams: 4, seconds: seconds, ifaces: [u.iface])
-        let up = measure(["--interface", u.iface], streams: 4, seconds: seconds, up: true, ifaces: [u.iface])
+        let how = u.phone.map { ["-x", "socks5h://127.0.0.1:\($0.port)"] } ?? ["--interface", u.iface]
+        let dn = measure(how, streams: 4, seconds: seconds, ifaces: [u.iface])
+        let up = measure(how, streams: 4, seconds: seconds, up: true, ifaces: [u.iface])
         spent += dn.mb + up.mb; alone[u.name] = dn.mbps; aloneUp[u.name] = up.mbps; speeds[u.publicIP ?? u.iface] = dn.mbps
         print(String(format: "%@ (%@, %@) alone: down %.1f, up %.1f Mbit/s", u.name, u.iface, u.publicIP ?? "?", dn.mbps, up.mbps))
     }
@@ -578,6 +599,9 @@ func test(seconds: Int, only: String? = nil) {
         sleep(2)
         while shell("/usr/bin/curl", ["-s", "-m", "2", "http://127.0.0.1:\(aggPort)/status"], timeout: 3).status != 0 { sleep(1) }
     }
+    // and until it has found every line (finding a phone's public IP takes some seconds; the first joined test of
+    // 19.10.2026 ran out before the server knew any line and read 0.0)
+    for _ in 0..<30 where (Aggregation.status()?.lines.count ?? 0) < lines.count { sleep(1) }
     let via = ["-x", "socks5h://127.0.0.1:\(aggPort)"]
     let dn = measure(via, streams: 4 * lines.count, seconds: seconds, ifaces: lines.map(\.iface))
     let up = measure(via, streams: 4 * lines.count, seconds: seconds, up: true, ifaces: lines.map(\.iface))

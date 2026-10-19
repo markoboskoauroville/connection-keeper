@@ -202,3 +202,7 @@ within 2 s), macOS's SOCKS proxy, and the aggregation server, which is also kept
 are kept for the next time. The root helper ck-tunnel now sends a real request (HEAD to 1.1.1.1 / 1.0.0.1) through the
 device every 10 s; two misses, or macOS taking its routes away five times in a minute, and it lets go and rests five
 minutes. The new helper is installed with `sudo ./tunnel.sh install`.
+
+## A phone over USB (v17, 19.10.2026)
+
+Plug in an Android phone with USB debugging allowed and it becomes a line of its own, "Nothing A142 (USB)" on the stripe, even though macOS cannot use Android's USB tethering (RNDIS) and this phone refuses NCM. The keeper puts a small proxy, ck-phone, on the phone over adb and reaches the phone's internet through the same USB cable. Tick it in ▾ JOIN and click ONE CONNECTION to aggregate it with the cable. Web pages, downloads and everything on TCP use both; UDP (calls, QUIC) stays on the cable.
