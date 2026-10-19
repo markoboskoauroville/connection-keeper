@@ -290,3 +290,7 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > In the connection keeper application one line is not worded correctly. It should say one connection and  aggregate connection.
 
 **Status:** done 18.10.2026 (v16): the stripe's last row says ONE CONNECTION or AGGREGATE CONNECTION (a click switches), the drop-down "One connection" / "Aggregate connection"; the name column made wide enough for the longer word. Seen on screen: ONE CONNECTION · click ONE CONNECTION to aggregate.
+
+## 19.10.2026, request 36 (two USB connections combined: the LAN adapter and the Nothing phone's USB tethering)
+
+> please let's work on my app connection keeper you need to start it and test it now I have two USB connection one is my USB to LAN adapter and connected to TP-Link another USB connection is my noting phone to A which is connected with USB tethering. So please detect and combine these two USB connections into one.
