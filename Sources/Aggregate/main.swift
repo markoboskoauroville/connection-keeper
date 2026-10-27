@@ -270,6 +270,9 @@ final class Server {
         addr.sin_family = sa_family_t(AF_INET); addr.sin_port = aggPort.bigEndian; addr.sin_addr.s_addr = inet_addr("127.0.0.1")
         let b = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
         guard b == 0, listen(s, 256) == 0 else { log("port \(aggPort) is taken: \(String(cString: strerror(errno)))"); exit(1) }
+        // macOS's SOCKS proxy setting points at this number, so it never moves: the one owner in the Mac's port
+        // registry (MANTRA_PORTS v2, 27.10.2026), and `mantra-ports check` names a stranger on it
+        Ports.record("aggregate", aggPort, udp: false, health: "/status")
         // Answering at once: finding the lines takes 10-20 s (pings, public IPs), and with the virtual device the whole
         // Mac waits for the server after each restart. The first connections wait for the lines in open().
         Thread.detachNewThread { [self] in refresh() }

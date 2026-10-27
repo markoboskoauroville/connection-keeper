@@ -306,3 +306,10 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 > AX is also on USB, so you can add USB in parentheses as well.
 
 **Status:** done 19.10.2026 (v18): a device whose network interface hangs under a USB device in the I/O registry is shown with "(USB)" on the stripe, in ▾ and in JOIN; the ticks and settings keep the plain name. Seen on screen: "AX88179B (USB)" and "Nothing A142 (USB)", both joined.
+
+## 27.10.2026: onto the Mac's port registry (MANTRA_PORTS v2)
+
+> please do rebuild and restart
+
+**Status:** v19: ck-aggregate (TCP 8857, macOS's SOCKS proxy) writes itself into ~/.config/mantra-ports.json as its
+owner once it listens. Rebuilt; not restarted, its LaunchAgent was not loaded.
