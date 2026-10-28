@@ -349,3 +349,9 @@ three colours (not looked at on screen: opening it needs his mouse).
 **Status:** done 28.10.2026 (v23). Seen closed: one line, "▸ AGGREGATE CONNECTION", 41.2 Mbit/s; opened: mantra
 grey (not available, connected 22 min ago), AX88179B (USB) and Nothing A142 (USB) green, joined; closed again (68 px,
 one line). Fixed on the way: the cable had no row of its own (it was the old first row) and showed grey.
+
+## 28.10.2026, request 42 (the opened list: only what is connected now)
+
+> please don't show past connections inside this main interface when I press this folder expansion button. Please just show what is actually right now connected, and that's all
+
+**Status:** in work.
