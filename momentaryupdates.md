@@ -385,3 +385,9 @@ The drag itself is for Marko's hand.
 > this green LED at the beginning of this application is not needed when the connection is green. I know it's a text connection. When it's red, I know it's not connected. Remove the LED next to the minimize circle
 
 **Status:** done 28.10.2026 (v28): no dot on the stripe or on the opened rows; seen closed and open.
+
+## 28.10.2026, request 47 (a digital display: nothing moves)
+
+> all works. Only what is annoying me is when the text has more or less of the text. My user interface is breathing. It's changing the size. Right now it's changing the size. I don't know why some numbers are appearing, some are disappearing. Something is not here, right? Please make a digital display. Make fixed positions for every number and every letter, like in a digital display. Then everything is fixed. Now things are moving around, which is distracting
+
+**Status:** in work.
