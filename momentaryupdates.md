@@ -313,3 +313,9 @@ Proven 18.10.2026 ~02:15: `curl --interface en0` and `curl --interface en17` bot
 
 **Status:** v19: ck-aggregate (TCP 8857, macOS's SOCKS proxy) writes itself into ~/.config/mantra-ports.json as its
 owner once it listens. Rebuilt; not restarted, its LaunchAgent was not loaded.
+
+## 28.10.2026, request 38 (the name, and the star)
+
+> why don't I see Network Aggregate Application in my Star Menu Matrix, and rename it to Connection Aggregate Keeper so I can easily find it? Also, add Network in the name, so add everything so I can easily find it: Network Aggregate Connection Keeper
+
+**Status:** in progress.
