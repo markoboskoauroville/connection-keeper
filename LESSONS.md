@@ -217,3 +217,9 @@ JOINED, that takes every piece of the aggregation away without a password.
   stripeScale 1.3/1.4/1.5 and relaunching.
 - **Every relaunch of the stripe sends one STANJE SMS** (the data check at start): about fifteen on 28.10.2026 from the
   rebuilds.
+
+## 28.10.2026, v29: "no empty space" and "no breathing" pull in opposite directions
+
+- Request 44 (no empty space) had the fields follow their words, and the stripe breathed (request 47). The answer that
+  serves both: fixed slots, each as small as its widest words; the v9 rule (fixed places for numbers) stands, with
+  four places instead of five. Width measured over time is the test, not one screenshot.

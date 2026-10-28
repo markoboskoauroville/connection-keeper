@@ -81,17 +81,11 @@ func fixWidth(_ v: NSView, _ width: CGFloat) -> NSLayoutConstraint {
 func rate(_ bytesPerSecond: Double) -> String { SpeedUnit.current.format(bytesPerSecond: bytesPerSecond) }
 
 // The widest speed text of the chosen unit: auto never needs more than five places, a fixed unit up to nine.
-// v26 (request 44: "no extra space where there are non-numbers"): the padding spaces of a number go; one space between
-// a number and its parentheses, two between download and upload.
-func tight(_ s: String) -> String {
-    s.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
-}
-
 func speedSample() -> String {
     let u = SpeedUnit.current
-    let digits = (u == .autoBits || u == .autoBytes) ? 5 : 9
+    let digits = (u == .autoBits || u == .autoBytes) ? 4 : 9
     let n = String(repeating: "8", count: digits) + " " + String(repeating: "M", count: u.unitWidth)
-    return "\(n)  (88.8)  \(n)  (88.8)"     // testPart is seven places: " (88.8)"
+    return "\(n) (88.8)  \(n) (88.8)"     // testPart is six places: "(88.8)"
 }
 
 // v12 (Marko 18.10.2026: "you're using too much of my real estate ... remove internet ... just in parentheses. Put the
@@ -103,7 +97,7 @@ func testPart(_ mbps: Double?, mark: String?) -> String {
     else if let mbps { inner = SpeedUnit.slot(SpeedUnit.current.isBits ? mbps : mbps / 8).trimmingCharacters(in: .whitespaces) }
     else { inner = "—" }
     let t = "(\(inner))"
-    return String(repeating: " ", count: max(0, 7 - t.count)) + t
+    return String(repeating: " ", count: max(0, 6 - t.count)) + t
 }
 
 // v12 (Marko 18.10.2026: "every Wi-Fi device will be green. Every LAN port hardware port or maybe tethering through
@@ -426,8 +420,8 @@ final class Stripe: NSObject {
     // arrows, the download half green, the upload half red; all red in the failover alert as every other word.
     func setSpeed(_ down: Double?, _ up: Double?) {
         let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
-        let d = tight("\(down.map(rate) ?? dash) \(testPart(lastTest?.down_mbps, mark: testMark))")
-        let u = tight("\(up.map(rate) ?? dash) \(testPart(lastTest?.up_mbps, mark: testMark))")
+        let d = "\(down.map(rate) ?? dash) \(testPart(lastTest?.down_mbps, mark: testMark))"
+        let u = "\(up.map(rate) ?? dash) \(testPart(lastTest?.up_mbps, mark: testMark))"
         let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: red ? Ink.red : Ink.green])
         t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: Ink.red]))
         speed.attributedStringValue = t
@@ -592,7 +586,8 @@ final class Stripe: NSObject {
         guard let root = panel.contentView, let column = root.subviews.first else { return }
         let t = checked.stringValue
         let quiet = t.isEmpty || t.hasPrefix("checked ") || t == "keeper not running"
-        if checked.isHidden != quiet { checked.isHidden = quiet; checkedPipe.isHidden = quiet }
+        checked.isHidden = false; checkedPipe.isHidden = false          // v29: the status slot keeps its place
+        checked.alphaValue = quiet ? 0 : 1
         if failover.isHidden == red { failover.isHidden = !red; failoverPipe.isHidden = !red }
         tighten()
         column.layoutSubtreeIfNeeded()
@@ -611,24 +606,22 @@ final class Stripe: NSObject {
         keepOnScreen()
     }
 
-    // Every field exactly as wide as its words now; the rows under the line share one width per column so their pipes
-    // stay under each other.
+    // v29 (request 47: "Please make a digital display. Make fixed positions for every number and every letter"): every
+    // field has the width of its widest possible words in the monospaced font, whatever it says now, so nothing on the
+    // stripe ever moves or changes its size; the slots are as small as those words allow (request 44).
+    static let statusSample = "ALIVE ✓ 88:88:88"
     func tighten() {
         func w(_ s: String) -> CGFloat { textWidth(s, monoFont) }
         func set(_ c: NSLayoutConstraint?, _ v: CGFloat) { if let c, abs(c.constant - v) >= 1 { c.constant = v } }
-        set(speedWidth, w(speed.stringValue))
-        set(pingWidth, w(ping.title))
-        set(dataWidth, w(data.title))
-        if !checked.isHidden { set(checkedWidth, textWidth(checked.stringValue, checked.font ?? monoFont)) }
+        set(speedWidth, w(speedSample()))
+        set(pingWidth, w("ping 999 ms"))
+        set(dataWidth, w("888.8 GB left"))
+        set(checkedWidth, w(Stripe.statusSample))
         if !failover.isHidden { set(failoverWidth, textWidth(failover.stringValue, failover.font ?? monoFont)) }
-        let rows = lineRows.values.filter { !$0.view.isHidden } + (aggRow.map { $0.view.isHidden ? [] : [$0] } ?? [])
-        guard !rows.isEmpty else { return }
-        let sw = rows.map { w($0.speed.stringValue) }.max()!, pw = rows.map { w($0.ping.stringValue) }.max()!
-        let iw = rows.map { w($0.info.stringValue) }.max()!
-        for r in rows {
-            set(r.speed.constraints.first { $0.firstAttribute == .width }, sw)
-            set(r.ping.constraints.first { $0.firstAttribute == .width }, pw)
-            set(r.info.constraints.first { $0.firstAttribute == .width }, iw)
+        for r in Array(lineRows.values) + (aggRow.map { [$0] } ?? []) {
+            set(r.speed.constraints.first { $0.firstAttribute == .width }, w(speedSample()))
+            set(r.ping.constraints.first { $0.firstAttribute == .width }, w("ping 999 ms"))
+            set(r.info.constraints.first { $0.firstAttribute == .width }, w("joined · 888 conn · 888 MB"))
         }
     }
 
@@ -736,7 +729,7 @@ final class Stripe: NSObject {
 
         if let s = state, alive {
             let check = s.lastCheck
-            ping.title = check?.latencyMs.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+            ping.title = check?.latencyMs.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
             // NO OTHER CONNECTION (Marko, 14.10.2026): the connection is dead and none in the list works.
             // Red and bold on the status line until a connection works again; he has to do something.
             let none = s.phase.hasPrefix(noOtherPrefix)
@@ -828,7 +821,7 @@ final class Stripe: NSObject {
                         let inUse = r.name == ssid
                         live = inUse && route == wifi
                         ok = inUse ? wifiMs != nil : near.contains(r.name)
-                        words = "Wi-Fi · " + (inUse ? (wifiMs.map { String(format: "ping %.0f ms", $0) } ?? "joined, no internet")
+                        words = "Wi-Fi · " + (inUse ? (wifiMs.map { String(format: "ping %3.0f ms", $0) } ?? "joined, no internet")
                                               : near.contains(r.name) ? "in range" : "not in range")
                         color = lineColor(gone: !ok, connected: live || inUse && joinedDevs.contains(r.dev))
                         r.item.action = #selector(self.pick(_:)); r.item.representedObject = r.name
@@ -836,7 +829,7 @@ final class Stripe: NSObject {
                         let ms = lanMs[r.dev]
                         live = route == r.dev && !r.dev.isEmpty
                         ok = ms != nil
-                        words = "cable · " + (ms.map { String(format: "ping %.0f ms", $0) } ?? (active.contains(r.dev) ? "no internet" : "not plugged in"))
+                        words = "cable · " + (ms.map { String(format: "ping %3.0f ms", $0) } ?? (active.contains(r.dev) ? "no internet" : "not plugged in"))
                         color = lineColor(gone: !ok && !active.contains(r.dev), connected: live || joinedDevs.contains(r.dev))
                         r.item.action = #selector(self.pickDevice(_:)); r.item.representedObject = r.dev
                     }
@@ -946,7 +939,7 @@ final class Stripe: NSObject {
             let p = Net.probe(pingHost: cfg.pingHost, httpURL: cfg.httpProbe)
             DispatchQueue.main.async {
                 switch p {
-                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.title = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.title = ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
                 case .captive: self.checked.stringValue = "captive portal ✗"
                 case .offline: self.checked.stringValue = "offline now ✗"
                 }
@@ -972,7 +965,7 @@ final class Stripe: NSObject {
                 let at = Date().formatted(date: .omitted, time: .standard)
                 switch p {
                 case .online(_, let ms):
-                    self.ping.title = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
+                    self.ping.title = ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
                     self.checked.stringValue = ms != nil ? "ALIVE ✓  \(at)" : "ALIVE ✓  web only (ping blocked)"
                     self.ping.contentTintColor = Ink.yellow; self.checked.textColor = Ink.green; self.dot.color = Ink.green
                 case .captive:

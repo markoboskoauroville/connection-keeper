@@ -260,3 +260,12 @@ shows only for ONE CONNECTION (aggregating, it would say the top line twice).
   it under the mouse). The old "–" is gone.
 - v28 (request 46: *"Remove the LED next to the minimize circle"*): no dot on any row; when the dot would have been red
   or amber, the word "connection" takes that colour.
+
+## A digital display (v29, 28.10.2026)
+
+Marko: *"My user interface is breathing ... Please make a digital display. Make fixed positions for every number and
+every letter."* Every field has the width of its widest possible words, whatever it says now: speeds in four places
+plus the unit ("62.8 Mbit/s", " 698 kbit/s"), the test in parentheses in six ("(45.0)", " (...)"), "ping 999 ms",
+"888.8 GB left", and the status slot ("ALIVE ✓ 15:16:41") always reserved, empty when there is nothing to say (a
+longer message is cut with "…", whole in its tooltip). Measured: 813 points wide in 28 readings, with the status
+coming and going.

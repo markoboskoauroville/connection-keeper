@@ -64,12 +64,13 @@ enum SpeedUnit: String, CaseIterable {
         return "\(SpeedUnit.slot(v)) \(unitText)"
     }
 
-    /// Four significant digits in a slot of five characters, right-aligned; a fixed unit may need more and gets them.
+    /// Three significant digits in a slot of four characters, right-aligned (v29, request 47: a digital display, compact);
+    /// a fixed unit may need more and gets them.
     static func slot(_ v: Double) -> String {
         let s: String
         if v < 9.995 { s = String(format: "%.2f", v) }
         else if v < 99.95 { s = String(format: "%.1f", v) }
         else { s = String(format: "%.0f", v) }
-        return String(repeating: " ", count: max(0, 5 - s.count)) + s
+        return String(repeating: " ", count: max(0, 4 - s.count)) + s
     }
 }

@@ -390,4 +390,5 @@ The drag itself is for Marko's hand.
 
 > all works. Only what is annoying me is when the text has more or less of the text. My user interface is breathing. It's changing the size. Right now it's changing the size. I don't know why some numbers are appearing, some are disappearing. Something is not here, right? Please make a digital display. Make fixed positions for every number and every letter, like in a digital display. Then everything is fixed. Now things are moving around, which is distracting
 
-**Status:** in work.
+**Status:** done 28.10.2026 (v29): fixed slots for every field (speeds four places, tests six, ping, data, the status
+slot always reserved). Measured 813 points in 20 readings over 20 s and 8 more while a pressed ping showed its status.
