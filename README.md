@@ -230,3 +230,13 @@ connected in the past, but now it's not available."* On every row of the stripe 
 **grey** was connected before and is gone now ("not available · connected 12 min ago"). The stripe remembers every
 line that was ever green for a week (`seen-lines.json`), so a Wi-Fi switched off by WIRES or a phone unplugged stays
 on the stripe in grey. The aggregation row keeps its own colours (green 2 of 2 up, amber fewer, red server down).
+
+## One line: ▸ AGGREGATE CONNECTION (v23, 28.10.2026)
+
+Marko: *"Put only Aggregate Connection with a small arrow. I can open and see what is aggregated ... The whole status
+line is basically one line."* The stripe is one line: `● ⚙ WIRES|WI-FI ▸ AGGREGATE CONNECTION | speed | ping | data`.
+Aggregating, the name is AGGREGATE CONNECTION and the speed is the joined lines added; with one connection, the name
+is that connection. ▸ (in front of the name, like a folder in Finder) opens the rows of the lines under it, coloured
+green / red / grey (v22), the cable carrying the internet included; ▾ closes them. It opens closed; the choice is kept.
+The name still opens the menu (one connection / aggregate, the JOIN ticks). The old last row "AGGREGATE CONNECTION"
+shows only for ONE CONNECTION (aggregating, it would say the top line twice).

@@ -74,7 +74,8 @@ extension Stripe {
             let st = Aggregation.status()
             let wifi = Net.wifiInterface()
             var found: [OtherLine] = []
-            for i in Net.activeInterfaces() where i != main {
+            // v23: aggregating, the one line is AGGREGATE CONNECTION, so the line under it needs its own row too
+            for i in Net.activeInterfaces() where i != main || Aggregation.on {
                 let gw = shell("/usr/sbin/ipconfig", ["getoption", i, "router"], timeout: 5).out.trimmingCharacters(in: .whitespacesAndNewlines)
                 if gw.isEmpty { continue }
                 found.append(OtherLine(iface: i, name: Net.displayName(i), wifi: i == wifi, ms: Net.onlineVia(i),
@@ -121,7 +122,7 @@ extension Stripe {
 
     func layoutLines() {
         guard let column = panel.contentView?.subviews.first as? NSStackView else { return }
-        let lead = gear.fittingSize.width + wiresSwitch.fittingSize.width + 6, nameW = connWidth.constant
+        let lead = gear.fittingSize.width + wiresSwitch.fittingSize.width + expand.fittingSize.width + 9, nameW = connWidth.constant
         var changed = false
         rememberLines()
         let shown = others + goneLines()
@@ -180,6 +181,12 @@ extension Stripe {
             r.lastBytes = c; r.lastAt = Date(); r.lastRate = v
             r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil, mark: lineTesting.contains(o.name) ? "..." : nil)
         }
+        // v23 (request 41): the rows only when ▸ is opened; the one line is the whole stripe otherwise
+        for r in lineRows.values where r.view.isHidden == expanded { r.view.isHidden = !expanded; changed = true }
+        // aggregating, the one line already is AGGREGATE CONNECTION: no second row saying it again
+        let aggHidden = !expanded || Aggregation.on
+        if let a = aggRow, a.view.isHidden != aggHidden { a.view.isHidden = aggHidden; changed = true }
+        expand.title = expanded ? "▾" : "▸"
         // The aggregation row: always the last.
         guard let a = aggRow else { return }
         a.name.stringValue = Aggregation.on ? "AGGREGATE CONNECTION" : "ONE CONNECTION"   // request 35, his words
@@ -251,6 +258,7 @@ extension Stripe {
         // v14: under mantra_networkaggregate the first row is the real lines added; utun99's own counters count every
         // byte twice (into hev and back out), 163 Mbit/s over lines carrying 82.8 (18.10.2026)
         if iface == Aggregation.tunnelDevice { setSpeed(allDown, allUp) }
+        else if on { setSpeed(sumDown, sumUp) }            // v23: the one line is the joined lines added
         aggRow.setSpeed(on ? sumDown : nil, on ? sumUp : nil, test: aggTest.map { ($0.joined, $0.joinedUp) }, dim: !on,
                         mark: lineTesting.contains("JOINED") ? "..." : nil)
     }
@@ -395,9 +403,18 @@ extension Stripe {
 
     // Remembered lines whose device is not here now, as rows of their own (grey).
     func goneLines() -> [OtherLine] {
-        let present = Set(others.map(\.name) + [currentName ?? ""] + (iface.map { [Net.displayName($0)] } ?? []))
+        let present = Set(others.map(\.name) + (Aggregation.on ? [] : [currentName ?? ""] + (iface.map { [Net.displayName($0)] } ?? [])))
         return seen.filter { !present.contains($0.key) && Date().timeIntervalSince($0.value.last) < SeenLines.keep }
             .sorted { $0.key < $1.key }
             .map { OtherLine(iface: SeenLines.gonePrefix + $0.key, name: $0.key, wifi: $0.value.wifi, ms: nil, sameAs: nil) }
+    }
+}
+
+extension Stripe {
+    @objc func toggleExpand() {
+        expanded.toggle()
+        UserDefaults.standard.set(expanded, forKey: "linesExpanded")
+        layoutLines()
+        fit()
     }
 }

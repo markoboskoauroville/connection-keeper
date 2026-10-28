@@ -166,6 +166,8 @@ final class Stripe: NSObject {
     var lineRows: [String: LineRow] = [:]
     var aggRow: LineRow!
     var others: [OtherLine] = []
+    let expand = NSButton(title: "▸", target: nil, action: nil)   // v23, request 41: opens the rows under the one line
+    var expanded = UserDefaults.standard.bool(forKey: "linesExpanded")
     var seen = SeenLines.load()                 // v22, request 40: the lines once connected (grey when gone)
     var agg: AggStatus?
     var aggMainLast: (rx: UInt64, tx: UInt64)?
@@ -281,14 +283,23 @@ final class Stripe: NSObject {
         minimize.toolTip = "Hide the stripe; Command-Tab to Connection Keeper (or its Dock icon) brings it back to this place"
         minimize.setContentHuggingPriority(.required, for: .horizontal)
         setupWires()
-        let row = NSStackView(views: [dot, gear, wiresSwitch, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
+        // v23 (request 41: "Put only Aggregate Connection with a small arrow. I can open and see what is aggregated ...
+        // The whole status line is basically one line"): ▸ opens the rows of the lines under it, ▾ closes them.
+        expand.isBordered = false
+        expand.target = self
+        expand.action = #selector(toggleExpand)
+        expand.font = .systemFont(ofSize: 13, weight: .bold)
+        expand.contentTintColor = Ink.text
+        expand.setContentHuggingPriority(.required, for: .horizontal)
+        expand.toolTip = "Open: see the lines (green connected, red here but not connected, grey gone)"
+        let row = NSStackView(views: [dot, gear, wiresSwitch, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
-        aggRow = LineRow(leadWidth: gear.fittingSize.width + wiresSwitch.fittingSize.width + 6, nameWidth: connWidth.constant)
+        aggRow = LineRow(leadWidth: gear.fittingSize.width + wiresSwitch.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connWidth.constant)
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
         aggRow.speed.toolTip = "All joined lines' live speed added; in parentheses the last joined test, down and up.\nClick: test every line alone, then all joined, to compare (about 40 s)."
@@ -618,7 +629,7 @@ final class Stripe: NSObject {
                     self.sampling = false
                     let dt = Date().timeIntervalSince(self.lastSample)
                     if let all { self.sampleLines(all, dt: dt) }
-                    if iface == Aggregation.tunnelDevice { self.lastSample = Date(); return }   // set from the lines
+                    if iface == Aggregation.tunnelDevice || (Aggregation.on && self.agg != nil) { self.lastSample = Date(); return }   // set from the lines
                     guard let c else { self.setSpeed(nil, nil); self.lastCounters = nil; return }
                     if let last = self.lastCounters, dt > 0 {
                         // a route made again (network change) starts its counters at 0: show nothing for that second
@@ -639,9 +650,14 @@ final class Stripe: NSObject {
         let cfg = Config.load()
         let current = alive ? state?.current : here
         let tunnel = iface == Aggregation.tunnelDevice
-        connButton.title = (tunnel ? Aggregation.tunnelName : current.map { Net.shown($0, iface) } ?? "no network") + " ▾"
+        // v23 (request 41): aggregating, the one line says only AGGREGATE CONNECTION; the lines are behind ▸
+        let joinedNow = Aggregation.on && agg != nil
+        connButton.title = joinedNow ? "AGGREGATE CONNECTION" : (tunnel ? Aggregation.tunnelName : current.map { Net.shown($0, iface) } ?? "no network")
         // request 40: the line carrying the internet is connected, so green (grey when there is none)
-        if !red && !noOther { connButton.contentTintColor = iface == nil ? Ink.grey : Ink.green }
+        if !red && !noOther {
+            let up = agg?.lines.filter(\.alive).count ?? 0
+            connButton.contentTintColor = iface == nil ? Ink.grey : joinedNow && up < 2 ? Ink.amber : Ink.green
+        }
 
         if Date() < pingHeld { return }            // a pressed ping's answer is being shown
 
@@ -688,7 +704,7 @@ final class Stripe: NSObject {
     func connectionWidth() -> CGFloat {
         let f = NSFont.systemFont(ofSize: 12, weight: .semibold)
         let names = Config.load().connections.map { $0.name + " (USB)" } + ["no network", Aggregation.tunnelName, "AGGREGATE CONNECTION"]
-        return (names.map { textWidth($0 + " ▾", f) }.max() ?? 80) + 8
+        return (names.map { textWidth($0, f) }.max() ?? 80) + 8
     }
 
     func currentNow() -> String? {

@@ -346,4 +346,6 @@ three colours (not looked at on screen: opening it needs his mouse).
 
 > I am confused with this aggregate connection. Nothing, phone, mantra. I understand mantra was not there. Please make this clear in the user interface. Put only "Aggregate Connection" with a small arrow. I can open and see what is aggregated, and that's called the user interface. I see only Wi-Fi, aggregate connection, and then I click on it to see what is in that folder. I kind of understand. The whole status line is basically one line, not one, two, three, four lines. That's it
 
-**Status:** in work.
+**Status:** done 28.10.2026 (v23). Seen closed: one line, "▸ AGGREGATE CONNECTION", 41.2 Mbit/s; opened: mantra
+grey (not available, connected 22 min ago), AX88179B (USB) and Nothing A142 (USB) green, joined; closed again (68 px,
+one line). Fixed on the way: the cable had no row of its own (it was the old first row) and showed grey.
