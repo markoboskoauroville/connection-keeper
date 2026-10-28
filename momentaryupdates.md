@@ -365,3 +365,9 @@ Nothing A142 (USB), both green, nothing else.
 **Status:** done 28.10.2026 (v25). Seen: one line "● ⚙ ▸ connection | speed | ping | data", 1400 px wide where it
 was about 2200. The ⚙ menu (WIRES / WI-FI / Settings…) could not be opened through Accessibility: Marko's click is
 the test.
+
+## 28.10.2026, request 44 (no empty space, resizable)
+
+> now shorten the user interface so there is no extra space where there are non-numbers. There is empty space on the right side, and please also make this user interface resizable
+
+**Status:** in work.
