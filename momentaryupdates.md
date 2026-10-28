@@ -392,3 +392,12 @@ The drag itself is for Marko's hand.
 
 **Status:** done 28.10.2026 (v29): fixed slots for every field (speeds four places, tests six, ping, data, the status
 slot always reserved). Measured 813 points in 20 readings over 20 s and 8 more while a pressed ping showed its status.
+
+## 28.10.2026, request 48 (faster switching between the lines)
+
+> yes, optimize speed of switching between lines. That's a good idea
+
+(Asked after the cut test of 28.10.2026 morning: with mantra cut, every call timed out until a minute after it came
+back; the server took 43 s to see the line dead and did not try the other line.)
+
+**Status:** in work.
