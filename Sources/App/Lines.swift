@@ -48,8 +48,8 @@ final class LineRow {
     // Download green, upload red, each with a test in parentheses, as on the first row.
     func setSpeed(_ down: Double?, _ up: Double?, test: (Double, Double?)?, dim: Bool = false, mark: String? = nil) {
         let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
-        let d = "\(down.map(rate) ?? dash) \(testPart(test?.0, mark: mark))"
-        let u = "\(up.map(rate) ?? dash) \(test?.1 == nil && mark == nil ? "       " : testPart(test?.1, mark: mark))"
+        let d = tight("\(down.map(rate) ?? dash) \(testPart(test?.0, mark: mark))")
+        let u = tight("\(up.map(rate) ?? dash) \(test?.1 == nil && mark == nil ? "" : testPart(test?.1, mark: mark))")
         let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: dim ? Ink.grey : Ink.green])
         t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: dim ? Ink.grey : Ink.red]))
         speed.attributedStringValue = t
@@ -153,7 +153,7 @@ extension Stripe {
             r.name.stringValue = gone ? o.name : Net.shown(o.name, o.iface)
             r.name.textColor = color
             r.dot.color = color
-            r.ping.stringValue = o.ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
+            r.ping.stringValue = o.ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
             r.ping.textColor = ok ? Ink.yellow : Ink.grey
             if gone {
                 r.info.stringValue = "not available · connected " + ago(seen[o.name]?.last)

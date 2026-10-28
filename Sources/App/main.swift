@@ -81,6 +81,12 @@ func fixWidth(_ v: NSView, _ width: CGFloat) -> NSLayoutConstraint {
 func rate(_ bytesPerSecond: Double) -> String { SpeedUnit.current.format(bytesPerSecond: bytesPerSecond) }
 
 // The widest speed text of the chosen unit: auto never needs more than five places, a fixed unit up to nine.
+// v26 (request 44: "no extra space where there are non-numbers"): the padding spaces of a number go; one space between
+// a number and its parentheses, two between download and upload.
+func tight(_ s: String) -> String {
+    s.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+}
+
 func speedSample() -> String {
     let u = SpeedUnit.current
     let digits = (u == .autoBits || u == .autoBytes) ? 5 : 9
@@ -149,6 +155,9 @@ final class Stripe: NSObject {
     var checkedPipe: NSTextField!
     var failoverPipe: NSTextField!
     var checkedWidth: NSLayoutConstraint!
+    var pingWidth: NSLayoutConstraint!, dataWidth: NSLayoutConstraint!   // v26: every field as wide as its text now
+    var scale = CGFloat(UserDefaults.standard.double(forKey: "stripeScale")).clamped(0.5, 3, or: 1)   // v26: resizable
+    var resizingByHand = false
     var noOther = false                         // the keeper says NO OTHER CONNECTION: the status is red
     var red = false                             // the failover alert is on: every word is red
 
@@ -177,7 +186,7 @@ final class Stripe: NSObject {
 
     override init() {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 30),
-                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+                        styleMask: [.borderless, .nonactivatingPanel, .resizable], backing: .buffered, defer: false)
         super.init()
         applyOnTop()
         NotificationCenter.default.addObserver(forName: OnTop.changed, object: nil, queue: .main) { [weak self] _ in self?.applyOnTop() }
@@ -187,7 +196,7 @@ final class Stripe: NSObject {
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
 
-        let root = NSView()
+        let root = FlippedView()          // v26: scaled from the top-left corner (resizable)
         root.wantsLayer = true
         root.layer?.backgroundColor = Ink.ground.cgColor
         root.layer?.cornerRadius = 8
@@ -223,7 +232,7 @@ final class Stripe: NSObject {
         data.alignment = .left
         data.translatesAutoresizingMaskIntoConstraints = false
         data.setContentHuggingPriority(.required, for: .horizontal)
-        _ = fixWidth(data, textWidth("888.8 GB left", monoFont))
+        dataWidth = fixWidth(data, textWidth("888.8 GB left", monoFont))
         // "When I click on download speed, it tests download speed" (request 16): the live speed starts the test too
         speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testSpeedByHand)))
         speed.maximumNumberOfLines = 1
@@ -232,7 +241,7 @@ final class Stripe: NSObject {
         speed.toolTip = speedTip()
         data.font = monoFont
         ping.font = monoFont
-        _ = fixWidth(ping, textWidth("ping 999 ms", monoFont))
+        pingWidth = fixWidth(ping, textWidth("ping 999 ms", monoFont))
         speedWidth = speed.constraints.first { $0.firstAttribute == .width }
         connWidth = fixWidth(connButton, connectionWidth())
         NotificationCenter.default.addObserver(forName: SpeedUnit.changed, object: nil, queue: .main) { [weak self] _ in
@@ -330,6 +339,10 @@ final class Stripe: NSObject {
             guard let self, self.minimizedFrame == nil else { return }
             StripePlace.save(self.panel)
         }
+        NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: panel, queue: .main) { [weak self] _ in
+            guard let self, self.panel.inLiveResize else { return }
+            self.resizedByHand()
+        }
         panel.orderFrontRegardless()
 
         showData()
@@ -411,8 +424,8 @@ final class Stripe: NSObject {
     // arrows, the download half green, the upload half red; all red in the failover alert as every other word.
     func setSpeed(_ down: Double?, _ up: Double?) {
         let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
-        let d = "\(down.map(rate) ?? dash) \(testPart(lastTest?.down_mbps, mark: testMark))"
-        let u = "\(up.map(rate) ?? dash) \(testPart(lastTest?.up_mbps, mark: testMark))"
+        let d = tight("\(down.map(rate) ?? dash) \(testPart(lastTest?.down_mbps, mark: testMark))")
+        let u = tight("\(up.map(rate) ?? dash) \(testPart(lastTest?.up_mbps, mark: testMark))")
         let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: red ? Ink.red : Ink.green])
         t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: Ink.red]))
         speed.attributedStringValue = t
@@ -572,18 +585,76 @@ final class Stripe: NSObject {
 
     // The stripe keeps its left and top edges and takes the size its words and rows need.
     func fit() {
-        guard let column = panel.contentView?.subviews.first else { return }
+        guard let root = panel.contentView, let column = root.subviews.first else { return }
         let t = checked.stringValue
         let quiet = t.isEmpty || t.hasPrefix("checked ") || t == "keeper not running"
         if checked.isHidden != quiet { checked.isHidden = quiet; checkedPipe.isHidden = quiet }
         if failover.isHidden == red { failover.isHidden = !red; failoverPipe.isHidden = !red }
+        tighten()
         column.layoutSubtreeIfNeeded()
-        let size = column.fittingSize
+        let natural = column.fittingSize
+        // v26 (request 44: "make this user interface resizable"): the stripe is drawn at `scale`; dragging an edge
+        // changes the scale, so the words grow or shrink with it and are never cut
+        let size = NSSize(width: ceil(natural.width * scale), height: ceil(natural.height * scale))
+        if root.bounds.size != natural { rescale(root, natural) }
         if abs(size.width - panel.frame.width) < 1 && abs(size.height - panel.frame.height) < 1 { return }
         let x = panel.frame.minX, top = panel.frame.maxY
+        resizingByHand = true
         panel.setContentSize(size)
+        rescale(root, natural)
         panel.setFrameOrigin(NSPoint(x: x, y: top - size.height))
+        resizingByHand = false
         keepOnScreen()
+    }
+
+    // Every field exactly as wide as its words now; the rows under the line share one width per column so their pipes
+    // stay under each other.
+    func tighten() {
+        func w(_ s: String) -> CGFloat { textWidth(s, monoFont) }
+        func set(_ c: NSLayoutConstraint?, _ v: CGFloat) { if let c, abs(c.constant - v) >= 1 { c.constant = v } }
+        set(speedWidth, w(speed.stringValue))
+        set(pingWidth, w(ping.title))
+        set(dataWidth, w(data.title))
+        if !checked.isHidden { set(checkedWidth, textWidth(checked.stringValue, checked.font ?? monoFont)) }
+        if !failover.isHidden { set(failoverWidth, textWidth(failover.stringValue, failover.font ?? monoFont)) }
+        let rows = lineRows.values.filter { !$0.view.isHidden } + (aggRow.map { $0.view.isHidden ? [] : [$0] } ?? [])
+        guard !rows.isEmpty else { return }
+        let sw = rows.map { w($0.speed.stringValue) }.max()!, pw = rows.map { w($0.ping.stringValue) }.max()!
+        let iw = rows.map { w($0.info.stringValue) }.max()!
+        for r in rows {
+            set(r.speed.constraints.first { $0.firstAttribute == .width }, sw)
+            set(r.ping.constraints.first { $0.firstAttribute == .width }, pw)
+            set(r.info.constraints.first { $0.firstAttribute == .width }, iw)
+        }
+    }
+
+    // The root keeps its natural size in its own coordinates and is drawn into the bigger or smaller window; the layout
+    // is done again in those coordinates (without it the rows slid up out of the window at 1.3×).
+    func rescale(_ root: NSView, _ natural: NSSize) {
+        root.setBoundsOrigin(.zero)
+        root.setBoundsSize(natural)
+        root.needsLayout = true
+        root.layoutSubtreeIfNeeded()
+        root.needsDisplay = true
+        if ProcessInfo.processInfo.environment["CK_DEBUG_SCALE"] != nil, let c = root.subviews.first {
+            appendLog("SCALE natural \(natural) root.frame \(root.frame) root.bounds \(root.bounds) column \(c.frame) minimize \(minimize.frame) panel \(panel.frame)")
+        }
+    }
+
+    // A drag on an edge: the new width sets the scale, the height follows it.
+    func resizedByHand() {
+        guard !resizingByHand, let root = panel.contentView, let column = root.subviews.first else { return }
+        let natural = column.fittingSize
+        guard natural.width > 0 else { return }
+        let s = (panel.frame.width / natural.width).clamped(0.5, 3, or: 1)
+        scale = s
+        UserDefaults.standard.set(Double(s), forKey: "stripeScale")
+        let top = panel.frame.maxY, x = panel.frame.minX
+        resizingByHand = true
+        panel.setContentSize(NSSize(width: ceil(natural.width * s), height: ceil(natural.height * s)))
+        rescale(root, natural)
+        panel.setFrameOrigin(NSPoint(x: x, y: top - panel.frame.height))
+        resizingByHand = false
     }
 
     // Never lost off the screens (14.10.2026 the saved place was x = -2247, on no display: the stripe was invisible).
@@ -664,7 +735,7 @@ final class Stripe: NSObject {
 
         if let s = state, alive {
             let check = s.lastCheck
-            ping.title = check?.latencyMs.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
+            ping.title = check?.latencyMs.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
             // NO OTHER CONNECTION (Marko, 14.10.2026): the connection is dead and none in the list works.
             // Red and bold on the status line until a connection works again; he has to do something.
             let none = s.phase.hasPrefix(noOtherPrefix)
@@ -874,7 +945,7 @@ final class Stripe: NSObject {
             let p = Net.probe(pingHost: cfg.pingHost, httpURL: cfg.httpProbe)
             DispatchQueue.main.async {
                 switch p {
-                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.title = ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
+                case .online(_, let ms): self.checked.stringValue = "online now ✓"; self.ping.title = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
                 case .captive: self.checked.stringValue = "captive portal ✗"
                 case .offline: self.checked.stringValue = "offline now ✗"
                 }
@@ -900,7 +971,7 @@ final class Stripe: NSObject {
                 let at = Date().formatted(date: .omitted, time: .standard)
                 switch p {
                 case .online(_, let ms):
-                    self.ping.title = ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
+                    self.ping.title = ms.map { String(format: "ping %.0f ms", $0) } ?? "ping —"
                     self.checked.stringValue = ms != nil ? "ALIVE ✓  \(at)" : "ALIVE ✓  web only (ping blocked)"
                     self.ping.contentTintColor = Ink.yellow; self.checked.textColor = Ink.green; self.dot.color = Ink.green
                 case .captive:
@@ -945,3 +1016,9 @@ let stripe = Stripe()
 if CommandLine.arguments.contains("--settings") { stripe.openSettings() }
 if CommandLine.arguments.contains("--check-data") { stripe.checkDataByHand() }    // v8: the same as a click on the data item
 app.run()
+
+extension CGFloat {
+    func clamped(_ lo: CGFloat, _ hi: CGFloat, or fallback: CGFloat) -> CGFloat { self > 0 ? Swift.min(Swift.max(self, lo), hi) : fallback }
+}
+
+final class FlippedView: NSView { override var isFlipped: Bool { true } }
