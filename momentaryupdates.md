@@ -323,3 +323,9 @@ owner once it listens. Rebuilt; not restarted, its LaunchAgent was not loaded.
 plists point at the new path, and the aggregation server runs from it: v20, mantra + Nothing A142 (USB) joined,
 mantra_networkaggregate up. A star row "netaggregate" in Mac (STAR_SWIFT rows.json), so the star, Swift Matrix and the
 Star Menu's search find it under Network, Aggregate, Connection or Keeper.
+
+## 28.10.2026, request 39 (WIRES or WI-FI: a switch that turns every radio off)
+
+> please make a switch in my aggregate connection application. It should have a switch between wires or Wi-Fi. If I switch on the wire, there will be a toggle button right in the interface: wire or Wi-Fi. It will just use a wired connection. In this case, you need to test everything. Look, I have the same case, so that's why I need to switch I am afraid of Wi-Fi, and I think it burns my brain. I want this look. Now, right now, I have TP-Link, and I have Nothing Phone 2A. Both are connected at the same time through Wi-Fi and through the cable. This switch is choosing the cable and not using Wi-Fi, and even turning off the Wi-Fi on my computer. When I go to the cable, everything you can do: if you can switch off radios on everything. On TP-Link, if you can, through the web interface, switch off the Wi-Fi using only cables. On my computer, switch off the Wi-Fi using only cable. On my Nothing Phone 2A, if I'm sharing the phone as a wireless access point, you need to turn that off as well. So we go wires only, and my brain will be happy. Now everything is connected. Test it. Switch on, switch off, and see how it works.
+
+**Status:** in work.
