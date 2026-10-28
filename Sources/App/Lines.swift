@@ -75,7 +75,8 @@ extension Stripe {
             let wifi = Net.wifiInterface()
             var found: [OtherLine] = []
             // v23: aggregating, the one line is AGGREGATE CONNECTION, so the line under it needs its own row too
-            for i in Net.activeInterfaces() where i != main || Aggregation.on {
+            // v24: the line carrying the internet has its row too (the opened list shows what is connected now)
+            for i in Net.activeInterfaces() {
                 let gw = shell("/usr/sbin/ipconfig", ["getoption", i, "router"], timeout: 5).out.trimmingCharacters(in: .whitespacesAndNewlines)
                 if gw.isEmpty { continue }
                 found.append(OtherLine(iface: i, name: Net.displayName(i), wifi: i == wifi, ms: Net.onlineVia(i),
@@ -125,7 +126,10 @@ extension Stripe {
         let lead = gear.fittingSize.width + wiresSwitch.fittingSize.width + expand.fittingSize.width + 9, nameW = connWidth.constant
         var changed = false
         rememberLines()
-        let shown = others + goneLines()
+        // v24 (request 42: "just show what is actually right now connected, and that's all"): only the green lines,
+        // the joined ones while aggregating, else the one carrying the internet; nothing gone, nothing merely here
+        let joinedNow = Set(agg?.lines.filter(\.alive).map(\.device) ?? [])
+        let shown = others.filter { Aggregation.on ? joinedNow.contains($0.iface) : $0.iface == iface }
         for o in shown where lineRows[o.iface] == nil {
             let r = LineRow(leadWidth: lead, nameWidth: nameW)
             r.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
@@ -295,7 +299,7 @@ extension Stripe {
             // nothing ticked yet: every usable line that is its own line
             var s: [String] = []
             if let i = iface, i != Aggregation.tunnelDevice { s.append(Net.displayName(i)) }
-            s += others.filter { $0.ms != nil && $0.sameAs == nil }.map(\.name)
+            s += others.filter { $0.ms != nil && $0.sameAs == nil && $0.iface != iface }.map(\.name)
             Aggregation.selected = s
         }
         proxyDropped = false; serverMisses = 0

@@ -354,4 +354,12 @@ one line). Fixed on the way: the cable had no row of its own (it was the old fir
 
 > please don't show past connections inside this main interface when I press this folder expansion button. Please just show what is actually right now connected, and that's all
 
+**Status:** done 28.10.2026 (v24): opened, the list shows only the lines connected now (joined while aggregating,
+else the one carrying the internet); mantra (gone) and lines merely here are not shown. Seen: AX88179B (USB) and
+Nothing A142 (USB), both green, nothing else.
+
+## 28.10.2026, request 43 (just "connection", smaller, WIRES/WI-FI under ⚙)
+
+> also, aggregate connection is too much text. Just need "con." Just put "connection," and that's all. Nothing more. Then reduce the size of this thing Also, this switch between wires and Wi-Fi can go under the settings gear icon. It doesn't need to be visible all the time.
+
 **Status:** in work.
