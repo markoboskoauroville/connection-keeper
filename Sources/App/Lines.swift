@@ -132,6 +132,7 @@ extension Stripe {
         let shown = others.filter { Aggregation.on ? joinedNow.contains($0.iface) : $0.iface == iface }
         for o in shown where lineRows[o.iface] == nil {
             let r = LineRow(leadWidth: lead, nameWidth: nameW)
+            r.view.edgeInsets.left += 15                    // v27: under the first row's dot, past the minimize button
             r.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
             r.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
             lineRows[o.iface] = r

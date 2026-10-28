@@ -377,3 +377,9 @@ the test.
 > I don't need minimize button. We do it like this: On the right side, put the two vertical lines, which I'm dragging and resizing. When I drag left and right, I'm resizing the interface. On the left side, make a minimize button which looks exactly as minimize button from the macOS, and please align that button with the rest of the text, and that's the new interface. So we have this trick with these grabbing handles on the right side to resize and minimize with that icon from macOS. And that's it
 
 **Status:** in work.
+
+## 28.10.2026, request 46 (no LED)
+
+> this green LED at the beginning of this application is not needed when the connection is green. I know it's a text connection. When it's red, I know it's not connected. Remove the LED next to the minimize circle
+
+**Status:** in work.
