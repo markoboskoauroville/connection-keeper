@@ -223,3 +223,7 @@ JOINED, that takes every piece of the aggregation away without a password.
 - Request 44 (no empty space) had the fields follow their words, and the stripe breathed (request 47). The answer that
   serves both: fixed slots, each as small as its widest words; the v9 rule (fixed places for numbers) stands, with
   four places instead of five. Width measured over time is the test, not one screenshot.
+
+## 28.10.2026, v30: an old balance never replaces a newer one
+
+- The stripe keeps the reading whose Telemach time is the newest; an older reply (an old SMS read again) is logged and ignored. The cause itself was fixed in router-sms v4.

@@ -52,6 +52,12 @@ struct DataBalance: Codable {
         let r = shell(command, visible ? ["balance", "--visible", "--json"] : ["balance", "--json"], timeout: 150)
         let last = r.out.split(separator: "\n").last.map(String.init) ?? ""
         if let d = last.data(using: .utf8), let b = try? JSONDecoder().decode(DataBalance.self, from: d) {
+            // v30 (28.10.2026, the balance jumped 96.7 → 24.0 → 84.7 GB): a reply older than the one shown is an old SMS
+            // read again ("at" is Telemach's own time, "2026-10-28 15:10", so the strings compare as times)
+            if let shown = load(), b.at < shown.at {
+                appendLog("\(logStamp()) DATA an old reply ignored (from \(b.at), the shown one is from \(shown.at))")
+                return .success(shown)
+            }
             b.save()
             return .success(b)
         }
