@@ -199,3 +199,9 @@ JOINED, that takes every piece of the aggregation away without a password.
 - Before v22 the colour said the kind (Wi-Fi green, cable yellow) and a line that went away vanished. Grey needs a
   memory of what was connected: seen-lines.json, written when a line is green (at most once a minute per line).
   The memory was seeded with mantra, really connected until WIRES at 14:27 the same day.
+
+## 28.10.2026, v25: pop-up menus do not open through Accessibility
+
+- AXPress on ⚙ or on the connection name runs nothing visible: an NSMenu popped up from a button of this
+  non-activating panel needs a real mouse click (tried with the app in front too). The ⚙ menu was left for Marko's
+  hand; ck-wires itself was proven before (v21).

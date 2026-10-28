@@ -143,7 +143,6 @@ final class Stripe: NSObject {
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
     let minimize = NSButton(title: "–", target: nil, action: nil)   // v13, request 29
-    let wiresSwitch = NSSegmentedControl()      // v21, request 39: WIRES | WI-FI (Wires.swift)
     var wiresBusy = false
     var minimizedFrame: NSRect?
     var failoverWidth: NSLayoutConstraint!
@@ -254,9 +253,9 @@ final class Stripe: NSObject {
         failover.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(acknowledge)))
         failoverWidth = failover.constraints.first { $0.firstAttribute == .width }
         checkedWidth = checked.constraints.first { $0.firstAttribute == .width }
-        gear.action = #selector(openSettings)
+        gear.action = #selector(gearMenu)        // v25: the menu holds WIRES / WI-FI and Settings
         gear.font = .systemFont(ofSize: 15)
-        gear.toolTip = "Settings: the connections and their order"
+        gear.toolTip = "WIRES or WI-FI, and Settings"
 
         // v7 (Marko 14.10.2026: "reduce the space between the text and just put pipes in between"): the items sit
         // close, a dim pipe between them, and the stripe is as wide as its words.
@@ -282,7 +281,6 @@ final class Stripe: NSObject {
         minimize.contentTintColor = Ink.dim
         minimize.toolTip = "Hide the stripe; Command-Tab to Connection Keeper (or its Dock icon) brings it back to this place"
         minimize.setContentHuggingPriority(.required, for: .horizontal)
-        setupWires()
         // v23 (request 41: "Put only Aggregate Connection with a small arrow. I can open and see what is aggregated ...
         // The whole status line is basically one line"): ▸ opens the rows of the lines under it, ▾ closes them.
         expand.isBordered = false
@@ -292,14 +290,14 @@ final class Stripe: NSObject {
         expand.contentTintColor = Ink.text
         expand.setContentHuggingPriority(.required, for: .horizontal)
         expand.toolTip = "Open: see the lines (green connected, red here but not connected, grey gone)"
-        let row = NSStackView(views: [dot, gear, wiresSwitch, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
+        let row = NSStackView(views: [dot, gear, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
-        aggRow = LineRow(leadWidth: gear.fittingSize.width + wiresSwitch.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connWidth.constant)
+        aggRow = LineRow(leadWidth: gear.fittingSize.width + expand.fittingSize.width + 6, nameWidth: connectionWidth())
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
         aggRow.speed.toolTip = "All joined lines' live speed added; in parentheses the last joined test, down and up.\nClick: test every line alone, then all joined, to compare (about 40 s)."
@@ -652,7 +650,10 @@ final class Stripe: NSObject {
         let tunnel = iface == Aggregation.tunnelDevice
         // v23 (request 41): aggregating, the one line says only AGGREGATE CONNECTION; the lines are behind ▸
         let joinedNow = Aggregation.on && agg != nil
-        connButton.title = joinedNow ? "AGGREGATE CONNECTION" : (tunnel ? Aggregation.tunnelName : current.map { Net.shown($0, iface) } ?? "no network")
+        // v25 (request 43: "Just put connection, and that's all ... reduce the size"): the word and only as wide as it is
+        connButton.title = joinedNow ? "connection" : (tunnel ? Aggregation.tunnelName : current.map { Net.shown($0, iface) } ?? "no network")
+        let w = textWidth(connButton.title, .systemFont(ofSize: 12, weight: .semibold)) + 8
+        if abs(connWidth.constant - w) >= 1 { connWidth.constant = w; fit() }
         // request 40: the line carrying the internet is connected, so green (grey when there is none)
         if !red && !noOther {
             let up = agg?.lines.filter(\.alive).count ?? 0
@@ -703,8 +704,8 @@ final class Stripe: NSObject {
     // The connection's name gets the width of the longest name in the list, so a switch does not move the rest.
     func connectionWidth() -> CGFloat {
         let f = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        let names = Config.load().connections.map { $0.name + " (USB)" } + ["no network", Aggregation.tunnelName, "AGGREGATE CONNECTION"]
-        return (names.map { textWidth($0, f) }.max() ?? 80) + 8
+        let names = Config.load().connections.map { $0.name + " (USB)" } + ["no network", Aggregation.tunnelName, "ONE CONNECTION"]
+        return (names.map { textWidth($0, f) }.max() ?? 80) + 8   // the rows' names; the first row fits its own word
     }
 
     func currentNow() -> String? {

@@ -1,8 +1,10 @@
 // WIRES OR WI-FI (v21, request 39, Marko 28.10.2026: "a toggle button right in the interface: wire or Wi-Fi ... I am
-// afraid of Wi-Fi, and I think it burns my brain ... So we go wires only"). A switch on the first row, beside ⚙.
-// WIRES: the Mac's Wi-Fi off, the TP-Link's Wi-Fi off, the phone's hotspot (and its Wi-Fi) off, and the aggregation's
-// ticks moved to the cable. WI-FI: what was on before put back. The work is the script ck-wires (Tools/, in the app's
-// Resources), so the same steps run from a terminal: `ck-wires wires|wifi|status`.
+// afraid of Wi-Fi, and I think it burns my brain ... So we go wires only"). WIRES: the Mac's Wi-Fi off, the TP-Link's
+// Wi-Fi off, the phone's hotspot (and its Wi-Fi) off, and the aggregation's ticks moved to the cable. WI-FI: what was on
+// before put back. The work is the script ck-wires (Tools/, in the app's Resources), so the same steps run from a
+// terminal: `ck-wires wires|wifi|status`.
+// v25 (request 43: "this switch between wires and Wi-Fi can go under the settings gear icon. It doesn't need to be
+// visible all the time"): ⚙ opens a small menu, WIRES and WI-FI on top (the one in force ticked), Settings under them.
 import AppKit
 
 enum Wires {
@@ -21,39 +23,40 @@ enum Wires {
 }
 
 extension Stripe {
-    func setupWires() {
-        wiresSwitch.segmentCount = 2
-        wiresSwitch.setLabel("WIRES", forSegment: 0)
-        wiresSwitch.setLabel("WI-FI", forSegment: 1)
-        wiresSwitch.trackingMode = .selectOne
-        wiresSwitch.controlSize = .small
-        wiresSwitch.font = .systemFont(ofSize: 11, weight: .bold)
-        wiresSwitch.target = self
-        wiresSwitch.action = #selector(pickWires)
-        wiresSwitch.selectedSegment = Wires.on ? 0 : 1
-        wiresSwitch.toolTip = "WIRES: every radio off (the Mac's Wi-Fi, the TP-Link's Wi-Fi, the phone's hotspot), cables only.\nWI-FI: the radios back as they were."
-        wiresSwitch.translatesAutoresizingMaskIntoConstraints = false
-        wiresSwitch.setContentHuggingPriority(.required, for: .horizontal)
+    @objc func gearMenu() {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for (title, sel, picked) in [("WIRES   every radio off, cables only", #selector(pickWiresOn), Wires.on),
+                                     ("WI-FI   the radios back as they were", #selector(pickWiresOff), !Wires.on)] {
+            let i = NSMenuItem(title: wiresBusy && picked ? title + "   (switching…)" : title, action: sel, keyEquivalent: "")
+            i.target = self
+            i.state = picked ? .on : .off
+            i.isEnabled = !wiresBusy
+            menu.addItem(i)
+        }
+        menu.addItem(.separator())
+        let s = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: "")
+        s.target = self
+        menu.addItem(s)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: gear.bounds.height + 4), in: gear)
     }
 
-    @objc func pickWires() {
-        let wires = wiresSwitch.selectedSegment == 0
-        if wires == Wires.on && !wiresBusy { return }
-        if wiresBusy { wiresSwitch.selectedSegment = Wires.on ? 0 : 1; return }
+    @objc func pickWiresOn() { setWires(true) }
+    @objc func pickWiresOff() { setWires(false) }
+
+    func setWires(_ wires: Bool) {
+        if wiresBusy || wires == Wires.on { return }
         wiresBusy = true
-        wiresSwitch.isEnabled = false
         appendLog("\(logStamp()) WIRES asked on the stripe: \(wires ? "wires only" : "Wi-Fi back")")
         show(wires ? "WIRES: switching every radio off…" : "WI-FI: switching the radios back on…", Ink.amber, for: 120)
         DispatchQueue.global().async {
             let a = Wires.run(wires)
             DispatchQueue.main.async {
                 self.wiresBusy = false
-                self.wiresSwitch.isEnabled = true
-                self.wiresSwitch.selectedSegment = Wires.on ? 0 : 1
                 guard let a else { self.show("\(wires ? "WIRES" : "WI-FI"): no answer from ck-wires", Ink.red, for: 30); return }
                 let tip = a.said.joined(separator: "\n") + String(format: "\n(%.0f s)", a.seconds)
                 if a.failed.isEmpty {
-                    self.show(wires ? "WIRES: radios off, cable only ✓" : "WI-FI: radios back ✓", Ink.green, for: 20, tip: tip)
+                    self.show(wires ? "WIRES ✓" : "WI-FI ✓", Ink.green, for: 15, tip: tip)
                 } else {
                     self.show("\(wires ? "WIRES" : "WI-FI"): not done: " + a.failed.joined(separator: ", "), Ink.red, for: 60, tip: tip)
                 }

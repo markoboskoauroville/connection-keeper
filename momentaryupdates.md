@@ -362,4 +362,6 @@ Nothing A142 (USB), both green, nothing else.
 
 > also, aggregate connection is too much text. Just need "con." Just put "connection," and that's all. Nothing more. Then reduce the size of this thing Also, this switch between wires and Wi-Fi can go under the settings gear icon. It doesn't need to be visible all the time.
 
-**Status:** in work.
+**Status:** done 28.10.2026 (v25). Seen: one line "● ⚙ ▸ connection | speed | ping | data", 1400 px wide where it
+was about 2200. The ⚙ menu (WIRES / WI-FI / Settings…) could not be opened through Accessibility: Marko's click is
+the test.

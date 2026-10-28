@@ -240,3 +240,11 @@ is that connection. ▸ (in front of the name, like a folder in Finder) opens th
 green / red / grey (v22), the cable carrying the internet included; ▾ closes them. It opens closed; the choice is kept.
 The name still opens the menu (one connection / aggregate, the JOIN ticks). The old last row "AGGREGATE CONNECTION"
 shows only for ONE CONNECTION (aggregating, it would say the top line twice).
+
+## Only what is connected; "connection"; WIRES under ⚙ (v24–v25, 28.10.2026)
+
+- v24 (request 42: *"just show what is actually right now connected, and that's all"*): ▸ opens only the lines
+  connected now (joined while aggregating, else the one carrying the internet). Nothing gone, nothing merely here.
+- v25 (request 43: *"Just put connection ... reduce the size ... this switch between wires and Wi-Fi can go under the
+  settings gear icon"*): aggregating, the one line says **connection**, and the name is only as wide as its word
+  (about a third narrower). ⚙ opens a small menu: WIRES, WI-FI (the one in force ticked), Settings….

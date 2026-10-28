@@ -123,7 +123,7 @@ extension Stripe {
 
     func layoutLines() {
         guard let column = panel.contentView?.subviews.first as? NSStackView else { return }
-        let lead = gear.fittingSize.width + wiresSwitch.fittingSize.width + expand.fittingSize.width + 9, nameW = connWidth.constant
+        let lead = gear.fittingSize.width + expand.fittingSize.width + 6, nameW = connectionWidth()
         var changed = false
         rememberLines()
         // v24 (request 42: "just show what is actually right now connected, and that's all"): only the green lines,
