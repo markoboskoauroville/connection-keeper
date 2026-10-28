@@ -1,5 +1,10 @@
 # connection-keeper: takeover
 
+**28.10.2026, 23:37: the v32 tunnel helper is installed** (Marko typed `sudo ./tunnel.sh install`; the first try hit
+"Bootstrap failed: 5", fixed in tunnel.sh). Since 23:36:45 the log says UP: utun99 carries the internet
+(mantra_networkaggregate); watched for a minute: 3 routes on utun99 the whole time, internet answering. Before the fix
+the routes "vanished" within 2.5 s in WIRES. Still to watch: that it stays up for hours, and through a WIRES / WI-FI switch.
+
 **Version v10** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `10-connection-keeper-v10.zip`, tag `v10`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
