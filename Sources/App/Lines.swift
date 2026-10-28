@@ -123,7 +123,9 @@ extension Stripe {
         guard let column = panel.contentView?.subviews.first as? NSStackView else { return }
         let lead = gear.fittingSize.width + wiresSwitch.fittingSize.width + 6, nameW = connWidth.constant
         var changed = false
-        for o in others where lineRows[o.iface] == nil {
+        rememberLines()
+        let shown = others + goneLines()
+        for o in shown where lineRows[o.iface] == nil {
             let r = LineRow(leadWidth: lead, nameWidth: nameW)
             r.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
             r.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
@@ -131,20 +133,33 @@ extension Stripe {
             column.insertArrangedSubview(r.view, at: column.arrangedSubviews.count - 1)
             changed = true
         }
-        for (dev, r) in lineRows where !others.contains(where: { $0.iface == dev }) {
+        for (dev, r) in lineRows where !shown.contains(where: { $0.iface == dev }) {
             column.removeArrangedSubview(r.view); r.view.removeFromSuperview(); lineRows[dev] = nil
             changed = true
         }
         let joined = Set(agg?.lines.map(\.device) ?? [])
         let tests = WebSpeedByConnection.all(), aggTest = AggTest.load()
-        for o in others {
+        for o in shown {
             guard let r = lineRows[o.iface] else { continue }
             let ok = o.ms != nil
-            r.name.stringValue = Net.shown(o.name, o.iface)
-            r.name.textColor = !ok ? Ink.grey : o.wifi ? Ink.green : Ink.yellow
-            r.dot.color = !ok ? Ink.grey : Aggregation.on && joined.contains(o.iface) ? Ink.green : Ink.dim
+            // request 40: green connected (joined), red here but not connected, grey connected before and gone now
+            let gone = o.iface.hasPrefix(SeenLines.gonePrefix)
+            let color = lineColor(gone: gone, connected: Aggregation.on && joined.contains(o.iface))
+            r.name.stringValue = gone ? o.name : Net.shown(o.name, o.iface)
+            r.name.textColor = color
+            r.dot.color = color
             r.ping.stringValue = o.ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
             r.ping.textColor = ok ? Ink.yellow : Ink.grey
+            if gone {
+                r.info.stringValue = "not available · connected " + ago(seen[o.name]?.last)
+                r.info.textColor = Ink.grey
+                r.name.toolTip = "Grey: connected before, not available now"
+                r.speed.toolTip = nil
+                if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: true) }
+                continue
+            }
+            r.info.textColor = Ink.dim
+            r.name.toolTip = color == Ink.green ? "Green: connected, carrying the internet" : "Red: here, but not connected (tick it in ▾ to join it)"
             let line = agg?.lines.first { $0.device == o.iface }
             r.info.stringValue = o.sameAs.map { "same line as \($0): not joined" }
                 ?? (Aggregation.on && line != nil ? String(format: "joined · %d conn · %.0f MB", line!.active, line!.mbDown + line!.mbUp)
@@ -341,5 +356,48 @@ extension Stripe {
         }
         layoutLines()
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.scanLines() }
+    }
+}
+
+// THE COLOURS OF A CONNECTION (v22, request 40, Marko 28.10.2026: "Red means device is available, but it's not
+// connected, green means device is connected ... grey means it was connected in the past, but now it's not available").
+// Every line that was ever green is remembered (seen-lines.json, a week), so it can stay on the stripe in grey when
+// its device is gone (the Wi-Fi in WIRES, the phone unplugged).
+func lineColor(gone: Bool, connected: Bool) -> NSColor { gone ? Ink.grey : connected ? Ink.green : Ink.red }
+
+enum SeenLines {
+    struct Seen: Codable { var wifi: Bool; var last: Date }
+    static let file = Paths.support.appendingPathComponent("seen-lines.json")
+    static let gonePrefix = "gone:"
+    static let keep: TimeInterval = 7 * 86400
+    static func load() -> [String: Seen] {
+        (try? Data(contentsOf: file)).flatMap { try? JSONDecoder().decode([String: Seen].self, from: $0) } ?? [:]
+    }
+    static func save(_ s: [String: Seen]) { try? JSONEncoder().encode(s).write(to: file, options: .atomic) }
+}
+
+extension Stripe {
+    var currentName: String? { (state?.isFresh ?? false) ? state?.current : here }
+
+    // The lines green now: the one under the first row (not the virtual device) and every joined one.
+    func rememberLines() {
+        let joined = Set(agg?.lines.map(\.device) ?? [])
+        var green: [(String, Bool)] = []
+        if let i = iface, i != Aggregation.tunnelDevice, let name = currentName { green.append((name, isWiFi(i))) }
+        for o in others where Aggregation.on && joined.contains(o.iface) { green.append((o.name, o.wifi)) }
+        var changed = false
+        for (name, wifi) in green {
+            if let s = seen[name], Date().timeIntervalSince(s.last) < 60 { continue }
+            seen[name] = SeenLines.Seen(wifi: wifi, last: Date()); changed = true
+        }
+        if changed { SeenLines.save(seen) }
+    }
+
+    // Remembered lines whose device is not here now, as rows of their own (grey).
+    func goneLines() -> [OtherLine] {
+        let present = Set(others.map(\.name) + [currentName ?? ""] + (iface.map { [Net.displayName($0)] } ?? []))
+        return seen.filter { !present.contains($0.key) && Date().timeIntervalSince($0.value.last) < SeenLines.keep }
+            .sorted { $0.key < $1.key }
+            .map { OtherLine(iface: SeenLines.gonePrefix + $0.key, name: $0.key, wifi: $0.value.wifi, ms: nil, sameAs: nil) }
     }
 }

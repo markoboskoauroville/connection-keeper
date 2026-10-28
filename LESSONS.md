@@ -193,3 +193,9 @@ JOINED, that takes every piece of the aggregation away without a password.
   shows the cable as a line; this session's own API stream lived through every switch.
 - **A tick is "wired" when it is a wired hardware port or a phone "(USB)"**: removing only the Wi-Fi's current name
   left "mantra" ticked when the Mac had been on "Something".
+
+## 28.10.2026, v22: colours by state, not by kind (request 40)
+
+- Before v22 the colour said the kind (Wi-Fi green, cable yellow) and a line that went away vanished. Grey needs a
+  memory of what was connected: seen-lines.json, written when a line is green (at most once a minute per line).
+  The memory was seeded with mantra, really connected until WIRES at 14:27 the same day.

@@ -338,4 +338,6 @@ rejoins mantra; only wired ticks stay). Left in WIRES, as he asked.
 
 > if not already, please color code my connection inside the app. Like this: Red means device is available, but it's not connected, green means device is connected, please change this in this app, and grey means it was connected in the past, but now it's not available
 
-**Status:** in work.
+**Status:** done 28.10.2026 (v22). Seen on the stripe: AX88179B and Nothing A142 green, mantra grey (gone since
+WIRES); with the phone unticked for 14 s it turned red ("not joined"), ticked again green. The ▾ menu uses the same
+three colours (not looked at on screen: opening it needs his mouse).

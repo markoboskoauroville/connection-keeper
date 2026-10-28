@@ -221,3 +221,12 @@ A switch on the first row, beside ⚙: **WIRES | WI-FI**.
 
 The work is `Tools/ck-wires` (inside the app as Resources/ck-wires): `ck-wires wires|wifi|status [--json]` from a
 terminal does the same. Every step goes to the log as one `WIRES` line.
+
+## The colours of a connection (v22, 28.10.2026)
+
+Marko: *"Red means device is available, but it's not connected, green means device is connected ... grey means it was
+connected in the past, but now it's not available."* On every row of the stripe (name and dot) and in ▾:
+**green** carries the internet (the first row, or joined in AGGREGATE CONNECTION), **red** is here but not connected,
+**grey** was connected before and is gone now ("not available · connected 12 min ago"). The stripe remembers every
+line that was ever green for a week (`seen-lines.json`), so a Wi-Fi switched off by WIRES or a phone unplugged stays
+on the stripe in grey. The aggregation row keeps its own colours (green 2 of 2 up, amber fewer, red server down).

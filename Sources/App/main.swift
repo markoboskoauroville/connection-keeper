@@ -166,6 +166,7 @@ final class Stripe: NSObject {
     var lineRows: [String: LineRow] = [:]
     var aggRow: LineRow!
     var others: [OtherLine] = []
+    var seen = SeenLines.load()                 // v22, request 40: the lines once connected (grey when gone)
     var agg: AggStatus?
     var aggMainLast: (rx: UInt64, tx: UInt64)?
     var scanning = false
@@ -639,7 +640,8 @@ final class Stripe: NSObject {
         let current = alive ? state?.current : here
         let tunnel = iface == Aggregation.tunnelDevice
         connButton.title = (tunnel ? Aggregation.tunnelName : current.map { Net.shown($0, iface) } ?? "no network") + " ▾"
-        if !red && !noOther { connButton.contentTintColor = iface == nil ? Ink.dim : tunnel || isWiFi(iface) ? Ink.green : Ink.yellow }
+        // request 40: the line carrying the internet is connected, so green (grey when there is none)
+        if !red && !noOther { connButton.contentTintColor = iface == nil ? Ink.grey : Ink.green }
 
         if Date() < pingHeld { return }            // a pressed ping's answer is being shown
 
@@ -729,6 +731,7 @@ final class Stripe: NSObject {
             var lanMs: [String: Double] = [:]
             for r in rows where r.kind == "lan" && active.contains(r.dev) { lanMs[r.dev] = Net.onlineVia(r.dev, host: cfg.pingHost) }
             let tests = WebSpeedByConnection.all()
+            let joinedDevs = Aggregation.on ? Set(Aggregation.status()?.lines.filter(\.alive).map(\.device) ?? []) : []
             RunLoop.main.perform(inModes: [.common]) {
                 for r in rows {
                     let live: Bool, ok: Bool, words: String, color: NSColor
@@ -738,20 +741,20 @@ final class Stripe: NSObject {
                         ok = inUse ? wifiMs != nil : near.contains(r.name)
                         words = "Wi-Fi · " + (inUse ? (wifiMs.map { String(format: "ping %.0f ms", $0) } ?? "joined, no internet")
                                               : near.contains(r.name) ? "in range" : "not in range")
-                        color = Ink.green
+                        color = lineColor(gone: !ok, connected: live || inUse && joinedDevs.contains(r.dev))
                         r.item.action = #selector(self.pick(_:)); r.item.representedObject = r.name
                     } else {
                         let ms = lanMs[r.dev]
                         live = route == r.dev && !r.dev.isEmpty
                         ok = ms != nil
                         words = "cable · " + (ms.map { String(format: "ping %.0f ms", $0) } ?? (active.contains(r.dev) ? "no internet" : "not plugged in"))
-                        color = Ink.yellow
+                        color = lineColor(gone: !ok && !active.contains(r.dev), connected: live || joinedDevs.contains(r.dev))
                         r.item.action = #selector(self.pickDevice(_:)); r.item.representedObject = r.dev
                     }
                     // v12 (Marko: "add to live connection in parentheses (LIVE) ... this is clearer"): the one carrying the internet
                     let f = NSFont.menuFont(ofSize: 0)
                     let t = NSMutableAttributedString(string: "\(r.kind == "lan" ? Net.shown(r.name, r.dev) : r.name)\(live ? " (LIVE)" : "")   \(words)",
-                                                      attributes: [.foregroundColor: ok ? color : Ink.grey, .font: f])
+                                                      attributes: [.foregroundColor: color, .font: f])
                     // the last speed test on this connection: download green, upload red (grey when not available)
                     if let w = tests[r.name] {
                         t.append(NSAttributedString(string: "  · ", attributes: [.foregroundColor: Ink.grey, .font: f]))
