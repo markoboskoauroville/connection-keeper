@@ -370,16 +370,18 @@ the test.
 
 > now shorten the user interface so there is no extra space where there are non-numbers. There is empty space on the right side, and please also make this user interface resizable
 
-**Status:** in work.
+**Status:** done 28.10.2026 (v26): no fixed widths, no padding; 1544 px wide at 1×. Resizing done by the grip in v27.
 
 ## 28.10.2026, request 45 (a grip on the right, the macOS minimize on the left)
 
 > I don't need minimize button. We do it like this: On the right side, put the two vertical lines, which I'm dragging and resizing. When I drag left and right, I'm resizing the interface. On the left side, make a minimize button which looks exactly as minimize button from the macOS, and please align that button with the rest of the text, and that's the new interface. So we have this trick with these grabbing handles on the right side to resize and minimize with that icon from macOS. And that's it
 
-**Status:** in work.
+**Status:** done 28.10.2026 (v27): the grip ‖ on the right, the yellow macOS minimize on the left, in line with the
+text. Seen at 1× and 1.4×; minimize pressed through Accessibility hid the stripe, opening the app brought it back.
+The drag itself is for Marko's hand.
 
 ## 28.10.2026, request 46 (no LED)
 
 > this green LED at the beginning of this application is not needed when the connection is green. I know it's a text connection. When it's red, I know it's not connected. Remove the LED next to the minimize circle
 
-**Status:** in work.
+**Status:** done 28.10.2026 (v28): no dot on the stripe or on the opened rows; seen closed and open.

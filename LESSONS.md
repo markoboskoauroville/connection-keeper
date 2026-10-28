@@ -205,3 +205,15 @@ JOINED, that takes every piece of the aggregation away without a password.
 - AXPress on ⚙ or on the connection name runs nothing visible: an NSMenu popped up from a button of this
   non-activating panel needs a real mouse click (tried with the app in front too). The ⚙ menu was left for Marko's
   hand; ck-wires itself was proven before (v21).
+
+## 28.10.2026, v26-v28: scaling a layer-backed stripe
+
+- **setBoundsSize on a layer-backed, non-flipped root scales from the bottom-left**: the content slid up out of the
+  window at 1.3×. A flipped root view fixed it.
+- **A constraint to the root's trailing edge uses the unscaled window**: the old "–" landed outside the window at 1.5×
+  (log: root.bounds 763 wide, the "–" at x 1124). Pin to the column's edge instead: the column lives in the scaled
+  coordinates.
+- **The grip is Marko's hand**: a drag cannot be made through Accessibility; the scale path was proven by setting
+  stripeScale 1.3/1.4/1.5 and relaunching.
+- **Every relaunch of the stripe sends one STANJE SMS** (the data check at start): about fifteen on 28.10.2026 from the
+  rebuilds.

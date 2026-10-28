@@ -248,3 +248,15 @@ shows only for ONE CONNECTION (aggregating, it would say the top line twice).
 - v25 (request 43: *"Just put connection ... reduce the size ... this switch between wires and Wi-Fi can go under the
   settings gear icon"*): aggregating, the one line says **connection**, and the name is only as wide as its word
   (about a third narrower). ⚙ opens a small menu: WIRES, WI-FI (the one in force ticked), Settings….
+
+## Tight, resizable, the macOS minimize, no LED (v26–v28, 28.10.2026)
+
+- v26 (request 44): every field as wide as its words now (no room kept for "888.8 GB left" or the widest speed), no
+  padding spaces inside the numbers. The stripe is drawn at a scale (stripeScale, 0.5-3×): the root view keeps its
+  natural size in its own coordinates (a flipped view, so it scales from the top-left).
+- v27 (request 45: *"On the right side, put the two vertical lines, which I'm dragging and resizing ... On the left
+  side, make a minimize button which looks exactly as minimize button from the macOS"*): the grip ‖ at the right end
+  (dragged left/right, the stripe smaller/bigger, the left edge staying), the yellow macOS minimize on the left ("−" on
+  it under the mouse). The old "–" is gone.
+- v28 (request 46: *"Remove the LED next to the minimize circle"*): no dot on any row; when the dot would have been red
+  or amber, the word "connection" takes that colour.

@@ -300,7 +300,8 @@ final class Stripe: NSObject {
         expand.contentTintColor = Ink.text
         expand.setContentHuggingPriority(.required, for: .horizontal)
         expand.toolTip = "Open: see the lines (green connected, red here but not connected, grey gone)"
-        let row = NSStackView(views: [minimize, dot, gear, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
+        // v28 (request 46: "Remove the LED next to the minimize circle"): no dot; its warning colours the word instead
+        let row = NSStackView(views: [minimize, gear, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -308,7 +309,8 @@ final class Stripe: NSObject {
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
         aggRow = LineRow(leadWidth: gear.fittingSize.width + expand.fittingSize.width + 6, nameWidth: connectionWidth())
-        aggRow.view.edgeInsets.left += 15
+        aggRow.view.edgeInsets.left += 12
+        aggRow.dot.isHidden = true
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
         aggRow.speed.toolTip = "All joined lines' live speed added; in parentheses the last joined test, down and up.\nClick: test every line alone, then all joined, to compare (about 40 s)."
@@ -508,6 +510,8 @@ final class Stripe: NSObject {
     func refresh() {
         reading()
         applyAlert()
+        // v28: the dot is gone from the stripe; when it would have been red or amber the name says it in that colour
+        if !red && !noOther && (dot.color == Ink.red || dot.color == Ink.amber) { connButton.contentTintColor = dot.color }
         fit()
     }
 
