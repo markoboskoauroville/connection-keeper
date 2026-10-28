@@ -333,3 +333,9 @@ Star Menu's search find it under Network, Aggregate, Connection or Keeper.
 Accessibility): WIRES 45 s, 35 s, 35 s, WI-FI 37 s, 46 s; every radio read back off/on, the internet fine on the cable,
 the API answering throughout. Two faults found and fixed on the way (the hotspot now comes back last so the Mac
 rejoins mantra; only wired ticks stay). Left in WIRES, as he asked.
+
+## 28.10.2026, request 40 (the colours of a connection)
+
+> if not already, please color code my connection inside the app. Like this: Red means device is available, but it's not connected, green means device is connected, please change this in this app, and grey means it was connected in the past, but now it's not available
+
+**Status:** in work.
