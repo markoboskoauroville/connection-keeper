@@ -181,3 +181,15 @@ JOINED, that takes every piece of the aggregation away without a password.
 - **The tunnel's fail-open works for real** (first time seen): the server went away for the rename and ck-tunnel logged
   "DOWN: the aggregation server does not answer; the Mac is straight on its lines"; the internet stayed, and the device
   came back by itself 50 s later when the server answered again.
+
+## 28.10.2026, v21: WIRES or WI-FI (request 39)
+
+- **The Nothing phone (Android 16) has no shell command for the hotspot** (`cmd wifi` has no start/stop-softap,
+  `cmd tethering` has no shell): the Quick Settings tile is pressed through uiautomator. Only the tile's node is
+  looked at, never the notifications. The state is read from `dumpsys tethering` ("ap0 - TetheredState").
+- **Bring the hotspot back last**: with the phone's hotspot on before the Mac's Wi-Fi, macOS joined "Something"
+  (the hotspot) instead of mantra, and `networksetup -setairportnetwork` could not move it (the old -3900).
+- **Move the ticks before pulling the Wi-Fi**: the server re-reads the ticks within 2 s, so WIRES waits until it
+  shows the cable as a line; this session's own API stream lived through every switch.
+- **A tick is "wired" when it is a wired hardware port or a phone "(USB)"**: removing only the Wi-Fi's current name
+  left "mantra" ticked when the Mac had been on "Something".

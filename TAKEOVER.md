@@ -234,3 +234,11 @@ Test the ladder without touching the network:
 ## v17 (19.10.2026): phone lines over adb
 
 `Sources/Shared/Phones.swift` lists the phones on a USB cable (`adb devices -l`, `usb:` only, not the emulator), names them "<maker> <model> (USB)", and `ensure()` pushes `Contents/Resources/phone/ck-phone` (built by build.sh from `Sources/Phone/main.go`, GOOS=linux GOARCH=arm64) to /data/local/tmp when its sha256 differs, starts it on the phone's 127.0.0.1:8858 and forwards Mac 127.0.0.1:8860+n to it. A phone's device is "adb:<serial>"; ck-aggregate's `Uplink.phone` dials it as SOCKS5 (`Phones.dial`), its health is a connection to 1.1.1.1:443 through it, UDP never goes to it; the test counts it on the phone's /proc/net/dev. The stripe ensures it too (every scan; cheap when it answers) and draws its speed from the server's byte counters. Known: `ensure` only pushes a new ck-phone when the old one stops answering (kill it on the phone after a change).
+
+## v21 (28.10.2026): WIRES or WI-FI
+
+The switch beside ⚙ runs `Resources/ck-wires wires|wifi --json` (Sources/App/Wires.swift); the mode is the file
+`wires` in Application Support, the radios before WIRES are in `wires-state.json` (deleted by WI-FI). The router is
+switched by `router-sms wifi on|off` (ROUTER_SMS v3, one session on the router: never run it beside another router-sms
+job). The phone's hotspot is the Quick Settings tile (no shell command on the Nothing). Never proven: a phone that is
+locked with a PIN (the tile may ask to unlock), and two phones on USB at once. Left in WIRES on 28.10.2026.

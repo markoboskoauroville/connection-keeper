@@ -1,0 +1,348 @@
+#!/usr/bin/python3
+"""
+ck-wires: WIRES or WI-FI for Network Aggregate Connection Keeper (v21, request 39, Marko 28.10.2026: "I am afraid of
+Wi-Fi ... So we go wires only, and my brain will be happy").
+
+    ck-wires wires [--json]   every radio off, the lines on cables only:
+                              the Mac's Wi-Fi off, the TP-Link's Wi-Fi off (router-sms wifi off, over the cable),
+                              the phone's hotspot and its own Wi-Fi off (adb, the Quick Settings tile), and the
+                              aggregation's ticks moved from the Wi-Fi to the cable
+    ck-wires wifi [--json]    back to what was on before WIRES (wires-state.json): the router's Wi-Fi, the Mac's
+                              Wi-Fi, the phone's hotspot, the ticks
+    ck-wires status [--json]  what each radio is now
+
+The cable must carry the internet before anything is switched off: no working cable, no WIRES.
+Nothing here prints a password: the router's is typed by router-sms from its own file.
+"""
+import json, os, re, subprocess, sys, time
+
+HOME = os.path.expanduser('~')
+SUPPORT = f'{HOME}/Library/Application Support/connection-keeper'
+STATE = f'{SUPPORT}/wires-state.json'
+MODEFILE = f'{SUPPORT}/wires'                      # "wires" or "wifi": what the stripe's switch shows
+SELECTION = f'{SUPPORT}/aggregate-selection.json'
+LOG = f'{HOME}/Library/Logs/connection-keeper.log'
+ROUTER_SMS = f'{HOME}/.local/bin/router-sms'
+ADB = next((p for p in [f'{HOME}/Library/Android/sdk/platform-tools/adb', '/opt/homebrew/bin/adb', '/usr/local/bin/adb']
+            if os.access(p, os.X_OK)), None)
+
+
+def run(cmd, timeout=30):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, (p.stdout + p.stderr).strip()
+    except Exception as e:
+        return -1, str(e)
+
+
+def log(msg):
+    with open(LOG, 'a') as f:
+        f.write(time.strftime('%Y-%m-%d %H:%M:%S') + ' WIRES ' + msg + '\n')
+
+
+# ---------------------------------------------------------------- the Mac
+
+def ports():
+    """[(hardware port, device)] from networksetup."""
+    out = run(['/usr/sbin/networksetup', '-listallhardwareports'])[1]
+    return re.findall(r'Hardware Port: (.+)\nDevice: (\S+)', out)
+
+
+def wifi_device():
+    return next((d for n, d in ports() if n == 'Wi-Fi'), 'en0')
+
+
+def ipv4(dev):
+    m = re.search(r'inet (\d+\.\d+\.\d+\.\d+)', run(['/sbin/ifconfig', dev])[1])
+    return m.group(1) if m else None
+
+
+def cables():
+    """The wired devices that have an address: [(name, device, ip)]; Thunderbolt and the phones' modems left out."""
+    out = []
+    for name, dev in ports():
+        if name == 'Wi-Fi' or name.startswith(('Thunderbolt', 'MT65xx')) or not dev.startswith('en'):
+            continue
+        ip = ipv4(dev)
+        if ip and not ip.startswith('169.254.'):
+            out.append((name, dev, ip))
+    return out
+
+
+def cable_works(dev):
+    """The internet answers through this device alone (curl bound to it)."""
+    code, out = run(['/usr/bin/curl', '-s', '-o', '/dev/null', '-w', '%{http_code}', '--interface', dev, '-m', '8',
+                     'http://connectivitycheck.gstatic.com/generate_204'], timeout=12)
+    return out.endswith('204')
+
+
+def mac_wifi_on():
+    return run(['/usr/sbin/networksetup', '-getairportpower', wifi_device()])[1].rstrip().endswith('On')
+
+
+def mac_wifi(on):
+    run(['/usr/sbin/networksetup', '-setairportpower', wifi_device(), 'on' if on else 'off'])
+    for _ in range(20):
+        if mac_wifi_on() == on:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def mac_wifi_network():
+    out = run(['/usr/sbin/ipconfig', 'getsummary', wifi_device()])[1]
+    m = re.search(r'^\s+SSID : (.+)$', out, re.M)
+    return m.group(1).strip() if m else None
+
+
+# ---------------------------------------------------------------- the router
+
+def router(arg=None):
+    """'on' / 'off' / None (could not tell), through router-sms (one session on the router at a time)."""
+    if not os.access(ROUTER_SMS, os.X_OK):
+        return None, 'router-sms is not installed'
+    code, out = run([ROUTER_SMS, 'wifi'] + ([arg] if arg else []) + ['--json'], timeout=150)
+    try:
+        j = json.loads(out.splitlines()[-1])
+    except Exception:
+        return None, out[-200:]
+    return j.get('wifi'), j.get('error', '')
+
+
+# ---------------------------------------------------------------- the phone
+
+def phones():
+    """The phones on a USB cable with USB debugging (serials without ':' are USB, not Wi-Fi adb or the emulator)."""
+    if not ADB:
+        return []
+    out = run([ADB, 'devices'], timeout=8)[1]
+    return [l.split()[0] for l in out.splitlines()[1:]
+            if l.endswith('\tdevice') and ':' not in l.split()[0] and not l.startswith('emulator')]
+
+
+def sh(serial, cmd, timeout=15):
+    return run([ADB, '-s', serial, 'shell', cmd], timeout=timeout)[1]
+
+
+def hotspot_on(serial):
+    # dumpsys tethering, "Tether state:": "ap0 - TetheredState" (or wlan1) while the hotspot is on
+    out = sh(serial, 'dumpsys tethering')
+    part = out.split('Tether state:', 1)[-1].split('\n\n')[0] if 'Tether state:' in out else ''
+    return bool(re.search(r'^\s+(ap\d|wlan\d|swlan\d)\s+-\s+TetheredState', part, re.M))
+
+
+def phone_wifi_on(serial):
+    return 'Wi-Fi is enabled' in sh(serial, 'cmd wifi status')
+
+
+def phone_name(serial):
+    return sh(serial, 'getprop ro.product.model').strip() or serial
+
+
+def tap_hotspot_tile(serial):
+    """The phone has no shell command for the hotspot (Android 16, Nothing): the Quick Settings tile is pressed.
+    Taps are shown on the screen (show_touches), so Marko sees where the Mac touches."""
+    sh(serial, 'settings put system show_touches 1')
+    sh(serial, 'input keyevent KEYCODE_WAKEUP')
+    sh(serial, 'cmd statusbar expand-settings')
+    time.sleep(1.2)
+    for attempt in range(3):
+        sh(serial, 'uiautomator dump /sdcard/ck-qs.xml >/dev/null')
+        xml = sh(serial, 'cat /sdcard/ck-qs.xml; rm -f /sdcard/ck-qs.xml')
+        # only the tile is looked at: never the notifications (they are his)
+        for node in re.findall(r'<node [^>]*>', xml):
+            label = ' '.join(re.findall(r'(?:text|content-desc)="([^"]*)"', node))
+            if re.match(r'\s*Hotspot\b', label) or 'Hotspot,' in label:
+                b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node)
+                if b:
+                    x1, y1, x2, y2 = map(int, b.groups())
+                    sh(serial, f'input tap {(x1 + x2) // 2} {(y1 + y2) // 2}')
+                    time.sleep(1.5)
+                    sh(serial, 'cmd statusbar collapse')
+                    return True
+        sh(serial, 'input swipe 540 300 540 1400 300')   # the tile may be on the expanded page only
+        time.sleep(1)
+    sh(serial, 'cmd statusbar collapse')
+    return False
+
+
+def hotspot(serial, on):
+    if hotspot_on(serial) == on:
+        return True
+    if not tap_hotspot_tile(serial):
+        return False
+    for _ in range(16):
+        if hotspot_on(serial) == on:
+            return True
+        time.sleep(0.5)
+    return False
+
+
+# ---------------------------------------------------------------- the ticks
+
+def selection():
+    try:
+        return json.load(open(SELECTION))
+    except Exception:
+        return []
+
+
+def set_selection(names):
+    json.dump(names, open(SELECTION, 'w'))
+
+
+def aggregation_names():
+    """The lines ck-aggregate uses now, or None when it is not running."""
+    code, out = run(['/usr/bin/curl', '-s', '-m', '2', 'http://127.0.0.1:8857/status'], timeout=4)
+    try:
+        return [l['name'] for l in json.loads(out)['lines']]
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------- the switch
+
+def status():
+    serials = phones()
+    r, rerr = router()
+    return {
+        'mode': open(MODEFILE).read().strip() if os.path.exists(MODEFILE) else 'wifi',
+        'mac_wifi': 'on' if mac_wifi_on() else 'off',
+        'mac_wifi_network': mac_wifi_network(),
+        'cables': [{'name': n, 'device': d, 'ip': ip} for n, d, ip in cables()],
+        'router_wifi': r or ('unknown: ' + rerr),
+        'phones': [{'serial': s, 'name': phone_name(s), 'hotspot': 'on' if hotspot_on(s) else 'off',
+                    'wifi': 'on' if phone_wifi_on(s) else 'off'} for s in serials],
+        'selection': selection(),
+    }
+
+
+def wires():
+    said, failed = [], []
+    wired = [c for c in cables() if cable_works(c[1])]
+    if not wired:
+        return ['no cable carries the internet: nothing switched off'], ['no working cable']
+    names = [n for n, _, _ in wired]
+    said.append('cable works: ' + ', '.join(f'{n} ({d})' for n, d, _ in wired))
+    # what was on, so WI-FI can put it back (kept from the first WIRES when pressed twice)
+    if not os.path.exists(STATE):
+        before = {'mac_wifi': mac_wifi_on(), 'mac_wifi_network': mac_wifi_network(), 'selection': selection(),
+                  'router_wifi': router()[0], 'phones': {s: {'hotspot': hotspot_on(s), 'wifi': phone_wifi_on(s)} for s in phones()}}
+        json.dump(before, open(STATE, 'w'), indent=1)
+    before = json.load(open(STATE))
+    # 1. the ticks: the Wi-Fi line out, the cable in (the phones on USB stay)
+    # only what runs on a wire stays: the cables and the phones on USB (their names end in "(USB)")
+    sel = selection()
+    wired_ports = {n for n, d in ports() if n != 'Wi-Fi'}
+    new = [s for s in sel if s.endswith('(USB)') or s in wired_ports]
+    new += [n for n in names if n not in new]
+    if new != sel:
+        set_selection(new)
+        said.append('joined lines: ' + ' + '.join(new))
+        # the server re-reads the ticks within 2 s; new connections go to the cable before the Wi-Fi goes away
+        if aggregation_names() is not None:
+            for _ in range(30):
+                now = aggregation_names()
+                if now is not None and set(names) & set(now):
+                    said.append('aggregation on ' + ' + '.join(now))
+                    break
+                time.sleep(1)
+    # 2. the Mac's Wi-Fi off: from here on the Mac is on the cable
+    said.append('Mac Wi-Fi off' if mac_wifi(False) else 'Mac Wi-Fi did not switch off')
+    if mac_wifi_on():
+        failed.append('Mac Wi-Fi')
+    # 3. the router's Wi-Fi off, over the cable
+    r, err = router('off')
+    said.append('TP-Link Wi-Fi ' + (r or 'not switched: ' + err))
+    if r != 'off':
+        failed.append('TP-Link Wi-Fi')
+    # 4. every phone on USB: the hotspot off, its own Wi-Fi off
+    for s in phones():
+        n = phone_name(s)
+        ok = hotspot(s, False)
+        said.append(f'{n} hotspot ' + ('off' if ok else 'still on'))
+        if not ok:
+            failed.append(f'{n} hotspot')
+        if phone_wifi_on(s):
+            sh(s, 'cmd wifi set-wifi-enabled disabled')
+            time.sleep(1)
+            said.append(f'{n} Wi-Fi ' + ('off' if not phone_wifi_on(s) else 'still on'))
+    # 5. the internet through the cable
+    ok = cable_works(wired[0][1])
+    said.append('internet ' + ('fine on the cable' if ok else 'NOT answering'))
+    if not ok:
+        failed.append('internet')
+    open(MODEFILE, 'w').write('wires\n')
+    return said, failed
+
+
+def wifi():
+    said, failed = [], []
+    try:
+        before = json.load(open(STATE))
+    except Exception:
+        before = {'mac_wifi': True, 'router_wifi': 'on', 'phones': {}, 'selection': None}
+    # the router first, so the Mac and the phone find its network when they come up
+    if before.get('router_wifi') != 'off':
+        r, err = router('on')
+        said.append('TP-Link Wi-Fi ' + (r or 'not switched: ' + err))
+        if r != 'on':
+            failed.append('TP-Link Wi-Fi')
+    if before.get('mac_wifi', True):
+        ok = mac_wifi(True)
+        said.append('Mac Wi-Fi on' if ok else 'Mac Wi-Fi did not switch on')
+        if not ok:
+            failed.append('Mac Wi-Fi')
+        want = before.get('mac_wifi_network')
+        for _ in range(30):                         # macOS joins a known network by itself
+            if mac_wifi_network():
+                break
+            time.sleep(1)
+        if want and mac_wifi_network() != want:
+            run(['/usr/sbin/networksetup', '-setairportnetwork', wifi_device(), want], timeout=30)
+            time.sleep(3)
+        said.append('Mac on Wi-Fi ' + (mac_wifi_network() or 'none yet'))
+    # the phone's hotspot last: on before the Mac, macOS joined it instead of the router (28.10.2026)
+    for s in phones():
+        was = before.get('phones', {}).get(s, {'hotspot': False, 'wifi': False})
+        n = phone_name(s)
+        if was.get('wifi') and not phone_wifi_on(s):
+            sh(s, 'cmd wifi set-wifi-enabled enabled')
+            said.append(f'{n} Wi-Fi on')
+        if was.get('hotspot'):
+            ok = hotspot(s, True)
+            said.append(f'{n} hotspot ' + ('on' if ok else 'did not come on'))
+            if not ok:
+                failed.append(f'{n} hotspot')
+    if before.get('selection'):
+        set_selection(before['selection'])
+        said.append('joined lines: ' + ' + '.join(before['selection']))
+    os.path.exists(STATE) and os.remove(STATE)
+    open(MODEFILE, 'w').write('wifi\n')
+    return said, failed
+
+
+def main(argv):
+    cmd = argv[0] if argv else 'status'
+    as_json = '--json' in argv
+    os.makedirs(SUPPORT, exist_ok=True)
+    if cmd == 'status':
+        st = status()
+        print(json.dumps(st, indent=None if as_json else 1))
+        return 0
+    if cmd not in ('wires', 'wifi'):
+        print(__doc__.strip())
+        return 2
+    t0 = time.time()
+    said, failed = wires() if cmd == 'wires' else wifi()
+    took = round(time.time() - t0, 1)
+    log(f'{cmd.upper()} ({took} s): ' + '; '.join(said) + (' | FAILED: ' + ', '.join(failed) if failed else ''))
+    if as_json:
+        print(json.dumps({'mode': cmd, 'said': said, 'failed': failed, 'seconds': took}))
+    else:
+        print('\n'.join(said) + (f'\nFAILED: {", ".join(failed)}' if failed else '') + f'\n({took} s)')
+    return 1 if failed else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

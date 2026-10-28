@@ -206,3 +206,18 @@ minutes. The new helper is installed with `sudo ./tunnel.sh install`.
 ## A phone over USB (v17, 19.10.2026)
 
 Plug in an Android phone with USB debugging allowed and it becomes a line of its own, "Nothing A142 (USB)" on the stripe, even though macOS cannot use Android's USB tethering (RNDIS) and this phone refuses NCM. The keeper puts a small proxy, ck-phone, on the phone over adb and reaches the phone's internet through the same USB cable. Tick it in ▾ JOIN and click ONE CONNECTION to aggregate it with the cable. Web pages, downloads and everything on TCP use both; UDP (calls, QUIC) stays on the cable.
+
+## WIRES or WI-FI (v21, 28.10.2026)
+
+Marko: *"I am afraid of Wi-Fi, and I think it burns my brain ... So we go wires only, and my brain will be happy."*
+A switch on the first row, beside ⚙: **WIRES | WI-FI**.
+
+- **WIRES** (about 35-45 s): checks that the cable (AX88179B to the TP-Link) carries the internet, else switches
+  nothing; moves the aggregation's ticks to the cable and the phone on USB and waits until the server uses them; then
+  the Mac's Wi-Fi off, the TP-Link's Wi-Fi off (`router-sms wifi off`, over the cable), the Nothing phone's hotspot off
+  (its Quick Settings tile, taps shown on the phone) and its own Wi-Fi off; then the internet checked on the cable.
+- **WI-FI** (about 30-45 s): puts back what was on before WIRES (`wires-state.json`): the router's Wi-Fi, the Mac's
+  Wi-Fi (back on mantra), the phone's hotspot last, the ticks.
+
+The work is `Tools/ck-wires` (inside the app as Resources/ck-wires): `ck-wires wires|wifi|status [--json]` from a
+terminal does the same. Every step goes to the log as one `WIRES` line.

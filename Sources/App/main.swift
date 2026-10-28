@@ -143,6 +143,8 @@ final class Stripe: NSObject {
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
     let minimize = NSButton(title: "–", target: nil, action: nil)   // v13, request 29
+    let wiresSwitch = NSSegmentedControl()      // v21, request 39: WIRES | WI-FI (Wires.swift)
+    var wiresBusy = false
     var minimizedFrame: NSRect?
     var failoverWidth: NSLayoutConstraint!
     var checkedPipe: NSTextField!
@@ -277,14 +279,15 @@ final class Stripe: NSObject {
         minimize.contentTintColor = Ink.dim
         minimize.toolTip = "Hide the stripe; Command-Tab to Connection Keeper (or its Dock icon) brings it back to this place"
         minimize.setContentHuggingPriority(.required, for: .horizontal)
-        let row = NSStackView(views: [dot, gear, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
+        setupWires()
+        let row = NSStackView(views: [dot, gear, wiresSwitch, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
-        aggRow = LineRow(leadWidth: gear.fittingSize.width + 3, nameWidth: connWidth.constant)
+        aggRow = LineRow(leadWidth: gear.fittingSize.width + wiresSwitch.fittingSize.width + 6, nameWidth: connWidth.constant)
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
         aggRow.speed.toolTip = "All joined lines' live speed added; in parentheses the last joined test, down and up.\nClick: test every line alone, then all joined, to compare (about 40 s)."

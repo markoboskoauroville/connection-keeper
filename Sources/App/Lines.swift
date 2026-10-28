@@ -121,7 +121,7 @@ extension Stripe {
 
     func layoutLines() {
         guard let column = panel.contentView?.subviews.first as? NSStackView else { return }
-        let lead = gear.fittingSize.width + 3, nameW = connWidth.constant
+        let lead = gear.fittingSize.width + wiresSwitch.fittingSize.width + 6, nameW = connWidth.constant
         var changed = false
         for o in others where lineRows[o.iface] == nil {
             let r = LineRow(leadWidth: lead, nameWidth: nameW)
