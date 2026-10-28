@@ -404,3 +404,9 @@ back; the server took 43 s to see the line dead and did not try the other line.)
 to the next line after 1 s, names never hang; phone data cut 30 s: 44 of 44 connections answered. Found on the way:
 in WIRES the system tunnel does not stay up (macOS removes its routes), so the Mac uses the cable alone; the fix is in
 the root helper and needs Marko's password.
+
+## 28.10.2026, request 49 (a rescan button: a plugged-in phone not picked up)
+
+> for my aggregate application to aggregate multiple collection connections, how can I force it to recheck connections? Now it was on one. I plugged in my phone, and it's not automatically recognized. I want to have some kind of refresh or push button
+
+**Status:** in progress 28.10.2026.
