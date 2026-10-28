@@ -242,3 +242,17 @@ The switch beside ⚙ runs `Resources/ck-wires wires|wifi --json` (Sources/App/W
 switched by `router-sms wifi on|off` (ROUTER_SMS v3, one session on the router: never run it beside another router-sms
 job). The phone's hotspot is the Quick Settings tile (no shell command on the Nothing). Never proven: a phone that is
 locked with a PIN (the tile may ask to unlock), and two phones on USB at once. Left in WIRES on 28.10.2026.
+
+## State on 28.10.2026, 15:20 (v29)
+
+The stripe: one line `🟡 ⚙ ▸ connection | speed (test) | ping | data | status ‖`. 🟡 = macOS minimize (TrafficMinimize,
+main.swift); ⚙ = a menu with WIRES / WI-FI (Wires.swift) and Settings…; ▸ opens only the lines connected now (Lines.swift,
+`shown`); "connection" while aggregating, else the line's name; ‖ = Grip, drags the scale (stripeScale in the stripe's
+defaults, 0.5–3×; the root is a FlippedView whose bounds keep the natural size). Every field is a fixed slot (tighten()
+in main.swift sets the widths from samples: speedSample(), "ping 999 ms", "888.8 GB left", statusSample), so the width
+never changes (813 points at 1×). Colours: green connected, red here but not connected, grey gone (seen-lines.json; grey
+rows are no longer shown on the stripe since v24, the ▾ menu still greys what is not available). No dots (v28).
+Mode on 28.10.2026: WIRES (Mac Wi-Fi, TP-Link Wi-Fi and the phone's hotspot off), AGGREGATE CONNECTION over AX88179B +
+Nothing A142 (USB). Marko: "everything working great".
+Never proven: the drag by a hand other than his (he confirmed "all works" on v28); the ⚙ menu opened by Accessibility
+(pop-up menus need a real click).
