@@ -80,6 +80,24 @@ enum Aggregation {
         return systemProxy(on)
     }
 
+    // RESCAN (v32, request 49: "how can I force it to recheck connections? ... I plugged in my phone, and it's not
+    // automatically recognized. I want to have some kind of refresh or push button"). The stripe's ⟳ leaves the file
+    // `aggregate-rescan`; the server takes it within a second, finds every device and phone again, checks every line,
+    // and writes `aggregate-rescan-done` (when, and the lines it has now).
+    static let rescanFile = Paths.support.appendingPathComponent("aggregate-rescan")
+    static let rescanDone = Paths.support.appendingPathComponent("aggregate-rescan-done")
+    static func requestRescan() {
+        try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: rescanFile.path, contents: Data(ISO8601DateFormatter().string(from: Date()).utf8))
+    }
+    // The server's answer to a rescan asked at `since`: the names of its lines, or nil while it has not answered.
+    static func rescanAnswer(since: Date) -> [String]? {
+        guard let a = try? FileManager.default.attributesOfItem(atPath: rescanDone.path),
+              let m = a[.modificationDate] as? Date, m >= since.addingTimeInterval(-1),
+              let s = try? String(contentsOf: rescanDone, encoding: .utf8) else { return nil }
+        return s.components(separatedBy: "\n").dropFirst().filter { !$0.isEmpty }
+    }
+
     // The server's own words (GET /status), or nil when it does not answer within a second.
     static func status() -> AggStatus? {
         let r = shell("/usr/bin/curl", ["-s", "-m", "1", "http://127.0.0.1:\(aggPort)/status"], timeout: 2)

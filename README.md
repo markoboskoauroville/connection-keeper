@@ -280,3 +280,19 @@ Marko: *"optimize speed of switching between lines."* The aggregation server (So
   a UDP name lookup (port 53) whose line is dead goes over TCP through a live line (the phone carries TCP only).
 Measured: the phone's data off 30 s, a new connection through the server every 1.4 s: 44 of 44 answered, the slowest
 1.6 s; the phone seen dead after 7 s (43 s before), back 3 s after its data returned.
+
+## ⟳ RESCAN, and a plugged-in phone joins by itself (v32, 28.10.2026)
+
+Marko: *"how can I force it to recheck connections? ... I plugged in my phone, and it's not automatically recognized.
+I want to have some kind of refresh or push button."* The stripe now reads `🟡 ⚙ ⟳ ▸ connection | …`:
+- **⟳** finds every device and phone again and checks every line now: the status slot says "rescanning…" (⟳ amber),
+  then **2 LINES ✓ 22:37** (green two or more, amber one, red none; the names in its tooltip), about 16 s.
+  From a terminal the same: `open -n "/Applications/Network Aggregate Connection Keeper (Mantra).app" --args --rescan`,
+  or the distributed notification `ConnectionKeeperRescan`.
+- **Nothing to press for a plug**: the server looks at the devices and the phones adb sees every second; a change finds
+  the lines again at once, and a phone or cable that appears while lines are ticked is ticked too ("plugged in: Nothing
+  A142 (USB): joined"). A Wi-Fi is never ticked this way, nor a device unticked while it stayed plugged in.
+- **The real cause** of "not recognized": the server leaked one pipe per program it ran. After 6.5 h it held 2473
+  of them, every program it started (ifconfig, adb) said nothing, and from 17:58 on 28.10.2026 it had no line at all, so
+  nothing plugged in could ever appear. Fixed in `shell()` (Sources/Shared/Net.swift); the server and the keeper keep
+  0 pipes over time now.

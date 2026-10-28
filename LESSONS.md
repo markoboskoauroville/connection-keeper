@@ -238,3 +238,17 @@ JOINED, that takes every piece of the aggregation away without a password.
   Not Tailscale (paused for one attempt: the same). Suspect: the scoped default route the helper adds on the cable when
   the cable is the Mac's only network (configd keeps it for itself). Changing the helper needs Marko's admin password.
   Meanwhile the Mac goes straight out through the cable, and the server's improvements wait for the tunnel.
+
+## 28.10.2026, v32: a phone not recognized was a pipe leak
+
+- **Process + Pipe outside a run loop leaks**: the Pipe's file handles are autoreleased, and a thread or a top-level
+  loop that never drains a pool keeps every one open (measured: 50 calls, 50 more descriptors). Once the limit is
+  reached the programs still run but their output is lost, so the code sees "no interfaces, no phones, no routes"
+  rather than an error. Wrap every Process call in `autoreleasepool` and close the pipe's ends; check a long-running
+  helper with `lsof -p <pid> | grep -c PIPE`, not by its log.
+- **"Not recognized" was not "not looked for"**: the server already looked every minute; it had been blind for hours.
+  A rescan button alone would not have helped; the leak fix did, the button and the plug watcher make it immediate.
+- **The tunnel's vanishing routes were probably the same leak** in the root helper (routes visible by hand while it
+  said they were gone). Look at what a process actually sees before believing that macOS deletes something.
+- `adb reconnect` flaps for under a second (between two looks); `adb -s <serial> usb` (adbd restarted on the phone)
+  hides the phone for about 10 s and is the honest stand-in for an unplug.

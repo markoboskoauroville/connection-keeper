@@ -142,6 +142,7 @@ final class Stripe: NSObject {
     static let failoverNormal = textWidth("failover 59 min ago", .monospacedDigitSystemFont(ofSize: 12, weight: .regular))
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
+    let rescan = NSButton(title: "⟳", target: nil, action: nil)   // v32, request 49: find every line again, now
     let minimize = TrafficMinimize()            // v27, request 45: the macOS yellow minimize, on the left
     let grip = Grip()                           // v27, request 45: two vertical lines on the right, dragged to resize
     var wiresBusy = false
@@ -260,6 +261,14 @@ final class Stripe: NSObject {
         gear.action = #selector(gearMenu)        // v25: the menu holds WIRES / WI-FI and Settings
         gear.font = .systemFont(ofSize: 15)
         gear.toolTip = "WIRES or WI-FI, and Settings"
+        // v32 (request 49: "I want to have some kind of refresh or push button"): ⟳ beside ⚙
+        rescan.isBordered = false
+        rescan.target = self
+        rescan.action = #selector(rescanNow)
+        rescan.font = .systemFont(ofSize: 14, weight: .semibold)
+        rescan.contentTintColor = Ink.text
+        rescan.setContentHuggingPriority(.required, for: .horizontal)
+        rescan.toolTip = "RESCAN: find every device and phone again (a phone just plugged in), check every line, join the new ones"
 
         // v7 (Marko 14.10.2026: "reduce the space between the text and just put pipes in between"): the items sit
         // close, a dim pipe between them, and the stripe is as wide as its words.
@@ -295,14 +304,14 @@ final class Stripe: NSObject {
         expand.setContentHuggingPriority(.required, for: .horizontal)
         expand.toolTip = "Open: see the lines (green connected, red here but not connected, grey gone)"
         // v28 (request 46: "Remove the LED next to the minimize circle"): no dot; its warning colours the word instead
-        let row = NSStackView(views: [minimize, gear, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
+        let row = NSStackView(views: [minimize, gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
-        aggRow = LineRow(leadWidth: gear.fittingSize.width + expand.fittingSize.width + 6, nameWidth: connectionWidth())
+        aggRow = LineRow(leadWidth: gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
         aggRow.view.edgeInsets.left += 12
         aggRow.dot.isHidden = true
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
@@ -362,6 +371,8 @@ final class Stripe: NSObject {
             NotificationCenter.default.addObserver(forName: n, object: nil, queue: .main) { [weak self] _ in self?.restoreStripe() }
         }
         NotificationCenter.default.addObserver(forName: DataBalanceNote.checkNow, object: nil, queue: .main) { [weak self] _ in self?.checkDataByHand() }
+        // v32: ⟳ pressed from outside too (a terminal, a script): the distributed notification "ConnectionKeeperRescan"
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperRescan"), object: nil, queue: .main) { [weak self] _ in self?.rescanNow() }
     }
 
     // THE DATA BALANCE (v8): the last answer, "28.6 GB left · 11:57" (GB with one decimal, the time from Telemach's SMS);
@@ -524,7 +535,7 @@ final class Stripe: NSObject {
         guard let a = alert else {
             if red {
                 red = false
-                for b in [connButton, gear] { b.contentTintColor = Ink.text }
+                for b in [connButton, gear, rescan] { b.contentTintColor = Ink.text }
                 if Date() >= pingHeld { ping.contentTintColor = Ink.yellow }
                 speed.textColor = Ink.text; failover.textColor = Ink.text; failover.font = speed.font
                 ok.isHidden = true
@@ -541,7 +552,7 @@ final class Stripe: NSObject {
             failoverWidth.constant = 260
             fit()
         }
-        for b in [connButton, ping, data, gear] { b.contentTintColor = Ink.red }
+        for b in [connButton, ping, data, gear, rescan] { b.contentTintColor = Ink.red }
         for l in [speed, checked, failover] { l.textColor = Ink.red }
         failover.font = .monospacedDigitSystemFont(ofSize: 12, weight: .bold)
         failover.stringValue = a.line
@@ -986,6 +997,56 @@ final class Stripe: NSObject {
         }
     }
 
+    // RESCAN (v32, request 49: "how can I force it to recheck connections? ... I plugged in my phone, and it's not
+    // automatically recognized"). The stripe looks again itself at once, and asks the server (Aggregation.requestRescan)
+    // to find every device and phone again and check every line; the status slot says "rescanning…", then the lines
+    // the server has now ("2 LINES ✓ 22:41", their names in the tooltip), or in red that the server did not answer.
+    @objc func rescanNow() {
+        let asked = Date()
+        pingHeld = asked.addingTimeInterval(60)
+        checked.stringValue = "rescanning…"
+        checked.textColor = Ink.amber
+        checked.toolTip = nil
+        rescan.contentTintColor = Ink.amber
+        fit()
+        appendLog("\(logStamp()) RESCAN pressed")
+        scanLines()
+        let aggregating = Aggregation.aggregateMode
+        DispatchQueue.global().async {
+            var answer: [String]?
+            if aggregating {
+                Aggregation.requestRescan()
+                if Aggregation.status() == nil {      // the server is not there: started again, it takes the request
+                    shell("/bin/launchctl", ["kickstart", "gui/\(getuid())/\(CKAggregateLabel)"])
+                }
+                for _ in 0..<60 { if let a = Aggregation.rescanAnswer(since: asked) { answer = a; break }; usleep(500_000) }
+            }
+            DispatchQueue.main.async {
+                let at = Date().formatted(date: .omitted, time: .shortened)
+                self.rescan.contentTintColor = Ink.text
+                if !aggregating {
+                    self.checked.stringValue = "RESCANNED ✓ \(at)"; self.checked.textColor = Ink.green
+                } else if let a = answer {
+                    let alive = a.filter { $0.hasSuffix("(alive)") }.count
+                    self.checked.stringValue = "\(alive) LINE\(alive == 1 ? "" : "S") ✓ \(at)"
+                    self.checked.textColor = alive >= 2 ? Ink.green : alive == 1 ? Ink.amber : Ink.red
+                    self.checked.toolTip = a.isEmpty ? "no line found" : a.joined(separator: "\n")
+                    appendLog("\(logStamp()) RESCAN answered: " + (a.isEmpty ? "no line" : a.joined(separator: " + ")))
+                } else {
+                    self.checked.stringValue = "RESCAN ✗ \(at)"; self.checked.textColor = Ink.red
+                    self.checked.toolTip = "The aggregation server did not answer within 30 s"
+                    appendLog("\(logStamp()) RESCAN: the server did not answer within 30 s")
+                }
+                self.scanLines()
+                self.pingHeld = Date().addingTimeInterval(20)
+                self.fit()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 20.5) {
+                    if Date() >= self.pingHeld { self.checked.toolTip = nil; self.refresh() }
+                }
+            }
+        }
+    }
+
     @objc func openLog() { NSWorkspace.shared.open(Paths.log) }
 
     @objc func openSettings() {
@@ -1009,6 +1070,7 @@ app.setActivationPolicy(.accessory)
 let stripe = Stripe()
 if CommandLine.arguments.contains("--settings") { stripe.openSettings() }
 if CommandLine.arguments.contains("--check-data") { stripe.checkDataByHand() }    // v8: the same as a click on the data item
+if CommandLine.arguments.contains("--rescan") { stripe.rescanNow() }             // v32: the same as ⟳
 app.run()
 
 extension CGFloat {

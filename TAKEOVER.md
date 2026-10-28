@@ -256,3 +256,28 @@ Mode on 28.10.2026: WIRES (Mac Wi-Fi, TP-Link Wi-Fi and the phone's hotspot off)
 Nothing A142 (USB). Marko: "everything working great".
 Never proven: the drag by a hand other than his (he confirmed "all works" on v28); the ⚙ menu opened by Accessibility
 (pop-up menus need a real click).
+
+## State on 28.10.2026, 22:50 (v32): ⟳ RESCAN, plugged devices, the pipe leak
+
+- **The pipe leak** (the cause of request 49): `shell()` leaked one pipe per call in every program without a run loop
+  (ck-aggregate, connection-keeperd); the stripe drains its pool and did not. ck-aggregate had 2473 pipes after 6.5 h,
+  every program it ran gave empty output, `discover()` found nothing and `/status` said `"lines": []` from 17:58.
+  `shell()` now runs in `autoreleasepool` and closes both ends; the tunnel helper's `run()` the same.
+- **⟳** (`rescan` in main.swift, `rescanNow()`): writes `aggregate-rescan` (Aggregation.requestRescan); the server's
+  watcher (closure in `Server.run`, every 1 s) deletes it, `rescan()` = refresh + every line probed now
+  (`lastGood` reset), and writes `aggregate-rescan-done` (time, then "name (alive|silent)" per line); the stripe waits
+  up to 30 s (`rescanAnswer(since:)`) and shows "N LINES ✓ HH:MM". Not aggregating: the stripe's own scan only. Server
+  silent: launchctl kickstart of the agent. Also `--rescan` and the distributed notification `ConnectionKeeperRescan`.
+- **Plug detection** (`deviceFingerprint()` in Aggregate/main.swift): the IPv4 devices from getifaddrs (no program)
+  plus `adb devices` with each state, every second; a change logs `devices changed (… → …)`, `joinPlugged` ticks the
+  entries that appeared (a phone only in state "device", never the Wi-Fi), then refresh + checkLines.
+- Measured 28.10.2026: ⟳ answered in 16 s, "2 LINES ✓ 22:37" seen on the stripe (both lines joined). The phone unticked,
+  `adb usb` (adbd restarted on the phone, gone 10 s): "plugged in: Nothing A142 (USB): joined", both lines alive 19 s
+  after it went. ck-aggregate: 0 pipes after 6 minutes. The ticks were put back as they were.
+- Known: a flap shorter than about 1.3 s (`adb reconnect`) can fall between two looks; a real unplug is longer.
+- **The tunnel helper (needs Marko's admin password)**: on 28.10.2026 22:27 its log said "routes were gone" while
+  `netstat -rn` by hand showed 0/1 and 128.0/1 on utun99 the whole time; the helper had run 16 h with the same leaking
+  `run()`, so its own netstat very likely came back empty, it re-added routes, and after four "re-adds" rested five
+  minutes (the "macOS deletes the routes" of v31). The fix is in Sources/Tunnel/main.swift and is in the v32 app;
+  installing it needs `sudo ./tunnel.sh install` from this folder (or at least a restart of the daemon,
+  `sudo launchctl kickstart -k system/com.mantra.connectionkeeper.tunnel`). Never proven until then.

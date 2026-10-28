@@ -29,14 +29,20 @@ func log(_ s: String) {
 }
 
 @discardableResult
+// v32 (request 49): the pool drained and the pipe closed on every call. Without it one pipe leaked per call (netstat
+// every 2 s); the same leak emptied ck-aggregate, and on 28.10.2026 this helper said "routes were gone" while netstat
+// run by hand showed both half routes in place the whole time (22:27:00-22:27:03): its own netstat no longer ran.
 func run(_ path: String, _ args: [String]) -> (status: Int32, out: String) {
-    let p = Process(), pipe = Pipe()
-    p.executableURL = URL(fileURLWithPath: path); p.arguments = args
-    p.standardOutput = pipe; p.standardError = pipe
-    do { try p.run() } catch { return (-1, "\(error)") }
-    let d = pipe.fileHandleForReading.readDataToEndOfFile()
-    p.waitUntilExit()
-    return (p.terminationStatus, String(decoding: d, as: UTF8.self))
+    autoreleasepool {
+        let p = Process(), pipe = Pipe()
+        p.executableURL = URL(fileURLWithPath: path); p.arguments = args
+        p.standardOutput = pipe; p.standardError = pipe
+        defer { try? pipe.fileHandleForReading.close(); try? pipe.fileHandleForWriting.close() }
+        do { try p.run() } catch { return (-1, "\(error)") }
+        let d = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return (p.terminationStatus, String(decoding: d, as: UTF8.self))
+    }
 }
 
 guard let home = arg("--home") else { log("usage: ck-tunnel --home /Users/<name> [--dir <folder>] [--for <seconds>]"); exit(2) }

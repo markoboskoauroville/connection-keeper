@@ -409,4 +409,8 @@ the root helper and needs Marko's password.
 
 > for my aggregate application to aggregate multiple collection connections, how can I force it to recheck connections? Now it was on one. I plugged in my phone, and it's not automatically recognized. I want to have some kind of refresh or push button
 
-**Status:** in progress 28.10.2026.
+**Status:** done 28.10.2026 (v32): ⟳ beside ⚙ rescans every device, phone and line ("2 LINES ✓ 22:37", 16 s), and a
+plugged-in phone or cable is found within seconds and joined by itself (tested with adbd restarted on the phone: joined,
+both lines alive 19 s later). The cause: the server leaked a pipe per program run and had been blind since 17:58 (no
+line at all); fixed. The tunnel helper has the same leak, very likely why it "loses its routes"; installing the fix
+needs Marko's admin password (`sudo ./tunnel.sh install`).

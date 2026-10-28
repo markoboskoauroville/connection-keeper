@@ -279,10 +279,25 @@ final class Server {
         Resolver.lines = { [self] in lock.lock(); defer { lock.unlock() }; return lines }
         Thread.detachNewThread { [self] in while true { sleep(3); checkLines() } }
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
+        // v32 (request 49): at once too when a device comes or goes (a phone plugged in, a cable), and when ⟳ is pressed.
         Thread.detachNewThread { [self] in
-            var last = Date(), ticks = Aggregation.selected
+            var last = Date(), ticks = Aggregation.selected, devices = deviceFingerprint()
             while true {
-                sleep(2)
+                sleep(1)
+                if FileManager.default.fileExists(atPath: Aggregation.rescanFile.path) {
+                    try? FileManager.default.removeItem(at: Aggregation.rescanFile)
+                    log("RESCAN asked from the stripe: every device and phone found again, every line checked")
+                    rescan(); ticks = Aggregation.selected; last = Date(); devices = deviceFingerprint()
+                    continue
+                }
+                let d = deviceFingerprint()
+                if d != devices {
+                    log("devices changed (\(devices.joined(separator: " ")) → \(d.joined(separator: " "))): lines found again")
+                    joinPlugged(Set(d).subtracting(devices))
+                    devices = d
+                    refresh(); checkLines(); ticks = Aggregation.selected; last = Date()
+                    continue
+                }
                 let now = Aggregation.selected
                 if now != ticks || Date().timeIntervalSince(last) >= 60 { ticks = now; last = Date(); refresh() }
             }
@@ -296,6 +311,75 @@ final class Server {
         }
     }
 
+    // ⟳ (v32): the lines found again and every one of them checked now, not after its 3 s; the answer for the stripe.
+    func rescan() {
+        refresh()
+        lock.lock(); for u in lines { u.lastGood = .distantPast }; lock.unlock()
+        checkLines()
+        for _ in 0..<20 { lock.lock(); let busy = lines.contains { $0.probing }; lock.unlock(); if !busy { break }; usleep(250_000) }
+        lock.lock()
+        let said = lines.map { "\($0.name) (\($0.alive ? "alive" : "silent"))" }
+        lock.unlock()
+        log("RESCAN done: " + (said.isEmpty ? "no line" : said.joined(separator: " + ")))
+        try? ([ISO8601DateFormatter().string(from: Date())] + said).joined(separator: "\n").write(to: Aggregation.rescanDone, atomically: true, encoding: .utf8)
+    }
+
+    // A device plugged in while lines are ticked joins them by itself (request 49: "I plugged in my phone, and it's not
+    // automatically recognized"): a phone on USB or a cable that appeared since the last look (`appeared`: entries of
+    // deviceFingerprint). A Wi-Fi is never ticked this way (WIRES and WI-FI switch it on and off; that is not a plug),
+    // nor a device he unticked while it stayed plugged in.
+    func joinPlugged(_ appeared: Set<String>) {
+        let ticks = Aggregation.selected
+        guard Aggregation.aggregateMode, !ticks.isEmpty, !appeared.isEmpty else { return }
+        let wifi = Net.wifiInterface()
+        var names: [String] = []
+        for e in appeared.sorted() {
+            if e.hasPrefix("adb:") {
+                let serial = String(e.dropFirst(4).split(separator: "=").first ?? "")
+                guard e.hasSuffix("=device") else { continue }        // unauthorized, offline: not a line yet
+                for _ in 0..<5 {                                       // adb names it a moment after it is seen
+                    if let p = Phones.list().first(where: { $0.serial == serial }) { names.append(p.name); break }
+                    sleep(1)
+                }
+            } else if e != wifi {
+                names.append(Net.displayName(e))
+            }
+        }
+        let new = names.filter { !ticks.contains($0) }
+        if !new.isEmpty {
+            Aggregation.selected = ticks + new
+            log("plugged in: \(new.joined(separator: ", ")): joined")
+        }
+    }
+}
+
+// The devices with an IPv4 address (not the tunnel, loopback or Apple's own) and the phones adb sees, with their state:
+// cheap (no program but adb), so it is asked every second; a change means something was plugged in or pulled out.
+func deviceFingerprint() -> [String] {
+    var out: [String] = []
+    var ifap: UnsafeMutablePointer<ifaddrs>?
+    if getifaddrs(&ifap) == 0, let first = ifap {
+        var p: UnsafeMutablePointer<ifaddrs>? = first
+        while let a = p {
+            let name = String(cString: a.pointee.ifa_name)
+            if let addr = a.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET),
+               !["lo", "utun", "awdl", "llw", "anpi", "ap", "bridge", "gif", "stf"].contains(where: { name.hasPrefix($0) }) {
+                out.append(name)
+            }
+            p = a.pointee.ifa_next
+        }
+        freeifaddrs(ifap)
+    }
+    if let adb = Phones.adb {
+        for line in shell(adb, ["devices"], timeout: 5).out.components(separatedBy: "\n").dropFirst() {
+            let f = line.split(separator: "\t").map(String.init)
+            if f.count == 2 { out.append("adb:\(f[0])=\(f[1])") }
+        }
+    }
+    return Array(Set(out)).sorted()
+}
+
+extension Server {
     func handle(_ c: Int32) {
         var first: UInt8 = 0
         guard recv(c, &first, 1, MSG_PEEK) == 1 else { close(c); return }

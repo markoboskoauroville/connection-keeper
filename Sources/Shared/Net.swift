@@ -4,25 +4,34 @@
 import Foundation
 import CoreWLAN
 
+// v32 (request 49): ONE PIPE LEAKED PER CALL. Outside the stripe's run loop (ck-aggregate's threads, the keeper) nothing
+// drained the autorelease pool, so every Pipe stayed open: ck-aggregate held 2473 pipes after 6.5 h on 28.10.2026, then
+// could start no program at all (ifconfig, adb), found no line, and a plugged-in phone was never seen. Now the pool is
+// drained and both ends are closed on every call (measured: 3 descriptors before and after 120 calls, on a thread too).
+final class ShellOut { var data = Data() }
+
 @discardableResult
 func shell(_ path: String, _ args: [String], timeout: TimeInterval = 20) -> (status: Int32, out: String) {
-    let p = Process()
-    p.executableURL = URL(fileURLWithPath: path)
-    p.arguments = args
-    let pipe = Pipe()
-    p.standardOutput = pipe
-    p.standardError = pipe
-    do { try p.run() } catch { return (-1, "\(error)") }
-    let deadline = Date().addingTimeInterval(timeout)
-    var data = Data()
-    let reader = DispatchQueue(label: "shell.read")
-    let done = DispatchSemaphore(value: 0)
-    reader.async { data = pipe.fileHandleForReading.readDataToEndOfFile(); done.signal() }
-    while p.isRunning && Date() < deadline { usleep(50_000) }
-    if p.isRunning { p.terminate() }
-    _ = done.wait(timeout: .now() + 2)
-    p.waitUntilExit()
-    return (p.terminationStatus, String(decoding: data, as: UTF8.self))
+    autoreleasepool {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = pipe
+        let reading = pipe.fileHandleForReading
+        defer { try? reading.close(); try? pipe.fileHandleForWriting.close() }
+        do { try p.run() } catch { return (-1, "\(error)") }
+        let deadline = Date().addingTimeInterval(timeout)
+        let out = ShellOut()
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async { out.data = reading.readDataToEndOfFile(); done.signal() }
+        while p.isRunning && Date() < deadline { usleep(50_000) }
+        if p.isRunning { p.terminate() }
+        _ = done.wait(timeout: .now() + 2)
+        p.waitUntilExit()
+        return (p.terminationStatus, String(decoding: out.data, as: UTF8.self))
+    }
 }
 
 enum Probe {
