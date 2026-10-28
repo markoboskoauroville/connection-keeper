@@ -5,7 +5,7 @@
 	<key>Label</key><string>com.mantra.connectionkeeper</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Applications/Connection Keeper (Mantra).app/Contents/MacOS/connection-keeperd</string>
+		<string>/Applications/Network Aggregate Connection Keeper (Mantra).app/Contents/MacOS/connection-keeperd</string>
 	</array>
 	<key>RunAtLoad</key><true/>
 	<key>KeepAlive</key><true/>

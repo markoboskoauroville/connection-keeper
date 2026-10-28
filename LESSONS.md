@@ -172,3 +172,12 @@ JOINED, that takes every piece of the aggregation away without a password.
 - **Android has no /etc/resolv.conf**: a GOOS=linux binary must be given its resolvers (1.1.1.1, 8.8.8.8).
 - **curl through adb lies about uploads** (157 Mbit/s on 4G: adb's buffers); count a phone line on the phone's own /proc/net/dev (ccmni*, rmnet_data*, wlan*). And /proc/net/dev lines have no leading space for long names: split on ":" first.
 - **A test that starts its own server must wait until the server knows every line**: a phone's public-IP lookup takes ~9 s and the first joined test read 0.0.
+
+## 28.10.2026, v20: the rename
+
+- **The launchd plists in `launchd/` are templates**: `__HOME__` is filled in by `agent.sh`. Copied by hand into
+  ~/Library/LaunchAgents, the log path stays `__HOME__/…`, launchd cannot open it and the agent exits 78 (EX_CONFIG)
+  before its first line. Install them with `./agent.sh`, or `sed "s#__HOME__#$HOME#g"`.
+- **The tunnel's fail-open works for real** (first time seen): the server went away for the rename and ck-tunnel logged
+  "DOWN: the aggregation server does not answer; the Mac is straight on its lines"; the internet stayed, and the device
+  came back by itself 50 s later when the server answered again.

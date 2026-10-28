@@ -1,4 +1,4 @@
-# Connection Keeper (Mantra)
+# Network Aggregate Connection Keeper (Mantra)
 
 ```
 git clone https://github.com/markoboskoauroville/connection-keeper.git && cd connection-keeper && ./build.sh && ./agent.sh load

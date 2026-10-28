@@ -1,12 +1,12 @@
 #!/bin/bash
-# Builds Connection Keeper (Mantra).app (the stripe + the keeper inside it), signs it with
+# Builds Network Aggregate Connection Keeper (Mantra).app (the stripe + the keeper inside it), signs it with
 # "Mantra Apps", installs it in /Applications and zips it as N-connection-keeper-vN.zip.
 # It does NOT load the LaunchAgent: that is ./agent.sh load.
 set -euo pipefail
 cd "$(dirname "$0")"
 
 V=$(grep -E '^let CKVersion' Sources/Shared/Model.swift | grep -oE '[0-9]+')
-NAME="Connection Keeper (Mantra)"
+NAME="Network Aggregate Connection Keeper (Mantra)"
 APP="build/$NAME.app"
 
 rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

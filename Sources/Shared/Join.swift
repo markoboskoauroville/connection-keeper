@@ -19,8 +19,8 @@ enum WifiPassword {
 
     // Both programs of the bundle may read it without a prompt.
     static func trustedApps() -> [SecTrustedApplication] {
-        let paths = ["/Applications/Connection Keeper (Mantra).app",
-                     "/Applications/Connection Keeper (Mantra).app/Contents/MacOS/connection-keeperd"]
+        let paths = ["/Applications/Network Aggregate Connection Keeper (Mantra).app",
+                     "/Applications/Network Aggregate Connection Keeper (Mantra).app/Contents/MacOS/connection-keeperd"]
         return paths.compactMap { p in
             var t: SecTrustedApplication?
             return SecTrustedApplicationCreateFromPath(p, &t) == errSecSuccess ? t : nil

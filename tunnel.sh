@@ -10,7 +10,7 @@ set -euo pipefail
 LABEL=com.mantra.connectionkeeper.tunnel
 DIR=/Library/PrivilegedHelperTools/$LABEL
 PLIST=/Library/LaunchDaemons/$LABEL.plist
-APP="/Applications/Connection Keeper (Mantra).app"
+APP="/Applications/Network Aggregate Connection Keeper (Mantra).app"
 LOG=/Library/Logs/connection-keeper-tunnel.log
 
 case "${1:-status}" in

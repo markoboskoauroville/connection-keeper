@@ -27,7 +27,7 @@ enum Phones {
     static var binary: String? {
         let me = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let here = me.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/phone/ck-phone").path
-        return [here, "/Applications/Connection Keeper (Mantra).app/Contents/Resources/phone/ck-phone"]
+        return [here, "/Applications/Network Aggregate Connection Keeper (Mantra).app/Contents/Resources/phone/ck-phone"]
             .first { FileManager.default.fileExists(atPath: $0) }
     }
 

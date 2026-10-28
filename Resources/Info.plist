@@ -2,8 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key><string>Connection Keeper (Mantra)</string>
-	<key>CFBundleDisplayName</key><string>Connection Keeper (Mantra)</string>
+	<key>CFBundleName</key><string>Network Aggregate Connection Keeper (Mantra)</string>
+	<key>CFBundleDisplayName</key><string>Network Aggregate Connection Keeper (Mantra)</string>
 	<key>CFBundleIdentifier</key><string>com.mantra.connectionkeeper.stripe</string>
 	<key>CFBundleExecutable</key><string>Connection Keeper</string>
 	<key>CFBundleIconFile</key><string>AppIcon</string>

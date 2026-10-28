@@ -318,4 +318,8 @@ owner once it listens. Rebuilt; not restarted, its LaunchAgent was not loaded.
 
 > why don't I see Network Aggregate Application in my Star Menu Matrix, and rename it to Connection Aggregate Keeper so I can easily find it? Also, add Network in the name, so add everything so I can easily find it: Network Aggregate Connection Keeper
 
-**Status:** in progress.
+**Status:** done, 28.10.2026 (v20). The app is now /Applications/Network Aggregate Connection Keeper (Mantra).app
+(bundle ids unchanged, so its permissions stay); the old Connection Keeper (Mantra).app (v19) is removed. Both LaunchAgent
+plists point at the new path, and the aggregation server runs from it: v20, mantra + Nothing A142 (USB) joined,
+mantra_networkaggregate up. A star row "netaggregate" in Mac (STAR_SWIFT rows.json), so the star, Swift Matrix and the
+Star Menu's search find it under Network, Aggregate, Connection or Keeper.

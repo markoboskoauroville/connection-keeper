@@ -1,9 +1,9 @@
-// Connection Keeper (Mantra): one floating stripe that shows the connection, its speed and the
+// Network Aggregate Connection Keeper (Mantra): one floating stripe that shows the connection, its speed and the
 // keeper's last word, with a drop-down to switch by hand and a gear for the list of connections.
 import AppKit
 import CoreWLAN
 
-let appName = "Connection Keeper (Mantra)"
+let appName = "Network Aggregate Connection Keeper (Mantra)"
 
 enum DataBalanceNote { static let checkNow = Notification.Name("ConnectionKeeperCheckData") }
 

@@ -8,10 +8,10 @@ set -euo pipefail
 cd "$(dirname "$0")"
 LABEL=com.mantra.connectionkeeper
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-KEEPER="/Applications/Connection Keeper (Mantra).app/Contents/MacOS/connection-keeperd"
+KEEPER="/Applications/Network Aggregate Connection Keeper (Mantra).app/Contents/MacOS/connection-keeperd"
 AGG=com.mantra.connectionkeeper.aggregate
 AGGPLIST="$HOME/Library/LaunchAgents/$AGG.plist"
-AGGBIN="/Applications/Connection Keeper (Mantra).app/Contents/MacOS/ck-aggregate"
+AGGBIN="/Applications/Network Aggregate Connection Keeper (Mantra).app/Contents/MacOS/ck-aggregate"
 
 case "${1:-status}" in
   load)
