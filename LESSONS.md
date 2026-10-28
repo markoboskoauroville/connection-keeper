@@ -252,3 +252,9 @@ JOINED, that takes every piece of the aggregation away without a password.
   said they were gone). Look at what a process actually sees before believing that macOS deletes something.
 - `adb reconnect` flaps for under a second (between two looks); `adb -s <serial> usb` (adbd restarted on the phone)
   hides the phone for about 10 s and is the honest stand-in for an unplug.
+
+## 28.10.2026: launchctl bootout is not finished when it returns
+
+`sudo ./tunnel.sh install` stopped the old helper, copied the new one, then failed with "Bootstrap failed: 5:
+Input/output error": the old job was still being torn down. install now waits until `launchctl print` no longer finds
+the job and tries the bootstrap up to five times.

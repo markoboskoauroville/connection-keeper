@@ -19,12 +19,14 @@ case "${1:-status}" in
     [ -x "$APP/Contents/MacOS/ck-tunnel" ] || { echo "not built: ./build.sh first"; exit 1; }
     USERHOME=$(dscl . -read "/Users/${SUDO_USER:?run it with sudo from your own account}" NFSHomeDirectory | awk '{print $2}')
     launchctl bootout "system/$LABEL" 2>/dev/null || true
+    # bootout returns before the old helper is gone; a bootstrap then fails with "5: Input/output error" (28.10.2026)
+    for i in 1 2 3 4 5 6 7 8 9 10; do launchctl print "system/$LABEL" >/dev/null 2>&1 || break; sleep 0.5; done
     mkdir -p "$DIR"
     cp "$APP/Contents/MacOS/ck-tunnel" "$APP/Contents/Resources/tunnel/hev-socks5-tunnel" "$DIR/"
     chown -R root:wheel "$DIR"; chmod 755 "$DIR" "$DIR/ck-tunnel" "$DIR/hev-socks5-tunnel"
     sed -e "s|__DIR__|$DIR|g" -e "s|__HOME__|$USERHOME|g" -e "s|__LOG__|$LOG|g" "$(dirname "$0")/launchd/$LABEL.plist" > "$PLIST"
     chown root:wheel "$PLIST"; chmod 644 "$PLIST"
-    launchctl bootstrap system "$PLIST"
+    for i in 1 2 3 4 5; do launchctl bootstrap system "$PLIST" 2>/dev/null && break; echo "bootstrap: not yet, again in 1 s"; sleep 1; done
     sleep 2
     launchctl print "system/$LABEL" | grep -E '^\s*(state|pid) =' || true
     tail -3 "$LOG" 2>/dev/null || true ;;
