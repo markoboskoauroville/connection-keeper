@@ -269,3 +269,14 @@ plus the unit ("62.8 Mbit/s", " 698 kbit/s"), the test in parentheses in six ("(
 "888.8 GB left", and the status slot ("ALIVE ✓ 15:16:41") always reserved, empty when there is nothing to say (a
 longer message is cut with "…", whole in its tooltip). Measured: 813 points wide in 28 readings, with the status
 coming and going.
+
+## Faster switching between the lines (v31, 28.10.2026)
+
+Marko: *"optimize speed of switching between lines."* The aggregation server (Sources/Aggregate/Failover.swift):
+- every line checked every 3 s (a TCP handshake to 1.1.1.1:443, about 200 bytes; skipped while the line just carried a
+  new connection), dead after two misses, at once when its device loses its address; was a ping every 20 s;
+- a new connection races: the best line first, the next one after 1 s or a failure, the first to answer wins;
+- names kept 5 minutes; a lookup slower than 2 s uses the last answer, else asks 1.1.1.1 over TCP through a live line;
+  a UDP name lookup (port 53) whose line is dead goes over TCP through a live line (the phone carries TCP only).
+Measured: the phone's data off 30 s, a new connection through the server every 1.4 s: 44 of 44 answered, the slowest
+1.6 s; the phone seen dead after 7 s (43 s before), back 3 s after its data returned.

@@ -227,3 +227,14 @@ JOINED, that takes every piece of the aggregation away without a password.
 ## 28.10.2026, v30: an old balance never replaces a newer one
 
 - The stripe keeps the reading whose Telemach time is the newest; an older reply (an old SMS read again) is logged and ignored. The cause itself was fixed in router-sms v4.
+
+## 28.10.2026, v31: faster switching, and the tunnel that is not up in WIRES
+
+- Detection was the slow part (43 s): a 3 s TCP check with two misses sees a dead line in about 7 s; racing the next
+  line after 1 s hides even those seconds from a new connection.
+- **Since WIRES (14:18) mantra_networkaggregate has not stayed up**: every time ck-tunnel brings utun99 up, its 0/1 and
+  128/1 routes are deleted within 2.5 s by short-lived processes, four times, and the helper rests five minutes (81
+  times in its log since 19.10, every 5 minutes since 14:19 today). With the Mac's Wi-Fi on (14:07-14:18) it held.
+  Not Tailscale (paused for one attempt: the same). Suspect: the scoped default route the helper adds on the cable when
+  the cable is the Mac's only network (configd keeps it for itself). Changing the helper needs Marko's admin password.
+  Meanwhile the Mac goes straight out through the cable, and the server's improvements wait for the tunnel.

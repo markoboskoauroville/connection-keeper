@@ -37,6 +37,7 @@ final class Uplink {
     // BUSY, not open (18.10.2026: Chrome alone held 31 idle connections through the server and they counted as load):
     // the connections being dialled plus those that moved bytes in the last 5 s, by their client socket.
     var pending = 0, seen: [Int32: Date] = [:]
+    var lastGood = Date.distantPast, probing = false     // v31: the last proof it carries; a check under way
     func busy(_ now: Date) -> Int { pending + seen.values.filter { now.timeIntervalSince($0) < 5 }.count }
     init(iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?) {
         self.iface = iface; self.name = name; self.gateway = gateway; self.gatewayMAC = gatewayMAC; self.publicIP = publicIP
@@ -151,19 +152,15 @@ func ipv4(of iface: String) -> in_addr? {
 // bound to the device (IP_BOUND_IF) AND to its address, as `curl --interface` does: with IP_BOUND_IF alone four of
 // six connections hung until the timeout on 18.10.2026.
 func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 5) -> Int32? {
-    var hints = addrinfo(); hints.ai_socktype = SOCK_STREAM; hints.ai_family = AF_UNSPEC
-    var res: UnsafeMutablePointer<addrinfo>?
-    guard getaddrinfo(host, String(port), &hints, &res) == 0, let first = res else { return nil }
-    defer { freeaddrinfo(first) }
-    var addrs: [UnsafeMutablePointer<addrinfo>] = []
-    var p: UnsafeMutablePointer<addrinfo>? = first
-    while let a = p { addrs.append(a); p = a.pointee.ai_next }
-    addrs.sort { ($0.pointee.ai_family == AF_INET ? 0 : 1) < ($1.pointee.ai_family == AF_INET ? 0 : 1) }   // 4G hotspots often lack IPv6
+    // v31: the names through Resolver (kept 5 min, never a hang on a dead line's DNS); the port written into each address
+    var addrs = Resolver.addresses(host).map { d -> Data in var d = d; d[2] = UInt8(port >> 8); d[3] = UInt8(port & 255); return d }
+    func family(_ d: Data) -> Int32 { Int32(d[1]) }
+    addrs.sort { (family($0) == AF_INET ? 0 : 1) < (family($1) == AF_INET ? 0 : 1) }   // 4G hotspots often lack IPv6
     var index = if_nametoindex(iface)
-    for a in addrs {
-        let fd = socket(a.pointee.ai_family, SOCK_STREAM, 0)
+    for d in addrs {
+        let fd = socket(family(d), SOCK_STREAM, 0)
         if fd < 0 { continue }
-        let v6 = a.pointee.ai_family == AF_INET6
+        let v6 = family(d) == AF_INET6
         guard setsockopt(fd, v6 ? IPPROTO_IPV6 : IPPROTO_IP, v6 ? IPV6_BOUND_IF_ : IP_BOUND_IF_, &index, socklen_t(MemoryLayout<UInt32>.size)) == 0 else { close(fd); continue }
         if !v6, let src = ipv4(of: iface) {
             var sa = sockaddr_in(); sa.sin_family = sa_family_t(AF_INET); sa.sin_len = UInt8(MemoryLayout<sockaddr_in>.size); sa.sin_addr = src
@@ -172,7 +169,7 @@ func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 5)
         }
         let flags = fcntl(fd, F_GETFL)
         _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
-        var ok = connect(fd, a.pointee.ai_addr, a.pointee.ai_addrlen) == 0
+        var ok = d.withUnsafeBytes { connect(fd, $0.baseAddress!.assumingMemoryBound(to: sockaddr.self), socklen_t(d.count)) } == 0
         if !ok && errno == EINPROGRESS {
             var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
             if poll(&pfd, 1, timeout * 1000) == 1 {
@@ -238,7 +235,9 @@ final class Server {
     }
 
     // Out through the best line; if it cannot reach the host, through the next (a dead line is skipped this way too).
-    func open(_ host: String, _ port: UInt16, for c: Int32) -> (Int32, Uplink)? {
+    func open(_ host: String, _ port: UInt16, for c: Int32) -> (Int32, Uplink)? { race(host, port, for: c) }   // v31
+
+    func openOneByOne(_ host: String, _ port: UInt16, for c: Int32) -> (Int32, Uplink)? {
         // The line is reserved before dialling, so connections arriving together spread over the lines (they all saw
         // "0 active" and took the same line in the first joined test).
         var tried = Set<String>()
@@ -276,7 +275,9 @@ final class Server {
         // Answering at once: finding the lines takes 10-20 s (pings, public IPs), and with the virtual device the whole
         // Mac waits for the server after each restart. The first connections wait for the lines in open().
         Thread.detachNewThread { [self] in refresh() }
-        Thread.detachNewThread { [self] in while true { sleep(20); health() } }
+        // v31 (request 48): every line checked every 3 s (Failover.swift), not every 20 s
+        Resolver.lines = { [self] in lock.lock(); defer { lock.unlock() }; return lines }
+        Thread.detachNewThread { [self] in while true { sleep(3); checkLines() } }
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
         Thread.detachNewThread { [self] in
             var last = Date(), ticks = Aggregation.selected
@@ -389,6 +390,13 @@ final class Server {
                 }
                 dst.sin_port = (UInt16(buf[at]) << 8 | UInt16(buf[at + 1])).bigEndian
                 let data = at + 2
+                // v31: this association's line is dead and it is a name lookup: over TCP through a live line instead
+                lock.lock(); let lineAlive = u.alive; lock.unlock()
+                if !lineAlive && UInt16(bigEndian: dst.sin_port) == 53, let to = client {
+                    let query = Array(buf[data..<n]), origin = dst.sin_addr
+                    Thread.detachNewThread { [self] in dnsOverTCP(query, origin: origin, to: to, via: local) }
+                    continue
+                }
                 let sent = buf.withUnsafeBytes { b in withUnsafePointer(to: &dst) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { sendto(out, b.baseAddress! + data, n - data, 0, $0, size) } } }
                 if sent > 0 { up += sent }
                 if Date().timeIntervalSince(last) > 1 { var d = 0; flush(&up, &d); last = Date() }

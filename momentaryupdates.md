@@ -400,4 +400,7 @@ slot always reserved). Measured 813 points in 20 readings over 20 s and 8 more w
 (Asked after the cut test of 28.10.2026 morning: with mantra cut, every call timed out until a minute after it came
 back; the server took 43 s to see the line dead and did not try the other line.)
 
-**Status:** in work.
+**Status:** v31 built and measured 28.10.2026: the server sees a dead line in ~7 s (was 43 s), new connections race
+to the next line after 1 s, names never hang; phone data cut 30 s: 44 of 44 connections answered. Found on the way:
+in WIRES the system tunnel does not stay up (macOS removes its routes), so the Mac uses the cable alone; the fix is in
+the root helper and needs Marko's password.
