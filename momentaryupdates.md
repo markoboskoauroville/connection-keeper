@@ -341,3 +341,9 @@ rejoins mantra; only wired ticks stay). Left in WIRES, as he asked.
 **Status:** done 28.10.2026 (v22). Seen on the stripe: AX88179B and Nothing A142 green, mantra grey (gone since
 WIRES); with the phone unticked for 14 s it turned red ("not joined"), ticked again green. The ▾ menu uses the same
 three colours (not looked at on screen: opening it needs his mouse).
+
+## 28.10.2026, request 41 (one line: AGGREGATE CONNECTION with a small arrow)
+
+> I am confused with this aggregate connection. Nothing, phone, mantra. I understand mantra was not there. Please make this clear in the user interface. Put only "Aggregate Connection" with a small arrow. I can open and see what is aggregated, and that's called the user interface. I see only Wi-Fi, aggregate connection, and then I click on it to see what is in that folder. I kind of understand. The whole status line is basically one line, not one, two, three, four lines. That's it
+
+**Status:** in work.
