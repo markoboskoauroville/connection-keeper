@@ -314,3 +314,13 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
 - show_touches is never set (Marko 29.10.2026: "I don't need these tabs").
 - Proven from the stripe (AX button 9): off 26 s (blind), on 16 s, 2412 MHz; earlier by hand 2427 MHz. Both lines stayed
   joined. Hotspot left ON (Marko switched it on). The 5 GHz branch is untested (the phone stays on 2.4 GHz).
+
+## 29.10.2026 (v36): the menu bar icon, the LED
+
+- Sources/App/MenuBar.swift: NSStatusItem (SF "network", template) + attributedTitle from `menuBarRate` (Mbit/s, four
+  places with figure spaces); fed from `Stripe.setSpeed` (every path: one line, joined lines, tunnel). `internetUp()`:
+  aggregating → a joined line alive; else the keeper's lastCheck.online and a default route. `showLed()` in refresh():
+  the LED (`led`, last in the first row) and the icon tint (red when down).
+- Click = `menuBarClicked`: toggle the panel; MenuBarPrefs.stripeHidden (UserDefaults) survives restarts; applyOnTop
+  respects it. minimizeStripe now hides to the icon (no Dock / Command-Tab any more).
+- The status item windows are layer 25, 98 points wide; `screencapture -l <id>` shows them without his screen.

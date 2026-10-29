@@ -124,6 +124,8 @@ final class Dot: NSView {
 final class Stripe: NSObject {
     let panel: NSPanel
     let dot = Dot()
+    let led = Dot()                             // v36, request 53: the one LED, internet green / red (MenuBar.swift)
+    var menuItem: NSStatusItem?
     let connButton = NSButton(title: "…", target: nil, action: nil)
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
     var speedWidth: NSLayoutConstraint!
@@ -305,7 +307,7 @@ final class Stripe: NSObject {
         expand.setContentHuggingPriority(.required, for: .horizontal)
         expand.toolTip = "Open: see the lines (green connected, red here but not connected, grey gone)"
         // v28 (request 46: "Remove the LED next to the minimize circle"): no dot; its warning colours the word instead
-        let row = NSStackView(views: [minimize, gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok])
+        let row = NSStackView(views: [minimize, gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, led])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -350,6 +352,7 @@ final class Stripe: NSObject {
             StripePlace.save(self.panel)
         }
         panel.orderFrontRegardless()
+        setUpMenuBar()                    // v36: the icon with the speeds; hides the stripe again if he left it hidden
 
         showData()
         showWebSpeed()
@@ -438,6 +441,7 @@ final class Stripe: NSObject {
         let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: red ? Ink.red : Ink.green])
         t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: Ink.red]))
         speed.attributedStringValue = t
+        showMenuBarSpeed(down, up)
     }
 
     func speedTip() -> String {
@@ -507,7 +511,7 @@ final class Stripe: NSObject {
         if OnTop.on {
             panel.level = .statusBar
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-            panel.orderFrontRegardless()
+            if !MenuBarPrefs.stripeHidden { panel.orderFrontRegardless() }
         } else {
             panel.level = .normal
             panel.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
@@ -517,6 +521,7 @@ final class Stripe: NSObject {
     func refresh() {
         reading()
         applyAlert()
+        showLed()
         // v28: the dot is gone from the stripe; when it would have been red or amber the name says it in that colour
         if !red && !noOther && (dot.color == Ink.red || dot.color == Ink.amber) { connButton.contentTintColor = dot.color }
         fit()
@@ -576,11 +581,10 @@ final class Stripe: NSObject {
     // app becomes an ordinary one only while hidden, so Command-Tab and the Dock know it; the moment it is switched to,
     // the stripe is back where it was and the app leaves the Dock and Command-Tab again.
     @objc func minimizeStripe() {
-        minimizedFrame = panel.frame
+        // v36: the stripe goes to the menu bar icon; a click on the icon brings it back
+        MenuBarPrefs.stripeHidden = true
         panel.orderOut(nil)
-        NSApp.setActivationPolicy(.regular)
-        NSApp.hide(nil)
-        appendLog("\(logStamp()) stripe minimized: Command-Tab brings it back")
+        appendLog("\(logStamp()) stripe minimized to the menu bar icon")
     }
 
     func restoreStripe() {

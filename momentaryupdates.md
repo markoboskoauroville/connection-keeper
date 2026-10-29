@@ -449,4 +449,7 @@ the last good read (phone-tiles.json), and if the hotspot does not change the sa
 
 > After you finish this, you need to make my app, which is aggregating connections, appear as an icon on the menu bar in my system. It also needs to show current upload and download speeds. When I click on the icon, the user interface opens, and it has one LED: green if the internet is connected, and red if it's disconnected.
 
-**Status:** waiting 29.10.2026 (after the Gmail login on the password pages).
+**Status:** v36 29.10.2026: the network icon in the menu bar with the live internet speed, Mbit/s, download green and
+upload red, fixed slots (seen changing: 1.5/0.5, 0.1/0.2); it turns red when the internet is gone. A click shows or
+hides the stripe (remembered); the minimize circle now hides it to the icon. The one LED at the right end of the
+stripe's first row, green / red (seen green). The click on the icon is Marko's to try.
