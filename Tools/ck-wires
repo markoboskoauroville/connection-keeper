@@ -147,15 +147,30 @@ def phone_name(serial):
     return sh(serial, 'getprop ro.product.model').strip() or serial
 
 
+TILES = f'{SUPPORT}/phone-tiles.json'             # v35: where each phone's Hotspot tile was on the last good read
+
+
+def tile_cache():
+    try:
+        return json.load(open(TILES))
+    except Exception:
+        return {}
+
+
 def tap_hotspot_tile(serial):
     """The phone has no shell command for the hotspot (Android 16, Nothing): the Quick Settings tile is pressed.
-    Taps are shown on the screen (show_touches), so Marko sees where the Mac touches."""
-    sh(serial, 'settings put system show_touches 1')
+    No "show taps" (Marko 29.10.2026, request 52: "I don't need these tabs"): show_touches is never switched on.
+    v35: uiautomator often cannot read the panel ("could not get idle state": the status bar's live speed keeps it
+    redrawing, 11 s each try); then the tile is tapped where it was on the last good read. Returns (x, y, seen) or None."""
     sh(serial, 'input keyevent KEYCODE_WAKEUP')
     sh(serial, 'cmd statusbar expand-settings')
     time.sleep(1.2)
-    for attempt in range(3):
-        sh(serial, 'uiautomator dump /sdcard/ck-qs.xml >/dev/null')
+    size = sh(serial, 'wm size').strip().split()[-1] if sh(serial, 'wm size').strip() else '?'
+    key = f'{serial} {size}'
+    for attempt in range(2):
+        out = sh(serial, 'uiautomator dump /sdcard/ck-qs.xml')
+        if 'dumped to' not in out.lower():
+            continue
         xml = sh(serial, 'cat /sdcard/ck-qs.xml; rm -f /sdcard/ck-qs.xml')
         # only the tile is looked at: never the notifications (they are his)
         for node in re.findall(r'<node [^>]*>', xml):
@@ -164,25 +179,43 @@ def tap_hotspot_tile(serial):
                 b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node)
                 if b:
                     x1, y1, x2, y2 = map(int, b.groups())
-                    sh(serial, f'input tap {(x1 + x2) // 2} {(y1 + y2) // 2}')
+                    x, y = (x1 + x2) // 2, (y1 + y2) // 2
+                    c = tile_cache(); c[key] = [x, y]
+                    json.dump(c, open(TILES, 'w'), indent=1)
+                    sh(serial, f'input tap {x} {y}')
                     time.sleep(1.5)
                     sh(serial, 'cmd statusbar collapse')
-                    return True
-        sh(serial, 'input swipe 540 300 540 1400 300')   # the tile may be on the expanded page only
-        time.sleep(1)
+                    return x, y, True
+    if key in tile_cache():
+        x, y = tile_cache()[key]
+        sh(serial, f'input tap {x} {y}')
+        time.sleep(1.5)
+        sh(serial, 'cmd statusbar collapse')
+        return x, y, False
     sh(serial, 'cmd statusbar collapse')
-    return False
+    return None
 
 
 def hotspot(serial, on):
     if hotspot_on(serial) == on:
         return True
-    if not tap_hotspot_tile(serial):
+    tap = tap_hotspot_tile(serial)
+    if not tap:
         return False
     for _ in range(16):
         if hotspot_on(serial) == on:
             return True
         time.sleep(0.5)
+    if not tap[2]:
+        # tapped blind and the hotspot did not change: the spot was something else; tapped again to put it back
+        sh(serial, 'cmd statusbar expand-settings')
+        time.sleep(1.2)
+        sh(serial, f'input tap {tap[0]} {tap[1]}')
+        time.sleep(1.5)
+        sh(serial, 'cmd statusbar collapse')
+        log(f'hotspot tile tapped blind at {tap[0]},{tap[1]}: no change, tapped again to undo; the cache dropped')
+        c = tile_cache(); c = {k: v for k, v in c.items() if not k.startswith(serial)}
+        json.dump(c, open(TILES, 'w'), indent=1)
     return False
 
 

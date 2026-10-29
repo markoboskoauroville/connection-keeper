@@ -304,3 +304,13 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
   in Wires.swift. AX: the icons are buttons 8 and 9 of the stripe window ("share this line over Wi-Fi").
   **Not yet proven:** the phone's hotspot from the icon and its band (phone was locked); the frequency regex is a guess
   until seen with the hotspot on.
+
+## 29.10.2026, 05:26 (v35): the hotspot tile without uiautomator; no show taps
+
+- ck-wires `tap_hotspot_tile`: two uiautomator reads; a good read stores the tile's centre in phone-tiles.json under
+  "<serial> <wm size>"; a failed read ("could not get idle state", common while the status bar's speed redraws) taps the
+  stored spot. `hotspot()` taps the same spot again if the state did not change after a blind tap (undo) and drops the
+  cache. Nothing A142: tile at 418,656 (1084x2412).
+- show_touches is never set (Marko 29.10.2026: "I don't need these tabs").
+- Proven from the stripe (AX button 9): off 26 s (blind), on 16 s, 2412 MHz; earlier by hand 2427 MHz. Both lines stayed
+  joined. Hotspot left ON (Marko switched it on). The 5 GHz branch is untested (the phone stays on 2.4 GHz).

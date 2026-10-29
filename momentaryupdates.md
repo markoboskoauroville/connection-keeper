@@ -439,4 +439,8 @@ its band is read back after it comes on and a 5 GHz hotspot is reported red.
 
 > on the phone, hotspot is on. Please do the necessary testings. Please don't enable my tabs to see my tabs on the phone by default. I just turned it off, and it's now back on. I don't need these tabs, please
 
-**Status:** in progress 29.10.2026.
+**Status:** done 29.10.2026 (v35). Show taps off on the phone and never switched on again (ck-wires no longer sets
+show_touches). Tested: hotspot on 2427 MHz (2.4 GHz), sharing the mobile data, no auto-shutdown. From the stripe's
+icon: off ✓ then on ✓ (2412 MHz, 2.4 GHz). Found on the way: "on" failed because uiautomator cannot read the Quick
+Settings panel while it keeps redrawing ("could not get idle state", 11 s a try); now the tile is tapped where it was on
+the last good read (phone-tiles.json), and if the hotspot does not change the same spot is tapped again to undo.
