@@ -458,4 +458,6 @@ stripe's first row, green / red (seen green). The click on the icon is Marko's t
 
 > for my aggregation application, please speed color. Take a screenshot of the menu bar, and you will see another app which is doing the counting. Please copy the same UI
 
-**Status:** in progress 29.10.2026.
+**Status:** v37 29.10.2026: the other app is iStat Menus (network). Copied: a round dot, then two small lines, upload
+on top and download below, "0.02 Mb/s", right aligned, the menu bar's own white; our dot is the LED (green connected,
+red not). Compared side by side on screen. Ours reads lower: internet only (v10), iStat counts the house too.

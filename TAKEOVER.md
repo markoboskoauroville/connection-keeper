@@ -324,3 +324,7 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
 - Click = `menuBarClicked`: toggle the panel; MenuBarPrefs.stripeHidden (UserDefaults) survives restarts; applyOnTop
   respects it. minimizeStripe now hides to the icon (no Dock / Command-Tab any more).
 - The status item windows are layer 25, 98 points wide; `screencapture -l <id>` shows them without his screen.
+
+- v37 (request 54): the item is drawn like iStat Menus' network item (`showMenuBarSpeed` draws an NSImage: dot 9 pt,
+  5 pt gap, two lines of monospaced 9 pt, labelColor, right aligned in the width of "88.88 Mb/s"); upload on top.
+  `istatRate`: 2 decimals under 10, 1 under 100, none above. The dot redraws when internetUp() changes.

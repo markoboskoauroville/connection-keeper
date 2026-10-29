@@ -126,6 +126,8 @@ final class Stripe: NSObject {
     let dot = Dot()
     let led = Dot()                             // v36, request 53: the one LED, internet green / red (MenuBar.swift)
     var menuItem: NSStatusItem?
+    var lastMenuSpeed: (Double?, Double?) = (nil, nil)
+    var lastMenuUp: Bool?
     let connButton = NSButton(title: "…", target: nil, action: nil)
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
     var speedWidth: NSLayoutConstraint!

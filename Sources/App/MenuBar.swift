@@ -16,6 +16,13 @@ enum MenuBarPrefs {
     }
 }
 
+// iStat's way: "0.02 Mb/s", "12.3 Mb/s", "123 Mb/s"; "— Mb/s" while there is no reading.
+func istatRate(_ bytesPerSecond: Double?) -> String {
+    guard let b = bytesPerSecond else { return "— Mb/s" }
+    let m = b * 8 / 1_000_000
+    return (m < 10 ? String(format: "%.2f", m) : m < 100 ? String(format: "%.1f", m) : String(format: "%.0f", min(m, 9999))) + " Mb/s"
+}
+
 // Mbit/s in four places: " 0.0", " 9.9", "12.3", " 123", "1234" (figure spaces keep the width).
 func menuBarRate(_ bytesPerSecond: Double?) -> String {
     guard let b = bytesPerSecond else { return "\u{2007}\u{2007}\u{2007}—" }
@@ -28,13 +35,10 @@ extension Stripe {
     func setUpMenuBar() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let b = item.button {
-            let img = NSImage(systemSymbolName: "network", accessibilityDescription: "Network Aggregate Connection Keeper")
-            img?.isTemplate = true
-            b.image = img
-            b.imagePosition = .imageLeading
+            b.imagePosition = .imageOnly
             b.target = self
             b.action = #selector(menuBarClicked)
-            b.toolTip = "Network Aggregate Connection Keeper\nInternet speed now, Mbit/s: download green, upload red.\nClick: show or hide the stripe."
+            b.toolTip = "Network Aggregate Connection Keeper\nInternet speed now: upload on top, download below (as iStat Menus).\nThe dot: green connected, red disconnected. Click: show or hide the stripe."
         }
         menuItem = item
         showMenuBarSpeed(nil, nil)
@@ -45,12 +49,31 @@ extension Stripe {
         if MenuBarPrefs.stripeHidden { panel.orderOut(nil) }
     }
 
+    // v37 (request 54, Marko 29.10.2026: "Take a screenshot of the menu bar, and you will see another app which is
+    // doing the counting. Please copy the same UI"): iStat Menus' network item, drawn the same way: a round dot, then
+    // two small lines, upload on top and download below, "0.02 Mb/s", right aligned in a fixed width, in the menu bar's
+    // own grey. The dot is our LED.
     func showMenuBarSpeed(_ down: Double?, _ up: Double?) {
+        lastMenuSpeed = (down, up)
         guard let b = menuItem?.button else { return }
-        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        let t = NSMutableAttributedString(string: " " + menuBarRate(down), attributes: [.font: font, .foregroundColor: Ink.green])
-        t.append(NSAttributedString(string: " " + menuBarRate(up), attributes: [.font: font, .foregroundColor: Ink.red]))
-        b.attributedTitle = t
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
+        let lines = [istatRate(up), istatRate(down)]
+        let textW = ceil(("88.88 Mb/s" as NSString).size(withAttributes: [.font: font]).width)
+        let dot: CGFloat = 9, gap: CGFloat = 5, h: CGFloat = 22
+        let img = NSImage(size: NSSize(width: dot + gap + textW, height: h), flipped: false) { _ in
+            b.effectiveAppearance.performAsCurrentDrawingAppearance {
+                (self.internetUp() ? Ink.green : Ink.red).withAlphaComponent(0.85).setFill()
+                NSBezierPath(ovalIn: NSRect(x: 0, y: (h - dot) / 2, width: dot, height: dot)).fill()
+                let style = NSMutableParagraphStyle(); style.alignment = .right
+                let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor, .paragraphStyle: style]
+                (lines[0] as NSString).draw(in: NSRect(x: dot + gap, y: h / 2 - 1, width: textW, height: 11), withAttributes: attrs)
+                (lines[1] as NSString).draw(in: NSRect(x: dot + gap, y: 1, width: textW, height: 11), withAttributes: attrs)
+            }
+            return true
+        }
+        img.isTemplate = false
+        b.image = img
+        b.title = ""
     }
 
     // Green while the internet answers: aggregating, a joined line alive; otherwise the keeper's last check and a road
@@ -64,7 +87,7 @@ extension Stripe {
     func showLed() {
         let up = internetUp()
         led.color = up ? Ink.green : Ink.red
-        menuItem?.button?.contentTintColor = up ? nil : Ink.red      // the icon itself turns red when the internet is gone
+        if up != lastMenuUp { lastMenuUp = up; showMenuBarSpeed(lastMenuSpeed.0, lastMenuSpeed.1) }   // the dot follows
     }
 
     @objc func menuBarClicked() {
