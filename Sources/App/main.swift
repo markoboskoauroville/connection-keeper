@@ -146,6 +146,7 @@ final class Stripe: NSObject {
     let minimize = TrafficMinimize()            // v27, request 45: the macOS yellow minimize, on the left
     let grip = Grip()                           // v27, request 45: two vertical lines on the right, dragged to resize
     var wiresBusy = false
+    var sharing: Set<String> = []        // v34: the lines whose Wi-Fi share is switching
     var minimizedFrame: NSRect?
     var failoverWidth: NSLayoutConstraint!
     var checkedPipe: NSTextField!
@@ -354,7 +355,8 @@ final class Stripe: NSObject {
         showWebSpeed()
         refresh()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData(); self?.newDay() }
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData(); self?.newDay(); loadAgents(); if Wires.on { DispatchQueue.global().async { Wires.refreshShares() } } }
+        loadAgents()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.scanLines() }
         layoutLines()
         scanLines()
@@ -1016,7 +1018,8 @@ final class Stripe: NSObject {
             var answer: [String]?
             if aggregating {
                 Aggregation.requestRescan()
-                if Aggregation.status() == nil {      // the server is not there: started again, it takes the request
+                if Aggregation.status() == nil {      // the server is not there: loaded and started again, it takes the request
+                    for l in Aggregation.ensureAgents() { appendLog("\(logStamp()) RESCAN: \(l) was not loaded, loaded it") }
                     shell("/bin/launchctl", ["kickstart", "gui/\(getuid())/\(CKAggregateLabel)"])
                 }
                 for _ in 0..<60 { if let a = Aggregation.rescanAnswer(since: asked) { answer = a; break }; usleep(500_000) }
@@ -1063,6 +1066,13 @@ if CommandLine.arguments.contains("--check-join") {
         "; stored passwords: " + Config.load().connections.map { "\($0.name) \(WifiPassword.has($0.name) ? "yes" : "no")" }.joined(separator: ", ")
     print(line); appendLog(line)
     exit(r.ok ? 0 : 1)
+}
+
+// v33 (request 50): the keeper and the server loaded by the stripe when macOS did not load them at login.
+func loadAgents() {
+    DispatchQueue.global().async {
+        for l in Aggregation.ensureAgents() { appendLog("\(logStamp()) AGENT \(l) was not loaded (macOS Login Items: not allowed in the background?): loaded it") }
+    }
 }
 
 let app = NSApplication.shared

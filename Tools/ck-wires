@@ -10,6 +10,13 @@ Wi-Fi ... So we go wires only, and my brain will be happy").
     ck-wires wifi [--json]    back to what was on before WIRES (wires-state.json): the router's Wi-Fi, the Mac's
                               Wi-Fi, the phone's hotspot, the ticks
     ck-wires status [--json]  what each radio is now
+    ck-wires share <line> on|off [--json]
+                              v34 (request 51): in WIRES, one line's internet shared over Wi-Fi to the other devices
+                              in the house for a while: the cable's (AX88179B) through the TP-Link's 2.4 GHz radio
+                              (router-sms), a phone's (".. (USB)") through its hotspot (adb). The Mac's Wi-Fi stays
+                              off: the Wi-Fi is never for this computer. The state goes to wifi-share.json.
+    ck-wires share-status [--json]
+                              the phones' hotspots read again (quick), the router's as last switched
 
 The cable must carry the internet before anything is switched off: no working cable, no WIRES.
 Nothing here prints a password: the router's is typed by router-sms from its own file.
@@ -21,6 +28,7 @@ SUPPORT = f'{HOME}/Library/Application Support/connection-keeper'
 STATE = f'{SUPPORT}/wires-state.json'
 MODEFILE = f'{SUPPORT}/wires'                      # "wires" or "wifi": what the stripe's switch shows
 SELECTION = f'{SUPPORT}/aggregate-selection.json'
+SHARE = f'{SUPPORT}/wifi-share.json'               # v34: {"<line>": "on" | "off"}, what the stripe's Wi-Fi icons show
 LOG = f'{HOME}/Library/Logs/connection-keeper.log'
 ROUTER_SMS = f'{HOME}/.local/bin/router-sms'
 ADB = next((p for p in [f'{HOME}/Library/Android/sdk/platform-tools/adb', '/opt/homebrew/bin/adb', '/usr/local/bin/adb']
@@ -200,6 +208,92 @@ def aggregation_names():
         return None
 
 
+# ---------------------------------------------------------------- v34: one line shared over Wi-Fi (request 51)
+
+def shares():
+    try:
+        return json.load(open(SHARE))
+    except Exception:
+        return {}
+
+
+def set_share(name, state):
+    d = shares()
+    d[name] = state
+    json.dump(d, open(SHARE, 'w'), indent=1)
+
+
+def phone_locked(serial):
+    """The phone waits for its PIN (after a restart always): the hotspot tile does nothing until it is unlocked."""
+    return bool(re.search(r'\(current\).*deviceLocked=1', sh(serial, 'dumpsys trust')))
+
+
+def phone_line(serial):
+    """The phone's line name as the stripe shows it (Phones.swift): "<maker> <model> (USB)"."""
+    maker = sh(serial, 'getprop ro.product.manufacturer').strip()
+    return f'{maker} {phone_name(serial)} (USB)'.strip()
+
+
+def phone_for(name):
+    """The serial of the phone a line name like "Nothing A142 (USB)" stands for."""
+    for s in phones():
+        if phone_line(s) == name:
+            return s
+    return None
+
+
+def hotspot_mhz(serial):
+    """The hotspot's frequency while it is on (dumpsys wifi, the SoftAp info), or None."""
+    m = re.findall(r'(?:mFrequency|frequency)\s*=\s*(\d{4})', sh(serial, 'dumpsys wifi | grep -i -A3 softapinfo'))
+    return int(m[-1]) if m else None
+
+
+def share(name, on):
+    said, failed = [], []
+    word = 'on' if on else 'off'
+    if mac_wifi_on():                                   # never for this computer
+        mac_wifi(False)
+        said.append('Mac Wi-Fi off (the Wi-Fi is for the other devices)')
+    if name.endswith('(USB)'):
+        s = phone_for(name)
+        if not s:
+            return said + [f'{name}: no phone with that name on USB'], [name]
+        if hotspot_on(s) != on and phone_locked(s):
+            set_share(name, 'on' if hotspot_on(s) else 'off')
+            return said + [f'{name} is locked: unlock it once with the PIN, then press the Wi-Fi icon again'], ['phone locked']
+        ok = hotspot(s, on)
+        said.append(f'{name} hotspot ' + (word if ok else f'did not switch {word}'))
+        if not ok:
+            failed.append(f'{name} hotspot')
+        if on and ok:
+            time.sleep(2)
+            mhz = hotspot_mhz(s)
+            if mhz and mhz >= 5000:
+                said.append(f'{name} hotspot is on {mhz} MHz (5 GHz): set it to 2.4 GHz in the phone\'s hotspot settings')
+                failed.append('hotspot on 5 GHz')
+            elif mhz:
+                said.append(f'{name} hotspot on {mhz} MHz (2.4 GHz)')
+        set_share(name, 'on' if hotspot_on(s) else 'off')
+    elif name in [n for n, _, _ in cables()]:
+        r, err = router(word)
+        said.append('TP-Link Wi-Fi (2.4 GHz) ' + (r or 'not switched: ' + err))
+        if r != word:
+            failed.append('TP-Link Wi-Fi')
+        if r:
+            set_share(name, r)
+    else:
+        return said + [f'{name}: not a cable or a phone on USB'], [name]
+    return said, failed
+
+
+def share_status():
+    d = shares()
+    for s in phones():
+        d[phone_line(s)] = 'on' if hotspot_on(s) else 'off'
+    json.dump(d, open(SHARE, 'w'), indent=1)
+    return d
+
+
 # ---------------------------------------------------------------- the switch
 
 def status():
@@ -273,6 +367,7 @@ def wires():
     if not ok:
         failed.append('internet')
     open(MODEFILE, 'w').write('wires\n')
+    json.dump({k: 'off' for k in shares()}, open(SHARE, 'w'), indent=1)
     return said, failed
 
 
@@ -330,6 +425,21 @@ def main(argv):
         st = status()
         print(json.dumps(st, indent=None if as_json else 1))
         return 0
+    if cmd == 'share-status':
+        print(json.dumps(share_status(), indent=None if as_json else 1))
+        return 0
+    if cmd == 'share' and len([a for a in argv if not a.startswith('--')]) >= 3:
+        args = [a for a in argv[1:] if not a.startswith('--')]
+        name, want = ' '.join(args[:-1]), args[-1] == 'on'
+        t0 = time.time()
+        said, failed = share(name, want)
+        took = round(time.time() - t0, 1)
+        log(f'SHARE {name} {"on" if want else "off"} ({took} s): ' + '; '.join(said) + (' | FAILED: ' + ', '.join(failed) if failed else ''))
+        if as_json:
+            print(json.dumps({'mode': 'share', 'said': said, 'failed': failed, 'seconds': took, 'share': shares()}))
+        else:
+            print('\n'.join(said) + (f'\nFAILED: {", ".join(failed)}' if failed else '') + f'\n({took} s)')
+        return 1 if failed else 0
     if cmd not in ('wires', 'wifi'):
         print(__doc__.strip())
         return 2

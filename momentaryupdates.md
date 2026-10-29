@@ -419,10 +419,18 @@ needs Marko's admin password (`sudo ./tunnel.sh install`).
 
 > The second thing: my connection aggregation app has a refresh button, which is great, but it doesn't work. It needs to use ADB to get internet from my phone. Now I have plugged in my Notion phone 2A. It has internet. I pressed refresh, and nothing is happening. It doesn't recognize it through the wire. Please make ADB code inside the app to share internet through the cable and disable any radios. As we said, if it's wired mode, please test the phone. The phone is connected, but it doesn't share its internet. Make it an automatic ADB system.
 
-**Status:** in progress 29.10.2026.
+**Status:** done 29.10.2026 (v33, in the v34 build). The adb part was working (ck-phone answered with the phone's own IP
+86.33.92.221); the server was not running at all: the Mac and the phone had restarted at 04:44, and macOS has both
+LaunchAgents (keeper and server) marked "not allowed in the background" (Login Items), so neither loaded and ⟳ only
+waited 30 s. Now the stripe loads them itself, at start, every minute and on ⟳. Tested: server unloaded → back in 57 s by
+itself; unloaded again and ⟳ pressed → "2 lines alive" in 12 s. Radios all read off (Mac, TP-Link, phone hotspot).
 
 ## 29.10.2026, request 51 (a Wi-Fi icon on each line in WIRES: share it to the house for a while)
 
 > wired mode. Next, each connection builds the icon, which looks like a Wi-Fi icon, which is grayed out or active, so I can overwrite it inside the mode of wires. Temporarily, I can enable Wi-Fi sharing of any active connection by that button, and it can temporarily become also going through Wi-Fi and through cable. Wi-Fi is never for this computer; it is for other devices on the network. Wi-Fi is never 5 GHz; it's always 2.4 GHz. Please now put me this icon. I can do on/off for the radio, of course, for our TP-Link, which is controlled through USB. Not through USB, it is controlled through Firefox and the web interface with a famous password. This is how you enable it, and for the Nothing Phone, you enable hotspot, and that's all. Now we can do it remotely with Nothing Phone ADB. AX88179B through Firefox interface. Please bring the Wi-Fi icon so I can quickly enable/disable for other devices in the house
 
-**Status:** in progress 29.10.2026.
+**Status:** v34 29.10.2026: in WIRES every cable and phone row (open ▸) has a Wi-Fi icon at its left, grey off, green on,
+amber switching. The cable's turns the TP-Link's 2.4 GHz radio on/off (router-sms, 23 s / 14 s), a phone's its hotspot
+(adb, Quick Settings tile); the Mac's Wi-Fi stays off. Tested from the icon: AX88179B on (green, "WI-FI ON ✓"), off,
+router read back off, internet fine. The phone's: not yet, it waits for its PIN after the restart (the stripe says so);
+its band is read back after it comes on and a 5 GHz hotspot is reported red.

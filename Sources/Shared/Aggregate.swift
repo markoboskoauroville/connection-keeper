@@ -58,6 +58,24 @@ enum Aggregation {
         return ["mode one connection"] + said + ["server stopped"]
     }
 
+    // v33 (request 50): macOS can mark the two LaunchAgents "not allowed in the background" (Login Items), and then
+    // after a restart neither the keeper nor the server is loaded; a kickstart alone finds nothing. The stripe itself
+    // starts at login, so it loads them by hand: the keeper always, the server in aggregate mode. Returns what it loaded.
+    @discardableResult
+    static func ensureAgents() -> [String] {
+        let domain = "gui/\(getuid())"
+        var started: [String] = []
+        for label in [CKAgentLabel] + (aggregateMode ? [CKAggregateLabel] : []) {
+            guard shell("/bin/launchctl", ["print", "\(domain)/\(label)"]).status != 0 else { continue }
+            let plist = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/\(label).plist").path
+            shell("/bin/launchctl", ["enable", "\(domain)/\(label)"])
+            shell("/bin/launchctl", ["bootstrap", domain, plist])
+            shell("/bin/launchctl", ["kickstart", "\(domain)/\(label)"])
+            started.append(label)
+        }
+        return started
+    }
+
     // THE VIRTUAL DEVICE (v14, request 33): when the root helper ck-tunnel is installed, aggregation on means the device
     // utun99, shown as mantra_networkaggregate, carries all internet traffic, and macOS's proxy setting stays off; the
     // helper follows this flag. Without the helper, the proxy setting as in v13.

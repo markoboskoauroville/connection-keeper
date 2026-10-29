@@ -286,3 +286,21 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
   minutes (the "macOS deletes the routes" of v31). The fix is in Sources/Tunnel/main.swift and is in the v32 app;
   installing it needs `sudo ./tunnel.sh install` from this folder (or at least a restart of the daemon,
   `sudo launchctl kickstart -k system/com.mantra.connectionkeeper.tunnel`). Never proven until then.
+
+## State on 29.10.2026, 05:05 (v33 + v34): agents loaded by the stripe; a Wi-Fi icon per line
+
+- **v33 (request 50):** macOS Login Items had both LaunchAgents (com.mantra.connectionkeeper, .aggregate) as
+  "not allowed in the background" (`sfltool dumpbtm`: disallowed), so after the 04:44 restart nothing loaded them and ⟳
+  waited for a server that was not there. `Aggregation.ensureAgents()` (Shared/Aggregate.swift) bootstraps whichever is
+  not loaded (the server only in aggregate mode); called at the stripe's start, every 60 s (`loadAgents()` in main.swift),
+  on ⟳ when the server is silent, and in watchServer. Log lines "AGENT … loaded it" / "RESCAN: … loaded it".
+  Measured: unloaded → loaded back in 57 s; unloaded + ⟳ → both lines alive in 12 s. Marko can also allow both under
+  System Settings → General → Login Items → Allow in the Background.
+- **v34 (request 51):** `ck-wires share <line> on|off` and `share-status`; state in wifi-share.json. Cable line → router-sms
+  wifi (the TP-Link has only 2.4 GHz); phone line ("<maker> <model> (USB)") → hotspot tile; Mac Wi-Fi kept off; a locked
+  phone (`dumpsys trust` deviceLocked=1, always after a phone restart) is refused with "unlock it once" in 0.3 s instead of
+  tapping; after a hotspot comes on its frequency is read (`dumpsys wifi`, softapinfo) and ≥5000 MHz is a failure.
+  WIRES itself sets every share off. Icon: LineRow.wifi inside the lead view (no column moves), Stripe.showShare/toggleShare
+  in Wires.swift. AX: the icons are buttons 8 and 9 of the stripe window ("share this line over Wi-Fi").
+  **Not yet proven:** the phone's hotspot from the icon and its band (phone was locked); the frequency regex is a guess
+  until seen with the hotspot on.

@@ -18,6 +18,7 @@ final class LineRow {
     let view: NSStackView
     let dot = Dot()
     let lead = NSView()
+    let wifi = NSButton()           // v34 (request 51): in WIRES, this line shared over Wi-Fi to the house, in the lead's space
     let name: NSTextField
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
     let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
@@ -32,6 +33,15 @@ final class LineRow {
         dot.heightAnchor.constraint(equalToConstant: 12).isActive = true
         lead.translatesAutoresizingMaskIntoConstraints = false
         lead.widthAnchor.constraint(equalToConstant: leadWidth).isActive = true
+        wifi.image = NSImage(systemSymbolName: "wifi", accessibilityDescription: "share this line over Wi-Fi")
+        wifi.imagePosition = .imageOnly
+        wifi.isBordered = false
+        wifi.isHidden = true
+        wifi.translatesAutoresizingMaskIntoConstraints = false
+        lead.addSubview(wifi)
+        NSLayoutConstraint.activate([wifi.trailingAnchor.constraint(equalTo: lead.trailingAnchor, constant: 2),
+                                     wifi.centerYAnchor.constraint(equalTo: lead.centerYAnchor),
+                                     wifi.widthAnchor.constraint(equalToConstant: 16), wifi.heightAnchor.constraint(equalToConstant: 16)])
         speed.lineBreakMode = .byClipping
         speed.maximumNumberOfLines = 1
         speed.cell?.wraps = false
@@ -108,6 +118,7 @@ extension Stripe {
                 appendLog("\(logStamp()) AGGREGATION server does not answer on :\(aggPort): macOS's proxy off, the server restarted")
                 DispatchQueue.global().async {
                     Aggregation.systemProxy(false)
+                    Aggregation.ensureAgents()
                     shell("/bin/launchctl", ["kickstart", "-k", "gui/\(getuid())/\(CKAggregateLabel)"])
                 }
             }
@@ -136,6 +147,8 @@ extension Stripe {
             r.dot.isHidden = true                           // v28 (request 46): every line shown is connected; no dots
             r.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
             r.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
+            r.wifi.target = self
+            r.wifi.action = #selector(toggleShare(_:))
             lineRows[o.iface] = r
             column.insertArrangedSubview(r.view, at: column.arrangedSubviews.count - 1)
             changed = true
@@ -165,6 +178,7 @@ extension Stripe {
                 if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: true) }
                 continue
             }
+            showShare(r, o)
             r.info.textColor = Ink.dim
             r.name.toolTip = color == Ink.green ? "Green: connected, carrying the internet" : "Red: here, but not connected (tick it in ▾ to join it)"
             let line = agg?.lines.first { $0.device == o.iface }
