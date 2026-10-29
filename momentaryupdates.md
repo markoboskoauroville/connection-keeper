@@ -420,3 +420,9 @@ needs Marko's admin password (`sudo ./tunnel.sh install`).
 > The second thing: my connection aggregation app has a refresh button, which is great, but it doesn't work. It needs to use ADB to get internet from my phone. Now I have plugged in my Notion phone 2A. It has internet. I pressed refresh, and nothing is happening. It doesn't recognize it through the wire. Please make ADB code inside the app to share internet through the cable and disable any radios. As we said, if it's wired mode, please test the phone. The phone is connected, but it doesn't share its internet. Make it an automatic ADB system.
 
 **Status:** in progress 29.10.2026.
+
+## 29.10.2026, request 51 (a Wi-Fi icon on each line in WIRES: share it to the house for a while)
+
+> wired mode. Next, each connection builds the icon, which looks like a Wi-Fi icon, which is grayed out or active, so I can overwrite it inside the mode of wires. Temporarily, I can enable Wi-Fi sharing of any active connection by that button, and it can temporarily become also going through Wi-Fi and through cable. Wi-Fi is never for this computer; it is for other devices on the network. Wi-Fi is never 5 GHz; it's always 2.4 GHz. Please now put me this icon. I can do on/off for the radio, of course, for our TP-Link, which is controlled through USB. Not through USB, it is controlled through Firefox and the web interface with a famous password. This is how you enable it, and for the Nothing Phone, you enable hotspot, and that's all. Now we can do it remotely with Nothing Phone ADB. AX88179B through Firefox interface. Please bring the Wi-Fi icon so I can quickly enable/disable for other devices in the house
+
+**Status:** in progress 29.10.2026.
