@@ -444,3 +444,9 @@ show_touches). Tested: hotspot on 2427 MHz (2.4 GHz), sharing the mobile data, n
 icon: off ✓ then on ✓ (2412 MHz, 2.4 GHz). Found on the way: "on" failed because uiautomator cannot read the Quick
 Settings panel while it keeps redrawing ("could not get idle state", 11 s a try); now the tile is tapped where it was on
 the last good read (phone-tiles.json), and if the hotspot does not change the same spot is tapped again to undo.
+
+## 29.10.2026, request 53 (an icon in the menu bar with the live speeds; LED in the opened window)
+
+> After you finish this, you need to make my app, which is aggregating connections, appear as an icon on the menu bar in my system. It also needs to show current upload and download speeds. When I click on the icon, the user interface opens, and it has one LED: green if the internet is connected, and red if it's disconnected.
+
+**Status:** waiting 29.10.2026 (after the Gmail login on the password pages).
