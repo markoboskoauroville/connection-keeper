@@ -434,3 +434,9 @@ amber switching. The cable's turns the TP-Link's 2.4 GHz radio on/off (router-sm
 (adb, Quick Settings tile); the Mac's Wi-Fi stays off. Tested from the icon: AX88179B on (green, "WI-FI ON ✓"), off,
 router read back off, internet fine. The phone's: not yet, it waits for its PIN after the restart (the stripe says so);
 its band is read back after it comes on and a 5 GHz hotspot is reported red.
+
+## 29.10.2026, request 52 (test the hotspot; no "show taps" on the phone)
+
+> on the phone, hotspot is on. Please do the necessary testings. Please don't enable my tabs to see my tabs on the phone by default. I just turned it off, and it's now back on. I don't need these tabs, please
+
+**Status:** in progress 29.10.2026.
