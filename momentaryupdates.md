@@ -453,3 +453,9 @@ the last good read (phone-tiles.json), and if the hotspot does not change the sa
 upload red, fixed slots (seen changing: 1.5/0.5, 0.1/0.2); it turns red when the internet is gone. A click shows or
 hides the stripe (remembered); the minimize circle now hides it to the icon. The one LED at the right end of the
 stripe's first row, green / red (seen green). The click on the icon is Marko's to try.
+
+## 29.10.2026, request 54 (the menu bar speed: copy the other app's look)
+
+> for my aggregation application, please speed color. Take a screenshot of the menu bar, and you will see another app which is doing the counting. Please copy the same UI
+
+**Status:** in progress 29.10.2026.
