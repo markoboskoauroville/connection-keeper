@@ -414,3 +414,9 @@ plugged-in phone or cable is found within seconds and joined by itself (tested w
 both lines alive 19 s later). The cause: the server leaked a pipe per program run and had been blind since 17:58 (no
 line at all); fixed. The tunnel helper has the same leak, very likely why it "loses its routes"; installing the fix
 needs Marko's admin password (`sudo ./tunnel.sh install`).
+
+## 29.10.2026, request 50 (the phone over the cable by adb, automatically)
+
+> The second thing: my connection aggregation app has a refresh button, which is great, but it doesn't work. It needs to use ADB to get internet from my phone. Now I have plugged in my Notion phone 2A. It has internet. I pressed refresh, and nothing is happening. It doesn't recognize it through the wire. Please make ADB code inside the app to share internet through the cable and disable any radios. As we said, if it's wired mode, please test the phone. The phone is connected, but it doesn't share its internet. Make it an automatic ADB system.
+
+**Status:** in progress 29.10.2026.
