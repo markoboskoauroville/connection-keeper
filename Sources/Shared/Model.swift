@@ -1,7 +1,8 @@
 // Shared by the keeper (daemon) and the stripe (app): the version, the paths, the config, the state.
 import Foundation
 
-let CKVersion = 37
+// v38 (30.10.2026, Marko: "If permissions are not set, it needs to have text in the top right"): PERMISSIONS
+let CKVersion = 38
 
 // The phase the keeper writes when the current connection is dead and no other one works (v5).
 let noOtherPrefix = "NO OTHER CONNECTION"

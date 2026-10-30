@@ -149,6 +149,7 @@ final class Stripe: NSObject {
     let rescan = NSButton(title: "⟳", target: nil, action: nil)   // v32, request 49: find every line again, now
     let minimize = TrafficMinimize()            // v27, request 45: the macOS yellow minimize, on the left
     let grip = Grip()                           // v27, request 45: two vertical lines on the right, dragged to resize
+    let permissions = NSButton(title: "PERMISSIONS", target: nil, action: nil)   // v38: shown only while one is missing
     var wiresBusy = false
     var sharing: Set<String> = []        // v34: the lines whose Wi-Fi share is switching
     var minimizedFrame: NSRect?
@@ -309,7 +310,17 @@ final class Stripe: NSObject {
         expand.setContentHuggingPriority(.required, for: .horizontal)
         expand.toolTip = "Open: see the lines (green connected, red here but not connected, grey gone)"
         // v28 (request 46: "Remove the LED next to the minimize circle"): no dot; its warning colours the word instead
-        let row = NSStackView(views: [minimize, gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, led])
+        // v38 (Marko, 30.10.2026: "If permissions are not set, it needs to have text in the top right: Permissions"):
+        // the word at the right end of the stripe, amber, while a permission is missing; a click opens its page
+        permissions.isBordered = false
+        permissions.target = self
+        permissions.action = #selector(openPermissions)
+        permissions.font = .monospacedSystemFont(ofSize: 12, weight: .bold)
+        permissions.contentTintColor = NSColor(calibratedRed: 0xE8/255, green: 0xA3/255, blue: 0x3D/255, alpha: 1)
+        permissions.setContentHuggingPriority(.required, for: .horizontal)
+        permissions.toolTip = "Accessibility is off: joining a Wi-Fi through Control Centre cannot work. This opens its page in System Settings"
+        permissions.isHidden = Permissions.missing.isEmpty
+        let row = NSStackView(views: [minimize, gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, led, permissions])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -360,6 +371,12 @@ final class Stripe: NSObject {
         showWebSpeed()
         refresh()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
+        // v38: the permissions read again every 2 s; the stripe changes only when they changed
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let hide = Permissions.missing.isEmpty
+            if hide != self.permissions.isHidden { self.permissions.isHidden = hide; self.fit() }
+        }
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData(); self?.newDay(); loadAgents(); if Wires.on { DispatchQueue.global().async { Wires.refreshShares() } } }
         loadAgents()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.scanLines() }
@@ -582,6 +599,8 @@ final class Stripe: NSObject {
     // the dock ... coming back to [the] position"): no Dock miniaturizing. The stripe is taken off the screen and the
     // app becomes an ordinary one only while hidden, so Command-Tab and the Dock know it; the moment it is switched to,
     // the stripe is back where it was and the app leaves the Dock and Command-Tab again.
+    @objc func openPermissions() { Permissions.openMissing() }
+
     @objc func minimizeStripe() {
         // v36: the stripe goes to the menu bar icon; a click on the icon brings it back
         MenuBarPrefs.stripeHidden = true
@@ -1091,6 +1110,25 @@ app.run()
 
 extension CGFloat {
     func clamped(_ lo: CGFloat, _ hi: CGFloat, or fallback: CGFloat) -> CGFloat { self > 0 ? Swift.min(Swift.max(self, lo), hi) : fallback }
+}
+
+// v38: the permissions the stripe uses: Accessibility (joining a Wi-Fi through Control Centre's list, Join.swift).
+// Nothing is asked by itself, at --login or ever; only a click on PERMISSIONS asks (swift-apps.md).
+enum Permissions {
+    static let needed = ["Accessibility"]
+    static func allowed(_ p: String) -> Bool {
+        switch p {
+        case "Accessibility": return AXIsProcessTrusted()
+        default: return true
+        }
+    }
+    static var missing: [String] { needed.filter { !allowed($0) } }
+    // the system's own request once (it puts the app in the list), then the page of the first one missing
+    static func openMissing() {
+        guard let p = missing.first else { return }
+        if p == "Accessibility" { _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary) }
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_" + p)!)
+    }
 }
 
 final class FlippedView: NSView { override var isFlipped: Bool { true } }
