@@ -461,3 +461,9 @@ stripe's first row, green / red (seen green). The click on the icon is Marko's t
 **Status:** v37 29.10.2026: the other app is iStat Menus (network). Copied: a round dot, then two small lines, upload
 on top and download below, "0.02 Mb/s", right aligned, the menu bar's own white; our dot is the LED (green connected,
 red not). Compared side by side on screen. Ours reads lower: internet only (v10), iStat counts the house too.
+
+## 30.10.2026: PERMISSIONS at the top right
+
+> please make this in every application that needs some permission. If permissions are not set, it needs to have text in the top right: "Permissions." Then I click on it, and it opens me directly to my settings page where I need to set permissions.
+
+**Status:** requested 30.10.2026; being built (MANTRA_MANIFEST swift-apps.md, last section).
