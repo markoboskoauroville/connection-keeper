@@ -487,3 +487,10 @@ pressed through Accessibility: grey → green, the stripe from layer 0 to 25 (sc
 server and keeper stopped and disabled at login, ck-phone and adb forwards removed, passing files deleted; radios
 untouched; a login start after OFF quits) but **not pressed**: it takes the tunnel away, waiting for Marko. The stripe was
 hidden in the menu bar (stripeHiddenInMenuBar): unhidden and opened on the MacBook screen.
+
+## 31.10.2026: the aggregate shows two connections, three phones are on the wire
+> "Please check why my aggregate connection has only two connections. I have three connections at this moment. Three
+> phones. Where is the third one? Why doesn't exist? Everything is on wire. And my nothing phone 7 is not registered in
+> the app. What kind of app is that? It needs to check or ADB connected always, being ready for changes."
+
+**Status:** pending.
