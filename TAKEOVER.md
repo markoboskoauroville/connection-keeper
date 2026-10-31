@@ -339,5 +339,15 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
   DNS, 160 held, 300 silent clients, a line cut silent and dead) is worth keeping in Tools/ next time.
 - OnOff.swift: OFF = `OnOff.cleanUp()` then quit, `offByHand` set; a `--login` start then exits; a start by hand clears it
   and, if `resumeAggregate`, sets aggregate mode again. AX identifiers `on`, `off`, `top`.
-- Never proven: OFF pressed for real; ON bringing aggregation back; the restart gap (~7 s while the server finds its lines
+- Proven 31.10.2026 10:20 by Marko: OFF cleaned up in 2 s (tunnel down, server and keeper stopped, ck-phone stopped and
+  its forward removed); ON from the star brought aggregation back. Still open: the restart gap (~7 s while the server finds its lines
   after a restart, the first connections wait) could be shortened by keeping the last lines on disk.
+
+## 31.10.2026 (v40): no ticked line, only phones ticked
+
+- `discover(known:anyLine:)`: when none of the ticked lines is present, the server uses any line with internet (log "no
+  ticked line is here: using …"); before, the tunnel carried nothing until it rested (20 s without internet, 10:17).
+- Only phones ticked: the Mac's own non-phone lines join for UDP (a phone line is TCP only); UDP 0/10 → 10/10.
+- Phones.swift: the maker from getprop only when adb answered cleanly (a phone name had become "adb: device … not found").
+- The stress harness is kept in Tools/stress (stress.py, summary.py); it runs a test copy on 8957, never the real 8857.
+- utun99 is not a VPN: a local virtual card feeding ck-aggregate; Tailscale (utun1) carries only the tailnet beside it.

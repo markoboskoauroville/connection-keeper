@@ -476,7 +476,7 @@ red not). Compared side by side on screen. Ours reads lower: internet only (v10)
 combinations (cable, Wi-Fi, phone, every mix): launchd's 256 open files; at ~125 connections every new one failed and the
 server lost its lines. Fixed: 16384 files, 1500 clients, 15 s handshake deadline, true "active" counters, a phone on 4G its
 own line. After: 250 at once 250/250, 124 held 20/20, 300 silent clients 10/10, failover 0 failures; 1000 at once is the
-4G line's own limit (cable + phone 994/1000). Installed 09:58; the server restart cost ~7 s of internet.
+4G line's own limit (cable + phone 994/1000). Installed 09:58; the server restart cost ~7 s of internet. v40 (10:27): when no ticked line is present any line is used, and with only phones ticked the Mac's Wi-Fi carries UDP (0/10 → 10/10).
 
 ## 31.10.2026, request 56 (ON / OFF switch that cleans every trace, and TOP)
 
@@ -486,7 +486,7 @@ own line. After: 250 at once 250/250, 124 held 20/20, 300 silent clients 10/10, 
 pressed through Accessibility: grey → green, the stripe from layer 0 to 25 (screenshots). OFF built (tunnel flag, proxy,
 server and keeper stopped and disabled at login, ck-phone and adb forwards removed, passing files deleted; radios
 untouched; a login start after OFF quits) but **not pressed**: it takes the tunnel away, waiting for Marko. The stripe was
-hidden in the menu bar (stripeHiddenInMenuBar): unhidden and opened on the MacBook screen.
+hidden in the menu bar (stripeHiddenInMenuBar): unhidden and opened on the MacBook screen. OFF and ON pressed by Marko 10:20, both worked (OFF cleaned up in 2 s).
 
 ## 31.10.2026: the aggregate shows two connections, three phones are on the wire
 > "Please check why my aggregate connection has only two connections. I have three connections at this moment. Three
