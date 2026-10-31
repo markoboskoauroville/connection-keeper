@@ -275,3 +275,7 @@ the job and tries the bootstrap up to five times.
   or the copy cannot raise it (the first "fixed" run was capped at 85 by the test, not the server).
 - Measured: before, 250 at once 102–126 of 250, 124 held → 0 of 20 new; after, 250 of 250, held 20/20, 300 silent
   clients 10/10, failover 0 failures; 1000 at once is the 4G line's limit (one line 27–81 %, cable + phone 994/1000).
+- **v40 (10:17 the same day, from Marko's own OFF/ON test):** he pulled the cable and the Nothing and plugged in the Pixel;
+  no ticked line was left, the Mac's Wi-Fi was not ticked, so the server had no line and the tunnel carried nothing
+  for 20 s until it rested. Now: no ticked line here → every line; only phones ticked → the Mac's own line joins (a
+  phone carries no UDP). The phone's maker is read only from a good adb answer (an error text became a ticked name).
