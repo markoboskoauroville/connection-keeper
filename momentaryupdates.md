@@ -518,3 +518,9 @@ Pixel 7 (Android 17, one SIM, Telemach): Android asked "Shell would like to send
 > "Always at the start of the session check all connections free space on the sim cards how many gigabytes is left."
 
 (Every start: the data left on every SIM of every line — the router's and each phone's — in GB.)
+
+## 31.10.2026, request 57 (shorten the restart gap and the tunnel's step-aside time)
+
+Marko, after the closing listed the two open times (~7 s after a restart, ~20 s for the tunnel to step aside): *"Can this time be improved?"* Then, to the plan (last lines remembered on disk, the Mac's own route while no line is known; the helper testing every 4 s with 2 s to answer, a 1-minute rest): *"Yes, please build."*
+
+**Status:** in progress.
