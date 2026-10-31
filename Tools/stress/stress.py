@@ -93,7 +93,7 @@ async def hold(k):
 async def main():
     json.dump(names, open(SEL, "w"))
     open(FAULT, "w").close()
-    env = dict(os.environ, CK_AGG_PORT=str(PORT), CK_AGG_SELECTION=SEL, CK_AGG_TEST="1", CK_AGG_FAULT=FAULT)
+    env = dict(os.environ, CK_AGG_PORT=str(PORT), CK_AGG_SELECTION=SEL, CK_AGG_TEST="1", CK_AGG_FAULT=FAULT, CK_AGG_LINES=os.path.join(HERE, "lines-test.json"))
     log = open(os.path.join(HERE, f"server-{label}.log"), "w")
     # launchd gives its agents 256 open files (launchctl limit maxfiles): the test copy gets the same
     srv = subprocess.Popen(["/bin/sh", "-c", f'ulimit -Sn 256; exec "{BIN}" serve'], env=env, stderr=log, stdout=log)

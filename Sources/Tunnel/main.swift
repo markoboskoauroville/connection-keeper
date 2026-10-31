@@ -68,10 +68,14 @@ func serverAnswers() -> Bool {
 
 // TRAFFIC MUST PASS (request 34, 18.10.2026: after v14 Marko had no connection at all until he restarted the Mac; the
 // server answered on 127.0.0.1, so the old check saw nothing wrong while every page hung). While up, a real request
-// goes out through the device every 10 s: HEAD to Cloudflare's 1.1.1.1 and 1.0.0.1 by address (no DNS), any answer
-// within 4 s is a pass. Two misses in a row: the device comes down and stays down for five minutes.
+// goes out through the device every 4 s: HEAD to Cloudflare's 1.1.1.1 and 1.0.0.1 by address (no DNS), any answer
+// within 2.5 s is a pass. A miss is checked again at once; two misses in a row: the device comes down and rests a minute.
+// v41 (request 57): every 10 s with 4 s per address and a five-minute rest made a stuck server cost ~20 s of no
+// internet; now ~5–9 s. Faster than this would take the device down for a 4G line's own 2–3 s pauses.
 func trafficPasses() -> Bool {
-    for ip in ["1.1.1.1", "1.0.0.1"] {
+    let end = Date().addingTimeInterval(2.5)
+    func left() -> Int32 { Int32(max(0, end.timeIntervalSinceNow) * 1000) }
+    for ip in ["1.1.1.1", "1.0.0.1"] where left() > 0 {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { continue }
         defer { close(fd) }
@@ -81,7 +85,7 @@ func trafficPasses() -> Bool {
         if r != 0 {
             guard errno == EINPROGRESS else { continue }
             var p = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-            guard poll(&p, 1, 4000) == 1 else { continue }
+            guard poll(&p, 1, left()) == 1 else { continue }
             var err: Int32 = 0; var len = socklen_t(MemoryLayout<Int32>.size)
             getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len)
             guard err == 0 else { continue }
@@ -89,7 +93,7 @@ func trafficPasses() -> Bool {
         let req = "HEAD / HTTP/1.1\r\nHost: one.one.one.one\r\nConnection: close\r\n\r\n"
         _ = req.withCString { send(fd, $0, strlen($0), 0) }
         var p = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
-        guard poll(&p, 1, 4000) == 1 else { continue }
+        guard poll(&p, 1, left()) == 1 else { continue }
         var buf = [UInt8](repeating: 0, count: 64)
         if recv(fd, &buf, buf.count, 0) > 0 { return true }
     }
@@ -184,13 +188,13 @@ writeState("off")
 var misses = 0
 var blocked = 0, sinceUp = 0
 var readds: [Date] = []
-var restUntil = Date.distantPast         // after a fail-open the device rests five minutes before it may come up again
+var restUntil = Date.distantPast         // after a fail-open the device rests a minute before it may come up again
 
 func rest(_ why: String) {
     down(why)
-    restUntil = Date().addingTimeInterval(300)
+    restUntil = Date().addingTimeInterval(60)          // v41: a minute (was five): a false alarm costs little
     writeState("off resting: \(why)")
-    log("resting five minutes before trying again")
+    log("resting a minute before trying again")
 }
 
 while true {
@@ -210,12 +214,12 @@ while true {
         } else {
             addScopedDefaults()                        // a line that became the main one meanwhile
             sinceUp += 1
-            if sinceUp == 2 || sinceUp % 5 == 0 {
-                if trafficPasses() { blocked = 0 }
-                else {
+            if sinceUp % 2 == 0 {                      // every 4 s
+                for _ in 0..<2 {                       // a miss is tried again at once
+                    if trafficPasses() { blocked = 0; break }
                     blocked += 1
                     log("traffic did not pass through \(device) (\(blocked) of 2)")
-                    if blocked >= 2 { blocked = 0; rest("traffic does not pass through \(device)") }
+                    if blocked >= 2 { blocked = 0; rest("traffic does not pass through \(device)"); break }
                 }
             }
         }

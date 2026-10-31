@@ -117,6 +117,29 @@ enum Lines {
         return (lines, ignored)
     }
 
+    // THE LINES REMEMBERED (v41, request 57, Marko 31.10.2026: "Can this time be improved?"): a restart left the server
+    // with no line for ~7 s while it asked every device for its router and public address, and every connection of the
+    // Mac waited. The lines are written down whenever they change; at start those whose device still has an address
+    // carry traffic at once, and the full search replaces them a few seconds later (a gone one fails over in the race).
+    struct Saved: Codable { let iface, name: String; let gateway, gatewayMAC, publicIP: String?; let serial: String?; let port: UInt16?; let cellular: Bool }
+    static func remember(_ ls: [Uplink]) {
+        let all = ls.map { Saved(iface: $0.iface, name: $0.name, gateway: $0.gateway, gatewayMAC: $0.gatewayMAC, publicIP: $0.publicIP,
+                                 serial: $0.phone?.serial, port: $0.phone?.port, cellular: $0.cellular) }
+        try? JSONEncoder().encode(all).write(to: Aggregation.remembered)
+    }
+    static func remembered() -> [Uplink] {
+        guard let d = try? Data(contentsOf: Aggregation.remembered), let all = try? JSONDecoder().decode([Saved].self, from: d) else { return [] }
+        let w = savedSpeeds()
+        return all.compactMap { s in
+            if s.serial == nil && ipv4(of: s.iface) == nil { return nil }     // the device is gone or has no address
+            let u = Uplink(iface: s.iface, name: s.name, gateway: s.gateway, gatewayMAC: s.gatewayMAC, publicIP: s.publicIP)
+            if let serial = s.serial, let port = s.port { u.phone = Phone(serial: serial, name: s.name, port: port) }
+            u.cellular = s.cellular
+            if let m = w[u.publicIP ?? u.iface] { u.mbps = max(m, 0.5) }
+            return u
+        }
+    }
+
     // The last measured speed of each line (by its public IP, which follows the line across devices), from `test`.
     static func savedSpeeds() -> [String: Double] {
         guard let d = try? Data(contentsOf: Aggregation.speeds) else { return [:] }
@@ -257,6 +280,7 @@ final class Server {
         let before = lines.map { "\($0.name)/\($0.iface)" }, after = fresh.map { "\($0.name)/\($0.iface)" }
         lines = fresh; ignored = d.ignored
         lock.unlock()
+        if !fresh.isEmpty { Lines.remember(fresh) }
         if before != after {
             log("lines: \(d.lines.map { "\($0.name) (\($0.iface), \($0.publicIP ?? "?"), \(Int($0.mbps)) Mbit/s)" }.joined(separator: " + "))"
                 + (d.ignored.isEmpty ? "" : "; ignored, same line: " + d.ignored.map { "\($0.0.name) = \($0.1.name)" }.joined(separator: ", ")))
@@ -317,6 +341,18 @@ final class Server {
         if !aggTestCopy { Ports.record("aggregate", aggPort, udp: false, health: "/status") }
         // Answering at once: finding the lines takes 10-20 s (pings, public IPs), and with the virtual device the whole
         // Mac waits for the server after each restart. The first connections wait for the lines in open().
+        // v41: the remembered lines carry traffic from the first second; the search below replaces them.
+        // Nothing remembered (the first run): every device with an address and a router, without the slow public-address
+        // lookups, so the Mac's own roads carry traffic until the search has finished.
+        var saved = Lines.remembered(), how = "the remembered lines"
+        if saved.isEmpty {
+            how = "the devices with a router"
+            saved = Net.activeInterfaces().compactMap { i in Lines.gateway(i).map { Uplink(iface: i, name: Net.displayName(i), gateway: $0, gatewayMAC: nil, publicIP: nil) } }
+        }
+        if !saved.isEmpty {
+            lock.lock(); if lines.isEmpty { lines = saved }; lock.unlock()
+            log("started on \(how): \(saved.map { "\($0.name) (\($0.iface))" }.joined(separator: " + ")); finding them again")
+        }
         Thread.detachNewThread { [self] in refresh() }
         // v31 (request 48): every line checked every 3 s (Failover.swift), not every 20 s
         Resolver.lines = { [self] in lock.lock(); defer { lock.unlock() }; return lines }

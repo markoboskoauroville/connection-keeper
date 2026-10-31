@@ -15,6 +15,8 @@ let CKAggregateLabel = "com.mantra.connectionkeeper.aggregate"
 enum Aggregation {
     static let selection = aggEnv["CK_AGG_SELECTION"].map { URL(fileURLWithPath: $0) } ?? Paths.support.appendingPathComponent("aggregate-selection.json")
     static let speeds = Paths.support.appendingPathComponent("aggregate-speeds.json")
+    // v41 (request 57): the lines of the last run, so a restarted server carries traffic at once (CK_AGG_LINES: a test copy's own)
+    static let remembered = aggEnv["CK_AGG_LINES"].map { URL(fileURLWithPath: $0) } ?? Paths.support.appendingPathComponent("aggregate-lines.json")
     static let lastTest = Paths.support.appendingPathComponent("aggregate-test.json")
     static let changed = Notification.Name("ConnectionKeeperAggregationChanged")
 
