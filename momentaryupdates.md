@@ -505,3 +505,7 @@ program. Asked of Marko: replug the Pixel's cable, choose USB tethering / File t
 
 **Status:** pending: the balance SMS (as router-sms does for the router) sent from each phone on the wire, on the
 Telemach SIM (SIM 1 where there are two), the answer read, the data left shown for every line.
+
+> "Always at the start of the session check all connections free space on the sim cards how many gigabytes is left."
+
+(Every start: the data left on every SIM of every line — the router's and each phone's — in GB.)
