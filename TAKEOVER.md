@@ -328,3 +328,16 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
 - v37 (request 54): the item is drawn like iStat Menus' network item (`showMenuBarSpeed` draws an NSImage: dot 9 pt,
   5 pt gap, two lines of monospaced 9 pt, labelColor, right aligned in the width of "88.88 Mb/s"); upload on top.
   `istatRate`: 2 decimals under 10, 1 under 100, none above. The dot redraws when internetUp() changes.
+
+## 31.10.2026 (v39): the outage fix, ON OFF TOP
+
+- ck-aggregate raises its open files to 16384 (`openFiles`), serves at most 1500 clients (`maxClients`, refused at once
+  beyond), gives a client 15 s to say where it goes (`deadline`), keeps a line's Uplink object across refreshes. A phone
+  whose `cmd wifi status` says it is not on a Wi-Fi is `cellular` and never "the same line". Why: LESSONS 31.10.2026.
+- Test copy: `CK_AGG_PORT=8957 CK_AGG_SELECTION=<json> CK_AGG_TEST=1 CK_AGG_FAULT=<file> ck-aggregate serve`; the fault
+  file holds `<line name>=silent|dead`. The harness used on 31.10.2026 (stress.py: bursts 20/100/250/1000, by name, UDP
+  DNS, 160 held, 300 silent clients, a line cut silent and dead) is worth keeping in Tools/ next time.
+- OnOff.swift: OFF = `OnOff.cleanUp()` then quit, `offByHand` set; a `--login` start then exits; a start by hand clears it
+  and, if `resumeAggregate`, sets aggregate mode again. AX identifiers `on`, `off`, `top`.
+- Never proven: OFF pressed for real; ON bringing aggregation back; the restart gap (~7 s while the server finds its lines
+  after a restart, the first connections wait) could be shortened by keeping the last lines on disk.

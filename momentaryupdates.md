@@ -472,10 +472,18 @@ red not). Compared side by side on screen. Ours reads lower: internet only (v10)
 
 > Please let's work on the aggregate connection now. My application. What is the issue? Last time this application bugged out the connection on my computer. I couldn't use any internet. So I flushed DNS cache and then that it was sold through application on my Mac called CleanMyMac. that's how I was doing it so there are some bugs in this application aggregate connections and now I have three connections addedSo please check all debugging phones and TP link and do stress test. Test all possible combinations of networks and don't disturb my connection with the server now. Mac must be on the Wi-Fi and this is also your network for talking with Claude and solving the problems. and use some other way of testing how to stress this this aggregation program to work with three connections one connections two connections any combinations and don't turn off Wi-Fi on TP-Link so we can continue working
 
-**Status:** started 31.10.2026, 09:15.
+**Status:** done 31.10.2026 (v39). The outage found and reproduced on a test copy (CK_AGG_PORT 8957), all seven
+combinations (cable, Wi-Fi, phone, every mix): launchd's 256 open files; at ~125 connections every new one failed and the
+server lost its lines. Fixed: 16384 files, 1500 clients, 15 s handshake deadline, true "active" counters, a phone on 4G its
+own line. After: 250 at once 250/250, 124 held 20/20, 300 silent clients 10/10, failover 0 failures; 1000 at once is the
+4G line's own limit (cable + phone 994/1000). Installed 09:58; the server restart cost ~7 s of internet.
 
 ## 31.10.2026, request 56 (ON / OFF switch that cleans every trace, and TOP)
 
 > Like we have in our manifest already, every application, including this one, has on-off switch, and off we going to clean up all traces from this app, and we have on top, which is just the word top. So please build this in the interface.We apply this rule to the Mantra sound recorder and read from that repository and do the same in this user interface.
 
-**Status:** started 31.10.2026.
+**Status:** done 31.10.2026 (v39, Sources/App/OnOff.swift): ON OFF after the minimize circle, TOP before the LED. TOP
+pressed through Accessibility: grey → green, the stripe from layer 0 to 25 (screenshots). OFF built (tunnel flag, proxy,
+server and keeper stopped and disabled at login, ck-phone and adb forwards removed, passing files deleted; radios
+untouched; a login start after OFF quits) but **not pressed**: it takes the tunnel away, waiting for Marko. The stripe was
+hidden in the menu bar (stripeHiddenInMenuBar): unhidden and opened on the MacBook screen.
