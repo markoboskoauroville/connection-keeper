@@ -69,9 +69,9 @@ func serverAnswers() -> Bool {
 // TRAFFIC MUST PASS (request 34, 18.10.2026: after v14 Marko had no connection at all until he restarted the Mac; the
 // server answered on 127.0.0.1, so the old check saw nothing wrong while every page hung). While up, a real request
 // goes out through the device every 4 s: HEAD to Cloudflare's 1.1.1.1 and 1.0.0.1 by address (no DNS), any answer
-// within 2.5 s is a pass. A miss is checked again at once; two misses in a row: the device comes down and rests a minute.
+// within 2.5 s is a pass. A miss is checked again 2 s later; two misses in a row: the device comes down and rests a minute.
 // v41 (request 57): every 10 s with 4 s per address and a five-minute rest made a stuck server cost ~20 s of no
-// internet; now ~5–9 s. Faster than this would take the device down for a 4G line's own 2–3 s pauses.
+// internet; now ~7–11 s. Faster than this would take the device down for a 4G line's own 2–3 s pauses.
 func trafficPasses() -> Bool {
     let end = Date().addingTimeInterval(2.5)
     func left() -> Int32 { Int32(max(0, end.timeIntervalSinceNow) * 1000) }
@@ -214,12 +214,15 @@ while true {
         } else {
             addScopedDefaults()                        // a line that became the main one meanwhile
             sinceUp += 1
-            if sinceUp % 2 == 0 {                      // every 4 s
-                for _ in 0..<2 {                       // a miss is tried again at once
-                    if trafficPasses() { blocked = 0; break }
+            // Every 4 s; after a miss, again on the next round (2 s), not at once: at 13:33:22 on 31.10.2026 the Pixel's
+            // cable dropped in the middle of a check, the immediate retry went to the same dying line before the server
+            // had marked it dead, and the device stepped aside for nothing.
+            if sinceUp % 2 == 0 || blocked > 0 {
+                if trafficPasses() { blocked = 0 }
+                else {
                     blocked += 1
                     log("traffic did not pass through \(device) (\(blocked) of 2)")
-                    if blocked >= 2 { blocked = 0; rest("traffic does not pass through \(device)"); break }
+                    if blocked >= 2 { blocked = 0; rest("traffic does not pass through \(device)") }
                 }
             }
         }

@@ -351,3 +351,16 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
 - Phones.swift: the maker from getprop only when adb answered cleanly (a phone name had become "adb: device … not found").
 - The stress harness is kept in Tools/stress (stress.py, summary.py); it runs a test copy on 8957, never the real 8857.
 - utun99 is not a VPN: a local virtual card feeding ck-aggregate; Tailscale (utun1) carries only the tailnet beside it.
+
+## 31.10.2026 (v41, v42): the restart gap and the tunnel's step-aside (request 57)
+
+- ck-aggregate writes its lines to `aggregate-lines.json` (`Lines.remember`) whenever they change; at start it carries
+  traffic on them at once (`Lines.remembered`, a device without an address left out; a phone by its serial and port),
+  else on every device with a router, and the full search replaces them. Test copy: `CK_AGG_LINES`. Measured: test copy
+  6.2 s (v40) → 0.16 s; the live server 0.38 s after `launchctl kickstart -k`. A remembered phone that is gone costs nothing.
+- ck-tunnel (needs `sudo ./tunnel.sh install`): a real request every 4 s, 2.5 s in all to answer, a miss checked again
+  on the next round (2 s), two misses → down, rest **1 minute** (was 5). Stuck server: ~7–11 s (was ~20).
+- v41's helper retried a miss at once: at 13:33:22 the Pixel's cable dropped in the middle of a check, both tries hit
+  the dying line, the device stepped aside for a minute. v42 waits a round. **v42's helper is built, not yet installed**
+  (Marko's password): the v41 helper runs meanwhile.
+- The Pixel 7 drops off USB again and again on 31.10.2026 (13:22, 13:33): the cable (the other session found it charge-only).

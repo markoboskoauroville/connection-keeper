@@ -523,4 +523,6 @@ Pixel 7 (Android 17, one SIM, Telemach): Android asked "Shell would like to send
 
 Marko, after the closing listed the two open times (~7 s after a restart, ~20 s for the tunnel to step aside): *"Can this time be improved?"* Then, to the plan (last lines remembered on disk, the Mac's own route while no line is known; the helper testing every 4 s with 2 s to answer, a 1-minute rest): *"Yes, please build."*
 
-**Status:** in progress.
+**Status:** done 31.10.2026, v41 + v42. Restart gap 6.2 s → 0.16 s (test copy), 0.38 s live (the lines remembered).
+The tunnel steps aside in ~7–11 s instead of ~20 and rests a minute; v41's helper installed by Marko 13:28, it stepped
+aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v42, whose helper waits for his password.

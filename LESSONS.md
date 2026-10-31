@@ -279,3 +279,10 @@ the job and tries the bootstrap up to five times.
   no ticked line was left, the Mac's Wi-Fi was not ticked, so the server had no line and the tunnel carried nothing
   for 20 s until it rested. Now: no ticked line here → every line; only phones ticked → the Mac's own line joins (a
   phone carries no UDP). The phone's maker is read only from a good adb answer (an error text became a ticked name).
+
+## 31.10.2026 (v41, v42): a retry must not hit the same dying line
+
+- The restart gap was the search itself (router, ARP and a public-address curl per device, ~6 s); remembering the lines
+  and starting on them makes it 0.2–0.4 s. A remembered line that is gone is harmless: the race moves on in ≤1 s.
+- A health check retried at once tests the same broken path twice in the same second; one dropped cable became two
+  misses and a needless fail-open (13:33:22). A retry waits long enough for the server's own line check (3 s rounds).
