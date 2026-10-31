@@ -78,9 +78,9 @@ enum Lines {
     // A device stays a line while it has an address and a router; whether it answers is the health check's word (a
     // single lost ping on a full 4G line dropped Something for a minute in the middle of the first joined test,
     // 18.10.2026). `known`: the public IPs found before, kept when a lookup fails under load.
-    static func discover(known: [String: String] = [:]) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
+    static func discover(known: [String: String] = [:], anyLine: Bool = false) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
         let wifi = Net.wifiInterface()
-        let ticked = Set(Aggregation.selected)
+        let ticked = anyLine ? [] : Set(Aggregation.selected)
         var found: [Uplink] = []
         for i in Net.activeInterfaces() {
             guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
@@ -100,6 +100,20 @@ enum Lines {
         }
         let w = savedSpeeds()
         for u in lines { if let m = w[u.publicIP ?? u.iface] { u.mbps = max(m, 0.5) } }
+        // NO TICKED LINE HERE (31.10.2026, 10:17: Marko pulled the cable and the Nothing and plugged in the Pixel; the Mac's
+        // Wi-Fi was not ticked, the server had no line, and the tunnel carried nothing for 20 s until it stepped aside):
+        // then every line with a router or a phone, so the Mac is never left without a road while the tunnel is up.
+        if lines.isEmpty && !ticked.isEmpty {
+            let any = discover(known: known, anyLine: true)
+            if !any.lines.isEmpty { log("no ticked line is here: using \(any.lines.map(\.name).joined(separator: " + ")) until one comes back") }
+            return any
+        }
+        // ONLY PHONES TICKED (31.10.2026): a phone carries TCP only, so calls, QUIC and other UDP had no road at all;
+        // the Mac's own lines (Wi-Fi, cable) join so UDP has one.
+        if !anyLine && !lines.isEmpty && lines.allSatisfy({ $0.phone != nil }) {
+            let mac = discover(known: known, anyLine: true).lines.filter { $0.phone == nil && !lines.contains(where: $0.sameLine) }
+            if !mac.isEmpty { log("only phones ticked: \(mac.map(\.name).joined(separator: " + ")) joins for UDP"); return (lines + mac, ignored) }
+        }
         return (lines, ignored)
     }
 

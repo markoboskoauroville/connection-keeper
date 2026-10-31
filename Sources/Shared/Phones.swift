@@ -47,7 +47,11 @@ enum Phones {
         }
         serials.sort { $0.0 < $1.0 }
         return serials.enumerated().map { i, s in
-            let maker = shell(adb, ["-s", s.0, "shell", "getprop", "ro.product.manufacturer"], timeout: 5).out.trimmingCharacters(in: .whitespacesAndNewlines)
+            // the maker only from a good answer: adb's error text ("adb: device '…' not found", a phone still waking) once
+            // became part of the name and was ticked under it (31.10.2026)
+            let r = shell(adb, ["-s", s.0, "shell", "getprop", "ro.product.manufacturer"], timeout: 5)
+            let said = r.out.trimmingCharacters(in: .whitespacesAndNewlines)
+            let maker = r.status == 0 && !said.contains(" ") && !said.lowercased().hasPrefix("adb") ? said : ""
             let name = (maker.isEmpty || s.1.lowercased().hasPrefix(maker.lowercased()) ? s.1 : "\(maker) \(s.1)") + " (USB)"
             return Phone(serial: s.0, name: name, port: firstPort + UInt16(i))
         }

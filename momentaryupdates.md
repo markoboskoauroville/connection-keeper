@@ -498,6 +498,9 @@ hidden in the menu bar (stripeHiddenInMenuBar): unhidden and opened on the MacBo
 Pixel's wireless adb went offline 09:09 and left 09:28 (the log); now no mDNS, no ping at 192.168.1.102. The app watches
 USB and adb every second (deviceFingerprint) and logged every change; a phone not on the bus cannot be seen by any
 program. Asked of Marko: replug the Pixel's cable, choose USB tethering / File transfer.
+Found 10:18: the Pixel's own cable is charge-only (on the Nothing's cable the Pixel enumerated at once and the aggregate
+joined it in 2 s, "Google Pixel 7 (USB): forwarded to 127.0.0.1:8860"). At 10:14 the AX88179B adapter was unplugged.
+Left: a data cable for the Nothing, the AX88179B back in.
 
 ## 31.10.2026: the data left on every phone's SIM, by SMS
 > "Please for aggregate connection you can send SMS messages from all these phones and check how much space is left on
@@ -509,6 +512,8 @@ phone, the reply read with `content query`). First run: AX88179B (router) 88.9 G
 On the Nothing the Telemach SIM is in the second slot (bonbon in the first). Saved in Application Support/
 connection-keeper/sim-balances.json. Every Claude Code session starts with `sim-balance --brief` (SessionStart hook,
 added by the update-config skill): the saved figures if under 3 h old, else a fresh check (about 20 s).
+Pixel 7 (Android 17, one SIM, Telemach): Android asked "Shell would like to send a message to 13880"; Marko allowed it
+(remembered); then silent: 99.4 GB left (10:25). Android 16 (the Nothing) sends without asking.
 
 > "Always at the start of the session check all connections free space on the sim cards how many gigabytes is left."
 
