@@ -498,3 +498,10 @@ hidden in the menu bar (stripeHiddenInMenuBar): unhidden and opened on the MacBo
 Pixel's wireless adb went offline 09:09 and left 09:28 (the log); now no mDNS, no ping at 192.168.1.102. The app watches
 USB and adb every second (deviceFingerprint) and logged every change; a phone not on the bus cannot be seen by any
 program. Asked of Marko: replug the Pixel's cable, choose USB tethering / File transfer.
+
+## 31.10.2026: the data left on every phone's SIM, by SMS
+> "Please for aggregate connection you can send SMS messages from all these phones and check how much space is left on
+> each SIM card. Please do that. If they have two SIM cards you need to detect TeleMach 1."
+
+**Status:** pending: the balance SMS (as router-sms does for the router) sent from each phone on the wire, on the
+Telemach SIM (SIM 1 where there are two), the answer read, the data left shown for every line.
