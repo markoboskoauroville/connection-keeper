@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""sim-balance: the data left on the SIM of every line of the aggregate connection, in GB.
+
+Marko, 31.10.2026: "for aggregate connection you can send SMS messages from all these phones and check how much space
+is left on each SIM card ... If they have two SIM cards you need to detect TeleMach", then "Always at the start of the
+session check all connections free space on the sim cards how many gigabytes is left."
+
+  * the router (TP-Link, its Telemach SIM): `router-sms balance --json` (ROUTER_SMS; one router session at a time);
+  * every phone on the USB cable (adb, state "device"): its Telemach SIM found by its carrier (TM / Telemach) in
+    `dumpsys isub`, STANJE sent to Telemach's free 13880 from that SIM through Android's own SMS service
+    (`service call isms 5`, works on a locked phone, no app opened), the reply read from the inbox (`content query`)
+    and parsed as router-sms does ("iskoristili ste X od ukupno Y MB").
+
+    sim-balance            check every line now (SMS), print one line each, save sim-balances.json
+    sim-balance --last     the last results, no SMS
+    sim-balance --brief    for the session start: the last results if younger than 3 hours, else check now
+    --json                 machine output
+"""
+import json, os, re, subprocess, sys, time
+
+ADB = os.path.expanduser("~/Library/Android/sdk/platform-tools/adb")
+ROUTER = os.path.expanduser("~/Developer/ROUTER_SMS/router-sms")
+STATE = os.path.expanduser("~/Library/Application Support/connection-keeper/sim-balances.json")
+REPLY = re.compile(r'do (\d{1,2})\.(\d{1,2})\.(\d{4}) u (\d{1,2}):(\d{2}) iskoristili ste ([\d.]+) od ukupno ([\d.]+) MB', re.I)
+FRESH = 3 * 3600
+
+
+def run(cmd, serial=None, timeout=30):
+    env = dict(os.environ)
+    if serial: env["ANDROID_SERIAL"] = serial          # never "adb -s x" in one variable (LESSONS)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def phones():
+    """[(serial, name)] of the phones on a USB cable, ready"""
+    out = []
+    for l in run([ADB, "devices", "-l"]).splitlines()[1:]:
+        p = l.split()
+        if len(p) >= 2 and p[1] == "device" and "usb:" in l:
+            model = (re.search(r"model:(\S+)", l) or [None, p[0]])[1].replace("_", " ")
+            maker = run([ADB, "shell", "getprop", "ro.product.manufacturer"], p[0]).strip().capitalize()
+            out.append((p[0], f"{maker} {model} (USB)".strip()))
+    return out
+
+
+def telemach_sub(serial):
+    """the active Telemach subscription id and its slot (SIM 1 = slot 0), or None"""
+    for l in run([ADB, "shell", "dumpsys", "isub"], serial).splitlines():
+        if "SubscriptionInfoInternal: id=" not in l: continue
+        m = re.search(r"id=(\d+) .*?simSlotIndex=(-?\d+).*?carrierName=([^=]*?) isOpportunistic", l)
+        if not m: continue
+        sub, slot, carrier = int(m[1]), int(m[2]), m[3].strip()
+        if slot >= 0 and re.search(r"\bTM\b|telemach", carrier, re.I):
+            return sub, slot
+    return None
+
+
+def parse(text):
+    m = REPLY.search(text or "")
+    if not m: return None
+    d, mo, y, h, mi, used, total = m.groups()
+    used, total = float(used), float(total)
+    return {"at": f"{int(y):04d}-{int(mo):02d}-{int(d):02d} {int(h):02d}:{mi}", "used_mb": used, "total_mb": total,
+            "left_gb": round((total - used) / 1024, 1)}
+
+
+def phone_balance(serial, name):
+    t = telemach_sub(serial)
+    if not t: return {"line": name, "error": "no Telemach SIM in it"}
+    sub, slot = t
+    since = run([ADB, "shell", "date", "+%s"], serial).strip() or str(int(time.time()))
+    run([ADB, "shell", f'service call isms 5 i32 {sub} s16 "com.android.shell" s16 "null" s16 "13880" s16 "null" '
+         f's16 "STANJE" i32 0 i32 0 i32 1 i64 0'], serial)
+    q = (f"content query --uri content://sms/inbox --projection body --sort 'date DESC' "
+         f"--where \"date > {since}000 AND sub_id={sub} AND address LIKE '%TELEMACH%'\"")
+    for _ in range(30):
+        time.sleep(2)
+        for l in run([ADB, "shell", q], serial).splitlines():
+            r = parse(l)
+            if r: return {"line": name, "sim": f"Telemach, SIM {slot + 1}", **r}
+    return {"line": name, "sim": f"Telemach, SIM {slot + 1}", "error": "no answer from Telemach in 60 s"}
+
+
+def router_balance():
+    if not os.path.exists(ROUTER): return None
+    try:
+        r = json.loads(run([sys.executable, ROUTER, "balance", "--json"], timeout=120) or "{}")
+    except ValueError:
+        r = {}
+    if r.get("left_mb") is not None:
+        return {"line": "AX88179B (router)", "sim": "Telemach", "at": r.get("at", ""), "used_mb": r.get("used_mb"),
+                "total_mb": r.get("total_mb"), "left_gb": round(r["left_mb"] / 1024, 1)}
+    return {"line": "AX88179B (router)", "error": r.get("error", "router-sms gave no balance")}
+
+
+def check():
+    res = [r for r in [router_balance()] if r] + [phone_balance(s, n) for s, n in phones()]
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    json.dump({"checked": int(time.time()), "lines": res}, open(STATE, "w"), indent=1)
+    return {"checked": int(time.time()), "lines": res}
+
+
+def show(state, js):
+    if js: print(json.dumps(state, ensure_ascii=False)); return
+    when = time.strftime("%H:%M", time.localtime(state.get("checked", 0)))
+    for r in state.get("lines", []):
+        if "left_gb" in r: print(f"{r['line']}: {r['left_gb']} GB left ({r.get('sim', '')}, {r.get('at', '')})")
+        else: print(f"{r['line']}: {r.get('error')}")
+    if not state.get("lines"): print("no line found")
+    print(f"(checked {when})")
+
+
+def main():
+    a = sys.argv[1:]; js = "--json" in a
+    last = json.load(open(STATE)) if os.path.exists(STATE) else None
+    if "--last" in a: return show(last or {}, js)
+    if "--brief" in a and last and time.time() - last.get("checked", 0) < FRESH: return show(last, js)
+    show(check(), js)
+
+
+if __name__ == "__main__":
+    main()

@@ -503,8 +503,12 @@ program. Asked of Marko: replug the Pixel's cable, choose USB tethering / File t
 > "Please for aggregate connection you can send SMS messages from all these phones and check how much space is left on
 > each SIM card. Please do that. If they have two SIM cards you need to detect TeleMach 1."
 
-**Status:** pending: the balance SMS (as router-sms does for the router) sent from each phone on the wire, on the
-Telemach SIM (SIM 1 where there are two), the answer read, the data left shown for every line.
+**Status:** done 31.10.2026: `Tools/sim-balance` (router through router-sms; every phone on USB: its Telemach SIM found in
+`dumpsys isub`, STANJE sent to 13880 through Android's own SMS service, `service call isms 5`, which works on a locked
+phone, the reply read with `content query`). First run: AX88179B (router) 88.9 GB, Nothing A142 (Telemach, SIM 2) 90.2 GB.
+On the Nothing the Telemach SIM is in the second slot (bonbon in the first). Saved in Application Support/
+connection-keeper/sim-balances.json. Every Claude Code session starts with `sim-balance --brief` (SessionStart hook,
+added by the update-config skill): the saved figures if under 3 h old, else a fresh check (about 20 s).
 
 > "Always at the start of the session check all connections free space on the sim cards how many gigabytes is left."
 
