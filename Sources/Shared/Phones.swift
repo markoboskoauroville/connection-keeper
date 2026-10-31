@@ -122,6 +122,14 @@ enum Phones {
         return fd
     }
 
+    // The phone's internet is its mobile data: its Wi-Fi is not connected to any network ("Wifi is disabled" or "Wifi is
+    // not connected"), read with `cmd wifi status` (Android 11 and later).
+    static func onMobileData(_ p: Phone) -> Bool {
+        guard let adb else { return false }
+        let r = shell(adb, ["-s", p.serial, "shell", "cmd", "wifi", "status"], timeout: 5)
+        return r.status == 0 && !r.out.isEmpty && !r.out.contains("connected to")
+    }
+
     // The internet through the phone: the ms to open a connection to 1.1.1.1:443 (or `host`) through it, or nil.
     static func online(_ p: Phone, host: String = "1.1.1.1") -> Double? {
         let t = Date()

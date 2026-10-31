@@ -42,7 +42,12 @@ final class Uplink {
     init(iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?) {
         self.iface = iface; self.name = name; self.gateway = gateway; self.gatewayMAC = gatewayMAC; self.publicIP = publicIP
     }
+    var cellular = false                                 // a phone whose internet is its mobile data, not a Wi-Fi
     func sameLine(_ o: Uplink) -> Bool {
+        // Two 4G lines of the same operator can leave through the same public address (carrier NAT): at 09:06 on
+        // 31.10.2026 the Nothing (LTE, Telemach) read the TP-Link's 86.33.92.213 and was dropped as "the same line" for
+        // three minutes. A phone on its own mobile data is its own radio, so its own line.
+        if cellular || o.cellular { return false }
         if let a = publicIP, a == o.publicIP { return true }
         if let a = gatewayMAC, a == o.gatewayMAC { return true }
         return false
@@ -86,7 +91,7 @@ enum Lines {
             if let note = Phones.ensure(p) { log("\(p.name): \(note)") }
             guard Phones.answers(p) else { continue }
             let u = Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: Phones.publicIP(p) ?? known[p.device])
-            u.phone = p; found.append(u)
+            u.phone = p; u.cellular = Phones.onMobileData(p); found.append(u)
         }
         found.sort { ($0.iface == wifi ? 1 : 0) < ($1.iface == wifi ? 1 : 0) }
         var lines: [Uplink] = [], ignored: [(Uplink, Uplink)] = []
@@ -184,6 +189,28 @@ func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 5)
     return nil
 }
 
+// THE OUTAGE (request 55, Marko 31.10.2026: "this application bugged out the connection on my computer. I couldn't use any
+// internet"). launchd gives its agents 256 open files; each connection takes two, so at about 125 connections every new
+// one failed, the server's own adb / ipconfig / curl could no longer start and it lost its lines; a client that never
+// spoke held its file for ever. Measured on a test copy: 250 at once, 131 failed; 124 held open, 20 of 20 new failed.
+// Now: 16384 files, at most 1500 clients (two threads each, 4096 per process), refused at once beyond that, and 15 s for
+// a client to say where it goes.
+let openFiles: Int = {
+    var r = rlimit()
+    getrlimit(RLIMIT_NOFILE, &r)
+    let want = min(rlim_t(16384), r.rlim_max)
+    if r.rlim_cur < want { r.rlim_cur = want; setrlimit(RLIMIT_NOFILE, &r) }
+    getrlimit(RLIMIT_NOFILE, &r)
+    return Int(r.rlim_cur)
+}()
+let maxClients = min(1500, max(openFiles / 3, 50))
+
+// A receive deadline on a socket, in seconds; 0 waits for ever (the relay: an idle connection may sleep for hours).
+func deadline(_ fd: Int32, _ seconds: Int) {
+    var tv = timeval(tv_sec: seconds, tv_usec: 0)
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+}
+
 func prepare(_ fd: Int32) {
     var one: Int32 = 1
     setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
@@ -194,6 +221,7 @@ func prepare(_ fd: Int32) {
 
 final class Server {
     let lock = NSLock()
+    var clients = 0
     var lines: [Uplink] = []
     var ignored: [(Uplink, Uplink)] = []
     let started = Date()
@@ -204,15 +232,16 @@ final class Server {
         lock.unlock()
         let d = Lines.discover(known: known)
         lock.lock()
-        // Counters stay with a line that is still there.
-        for u in d.lines {
-            if let old = lines.first(where: { $0.iface == u.iface && $0.publicIP == u.publicIP }) {
-                u.alive = old.alive; u.misses = old.misses
-                u.active = old.active; u.connections = old.connections; u.bytesDown = old.bytesDown; u.bytesUp = old.bytesUp
-            }
+        // A line that is still there stays the same object (request 55, 31.10.2026): the connections it carries end on
+        // it, so its counters stay true. A copy, as before, kept every connection open at a refresh as "active" for
+        // ever (2895 on the cable after four hours) and lost the busy marks the balance reads.
+        let fresh = d.lines.map { u -> Uplink in
+            guard let old = lines.first(where: { $0.iface == u.iface && $0.publicIP == u.publicIP }) else { return u }
+            old.mbps = u.mbps; old.phone = u.phone
+            return old
         }
-        let before = lines.map { "\($0.name)/\($0.iface)" }, after = d.lines.map { "\($0.name)/\($0.iface)" }
-        lines = d.lines; ignored = d.ignored
+        let before = lines.map { "\($0.name)/\($0.iface)" }, after = fresh.map { "\($0.name)/\($0.iface)" }
+        lines = fresh; ignored = d.ignored
         lock.unlock()
         if before != after {
             log("lines: \(d.lines.map { "\($0.name) (\($0.iface), \($0.publicIP ?? "?"), \(Int($0.mbps)) Mbit/s)" }.joined(separator: " + "))"
@@ -271,7 +300,7 @@ final class Server {
         guard b == 0, listen(s, 256) == 0 else { log("port \(aggPort) is taken: \(String(cString: strerror(errno)))"); exit(1) }
         // macOS's SOCKS proxy setting points at this number, so it never moves: the one owner in the Mac's port
         // registry (MANTRA_PORTS v2, 27.10.2026), and `mantra-ports check` names a stranger on it
-        Ports.record("aggregate", aggPort, udp: false, health: "/status")
+        if !aggTestCopy { Ports.record("aggregate", aggPort, udp: false, health: "/status") }
         // Answering at once: finding the lines takes 10-20 s (pings, public IPs), and with the virtual device the whole
         // Mac waits for the server after each restart. The first connections wait for the lines in open().
         Thread.detachNewThread { [self] in refresh() }
@@ -284,7 +313,7 @@ final class Server {
             var last = Date(), ticks = Aggregation.selected, devices = deviceFingerprint()
             while true {
                 sleep(1)
-                if FileManager.default.fileExists(atPath: Aggregation.rescanFile.path) {
+                if !aggTestCopy && FileManager.default.fileExists(atPath: Aggregation.rescanFile.path) {
                     try? FileManager.default.removeItem(at: Aggregation.rescanFile)
                     log("RESCAN asked from the stripe: every device and phone found again, every line checked")
                     rescan(); ticks = Aggregation.selected; last = Date(); devices = deviceFingerprint()
@@ -302,12 +331,20 @@ final class Server {
                 if now != ticks || Date().timeIntervalSince(last) >= 60 { ticks = now; last = Date(); refresh() }
             }
         }
-        log("ck-aggregate v\(CKVersion) on 127.0.0.1:\(aggPort) (SOCKS5 and HTTP)")
+        log("ck-aggregate v\(CKVersion) on 127.0.0.1:\(aggPort) (SOCKS5 and HTTP), \(openFiles) files, \(maxClients) clients at most")
+        var refusedAt = Date.distantPast
         while true {
             let c = accept(s, nil, nil)
-            if c < 0 { continue }
+            if c < 0 { usleep(20_000); continue }               // out of files for a moment: never a loop at full speed
+            lock.lock(); let full = clients >= maxClients; if !full { clients += 1 }; lock.unlock()
+            if full {
+                close(c)                                          // refused at once: the program asks again, nothing hangs
+                if Date().timeIntervalSince(refusedAt) > 60 { refusedAt = Date(); log("\(maxClients) connections open: new ones refused until some end") }
+                continue
+            }
             prepare(c)
-            Thread.detachNewThread { [self] in handle(c) }
+            deadline(c, 15)                                       // a client that says nothing is let go after 15 s
+            Thread.detachNewThread { [self] in handle(c); lock.lock(); clients -= 1; lock.unlock() }
         }
     }
 
@@ -330,7 +367,7 @@ final class Server {
     // nor a device he unticked while it stayed plugged in.
     func joinPlugged(_ appeared: Set<String>) {
         let ticks = Aggregation.selected
-        guard Aggregation.aggregateMode, !ticks.isEmpty, !appeared.isEmpty else { return }
+        guard !aggTestCopy, Aggregation.aggregateMode, !ticks.isEmpty, !appeared.isEmpty else { return }
         let wifi = Net.wifiInterface()
         var names: [String] = []
         for e in appeared.sorted() {
@@ -412,6 +449,7 @@ extension Server {
     // socket on 127.0.0.1 for the client and one UDP socket out through ONE line: the whole association stays on it,
     // since a QUIC connection or a call must keep its path. It lives as long as the client's TCP connection. IPv4 only.
     func udp(_ c: Int32) {
+        deadline(c, 0)
         for _ in 0..<100 { lock.lock(); let none = lines.isEmpty; lock.unlock(); if !none { break }; usleep(200_000) }
         lock.lock()
         let now = Date()
@@ -562,6 +600,7 @@ extension Server {
 
     // Both directions copied until each side has said it is done; the bytes counted on the line.
     func relay(_ c: Int32, _ out: Int32, _ u: Uplink) {
+        deadline(c, 0)
         let group = DispatchGroup()
         var up = 0, down = 0, done = false
         func pump(_ from: Int32, _ to: Int32, _ count: @escaping (Int) -> Void) {

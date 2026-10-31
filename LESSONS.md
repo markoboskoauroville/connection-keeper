@@ -258,3 +258,20 @@ JOINED, that takes every piece of the aggregation away without a password.
 `sudo ./tunnel.sh install` stopped the old helper, copied the new one, then failed with "Bootstrap failed: 5:
 Input/output error": the old job was still being torn down. install now waits until `launchctl print` no longer finds
 the job and tries the bootstrap up to five times.
+
+## 31.10.2026 (v39, requests 55 and 56): the outage was the file limit, not the failover
+
+- **launchd gives an agent 256 open files** (`launchctl limit maxfiles`: soft 256, hard unlimited). A proxy uses two per
+  connection, so at about 125 connections every new one failed, and the server's own adb / ipconfig / curl could not
+  start, so it also lost its lines (`lines:` empty). With the tunnel carrying all of the Mac, that is "no internet".
+  Raise the soft limit in the program (setrlimit) and cap the clients below the threads (4096 a process, two each).
+- **A handshake needs a deadline.** A client that connects and says nothing held its slot for ever; 300 of them took
+  the whole server. 15 s, then cleared before the relay (idle connections may sleep for hours).
+- **Never copy a live object to keep its counters**: the connections in flight end on the old one. The "2895 active".
+- **Same operator, same public IP**: two 4G lines (TP-Link and the Nothing on Telemach) can share a carrier-NAT address.
+  A phone on its own mobile data is its own line.
+- **Test on a copy, never on the line you talk through**: CK_AGG_PORT / CK_AGG_SELECTION / CK_AGG_TEST / CK_AGG_FAULT
+  run a second server with its own ticks and a fault switch. A test's `ulimit -n` sets the hard limit too: use `-Sn`
+  or the copy cannot raise it (the first "fixed" run was capped at 85 by the test, not the server).
+- Measured: before, 250 at once 102–126 of 250, 124 held → 0 of 20 new; after, 250 of 250, held 20/20, 300 silent
+  clients 10/10, failover 0 failures; 1000 at once is the 4G line's limit (one line 27–81 %, cable + phone 994/1000).

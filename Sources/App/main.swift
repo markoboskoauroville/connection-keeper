@@ -150,6 +150,11 @@ final class Stripe: NSObject {
     let minimize = TrafficMinimize()            // v27, request 45: the macOS yellow minimize, on the left
     let grip = Grip()                           // v27, request 45: two vertical lines on the right, dragged to resize
     let permissions = NSButton(title: "PERMISSIONS", target: nil, action: nil)   // v38: shown only while one is missing
+    // v39 (request 56): ON OFF after the minimize circle, TOP before the LED (OnOff.swift)
+    lazy var onWord = word("ON", Ink.green, #selector(noop), id: "on", tip: "The app is on (it runs)")
+    lazy var offWord = word("OFF", Ink.grey, #selector(switchOff), id: "off",
+        tip: "Off: the aggregation, the tunnel, the proxy, the keeper and the phones' helper stopped, nothing of the app left between the Mac and the internet; then the app quits. The Wi-Fi radios stay as they are.")
+    lazy var topWord = word("TOP", OnTop.on ? Ink.green : Ink.grey, #selector(toggleTop), id: "top", tip: "Always on top: green, the stripe stays above every other window")
     var wiresBusy = false
     var sharing: Set<String> = []        // v34: the lines whose Wi-Fi share is switching
     var minimizedFrame: NSRect?
@@ -191,7 +196,7 @@ final class Stripe: NSObject {
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
         applyOnTop()
-        NotificationCenter.default.addObserver(forName: OnTop.changed, object: nil, queue: .main) { [weak self] _ in self?.applyOnTop() }
+        NotificationCenter.default.addObserver(forName: OnTop.changed, object: nil, queue: .main) { [weak self] _ in self?.applyOnTop(); self?.showTop() }
         panel.isMovableByWindowBackground = true
         panel.backgroundColor = .clear
         panel.isOpaque = false
@@ -320,14 +325,14 @@ final class Stripe: NSObject {
         permissions.setContentHuggingPriority(.required, for: .horizontal)
         permissions.toolTip = "Accessibility is off: joining a Wi-Fi through Control Centre cannot work. This opens its page in System Settings"
         permissions.isHidden = Permissions.missing.isEmpty
-        let row = NSStackView(views: [minimize, gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, led, permissions])
+        let row = NSStackView(views: [minimize, onWord, offWord, gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, topWord, led, permissions])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
-        aggRow = LineRow(leadWidth: gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
+        aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + 6 + gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
         aggRow.view.edgeInsets.left += 12
         aggRow.dot.isHidden = true
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
@@ -600,6 +605,7 @@ final class Stripe: NSObject {
     // app becomes an ordinary one only while hidden, so Command-Tab and the Dock know it; the moment it is switched to,
     // the stripe is back where it was and the app leaves the Dock and Command-Tab again.
     @objc func openPermissions() { Permissions.openMissing() }
+    @objc func noop() {}
 
     @objc func minimizeStripe() {
         // v36: the stripe goes to the menu bar icon; a click on the icon brings it back
@@ -1101,6 +1107,7 @@ func loadAgents() {
 }
 
 let app = NSApplication.shared
+if !OnOff.atStart(login: CommandLine.arguments.contains("--login")) { exit(0) }   // v39: OFF stays off at login
 app.setActivationPolicy(.accessory)
 let stripe = Stripe()
 if CommandLine.arguments.contains("--settings") { stripe.openSettings() }

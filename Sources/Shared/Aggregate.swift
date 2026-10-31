@@ -4,11 +4,16 @@
 // at the server on 127.0.0.1:8857; off, it is switched off again, and nothing goes through the server.
 import Foundation
 
-let aggPort: UInt16 = 8857
+// A TEST COPY (request 55, 31.10.2026): CK_AGG_PORT and CK_AGG_SELECTION give a second server its own port and its own
+// ticks, so every combination of lines can be stressed while the real one (8857) keeps carrying the Mac. CK_AGG_TEST
+// keeps it away from the real server's files (the port registry, ⟳, the plug-in ticks).
+let aggEnv = ProcessInfo.processInfo.environment
+let aggPort: UInt16 = UInt16(aggEnv["CK_AGG_PORT"] ?? "") ?? 8857
+let aggTestCopy = aggEnv["CK_AGG_TEST"] != nil
 let CKAggregateLabel = "com.mantra.connectionkeeper.aggregate"
 
 enum Aggregation {
-    static let selection = Paths.support.appendingPathComponent("aggregate-selection.json")
+    static let selection = aggEnv["CK_AGG_SELECTION"].map { URL(fileURLWithPath: $0) } ?? Paths.support.appendingPathComponent("aggregate-selection.json")
     static let speeds = Paths.support.appendingPathComponent("aggregate-speeds.json")
     static let lastTest = Paths.support.appendingPathComponent("aggregate-test.json")
     static let changed = Notification.Name("ConnectionKeeperAggregationChanged")

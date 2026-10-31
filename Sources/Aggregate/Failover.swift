@@ -99,6 +99,22 @@ enum Resolver {
 
 // MARK: the race and the checks
 
+// The test copy's fault switch (request 55): the names in the file CK_AGG_FAULT are lines that have "died": "dead" fails at
+// once (a cable pulled), "silent" waits out the timeout first (4G gone quiet, the usual death). Never set for the real server.
+func fault(_ u: Uplink) -> String? {
+    guard let f = aggEnv["CK_AGG_FAULT"], let t = try? String(contentsOfFile: f, encoding: .utf8) else { return nil }
+    for line in t.components(separatedBy: "\n") {
+        let p = line.split(separator: "=", maxSplits: 1).map(String.init)
+        if p.count == 2, p[0] == u.name { return p[1].trimmingCharacters(in: .whitespaces) }
+    }
+    return nil
+}
+func faulted(_ u: Uplink, timeout: Int) -> Bool {
+    guard let f = fault(u) else { return false }
+    if f == "silent" { sleep(UInt32(timeout)) }
+    return true
+}
+
 final class Race {
     let lock = NSLock(), done = DispatchSemaphore(value: 0)
     var winner: (Int32, Uplink)?, finished = 0
@@ -122,7 +138,7 @@ extension Server {
             lock.lock(); u.active += 1; u.pending += 1; lock.unlock()
             started += 1
             Thread.detachNewThread { [self] in
-                let fd = u.phone.map { Phones.dial(host, port, via: $0.port, timeout: 8) } ?? dial(host, port, via: u.iface)
+                let fd = faulted(u, timeout: 5) ? nil : u.phone.map { Phones.dial(host, port, via: $0.port, timeout: 8) } ?? dial(host, port, via: u.iface)
                 r.lock.lock()
                 let won = fd != nil && r.winner == nil
                 if won { r.winner = (fd!, u) }
@@ -167,7 +183,7 @@ extension Server {
         Thread.detachNewThread { [self] in
             let gone = u.phone == nil && ipv4(of: u.iface) == nil
             var ok = false
-            if !gone {
+            if !gone && !faulted(u, timeout: 2) {
                 for host in ["1.1.1.1", "8.8.8.8"] {
                     if let fd = u.phone.map({ Phones.dial(host, 443, via: $0.port, timeout: 3) }) ?? dial(host, 443, via: u.iface, timeout: 2) {
                         close(fd); ok = true; break
