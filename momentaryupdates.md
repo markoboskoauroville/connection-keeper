@@ -493,4 +493,8 @@ hidden in the menu bar (stripeHiddenInMenuBar): unhidden and opened on the MacBo
 > phones. Where is the third one? Why doesn't exist? Everything is on wire. And my nothing phone 7 is not registered in
 > the app. What kind of app is that? It needs to check or ADB connected always, being ready for changes."
 
-**Status:** pending.
+**Status:** looked at, 10:15: the Mac's USB has one phone (Nothing A142) and the AX88179B; no other phone enumerates
+(system_profiler, ioreg). Ticked lines: Nothing A142 (USB), AX88179B, Google Pixel 7 (USB), Pixel 7 (wireless adb). The
+Pixel's wireless adb went offline 09:09 and left 09:28 (the log); now no mDNS, no ping at 192.168.1.102. The app watches
+USB and adb every second (deviceFingerprint) and logged every change; a phone not on the bus cannot be seen by any
+program. Asked of Marko: replug the Pixel's cable, choose USB tethering / File transfer.
