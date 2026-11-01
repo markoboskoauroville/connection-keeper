@@ -139,8 +139,18 @@ time). "checked … ago" and "failover … ago" are gone; the status place appea
 (NO OTHER CONNECTION, a ping answer, a switch), the failover place only in the red alert. At every start the ping,
 the data and the speed test run at once behind the scenes, and each place says (...) until its answer comes.
 
-The speed test's Firefox keeps one profile, `~/Library/Application Support/connection-keeper/firefox`: an add-on
-installed there once (uBlock Origin, against the advertisements) stays for every test.
+The speed test's Firefox keeps one profile, `~/Library/Application Support/connection-keeper/firefox`. Since v46
+(request 64) it copies uBlock Origin from Marko's own Firefox profile at every start (no advertisements on
+speedtest.net), and its window shows no Firefox interface: only the macOS title bar with the close button.
+
+## Claude Code's API drops (v46, 1.11.2026, request 65)
+
+`ck-claude` (Tools/, in the app's Resources, on the PATH) runs while the app runs. It follows every Claude Code
+transcript, writes each failed API try with the state of the lines at that second (mode, tunnel, route, DNS, a TLS
+handshake to api.anthropic.com) and probes the API with a TLS handshake every 30 s. The bottom row `☁ CLAUDE` shows
+the last drop, today's count and the probe. The Claude Code mod `mods/api-drops` puts the same in the status line of
+every session (loaded through `CLAUDE_CODE_PLUGIN_DIRS` in ~/.claude/settings.json). `ck-claude report` and
+`ck-claude history --days 7` read it back. The rule: MANTRA_MANIFEST modules/claude-api-drops.md.
 
 ## Aggregation: two lines at once (v13, 18.10.2026)
 

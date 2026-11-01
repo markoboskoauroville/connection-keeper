@@ -2,3 +2,5 @@ build/
 .DS_Store
 Resources/tunnel/hev-socks5-tunnel
 build-test/
+__pycache__/
+mods/*/.claude-plugin/types/
