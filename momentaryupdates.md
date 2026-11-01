@@ -592,3 +592,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > please, we are working on my adblock connection application. We need to fix the opening of the Firefox window. First of all, you need to open it without any user interface parts. Only X will be there to close the test. Second of all, you need to load this application in the Firefox window. When it opens, you block the extension. It is working in my normal Firefox. I installed it, but I don't know why this window is opening in its own special Firefox without any of my settings. You block is blocking commercials, which are on this speed test site. I don't want to see commercials. Use uBlock to block it. Please now build this upgrade for speed test. When I test speed, when I click on the number
 
 **Status:** in work.
+
+## 1.11.2026, request 65 (Claude Code's connection drops: detected, shown in the status line, protected against)
+
+> this application can also test as debugging for Claude code, because Claude code usually gets some drops, and then it gets me API errors or messages that it cannot reach the server. This is a momentary drop in connection. In the status line, you need to detect that the connection dropped with Claude Code locally, and then slowly understand why this is happening and build some kind of protection for these drops. You need to write this in the manifest, so every session runs this mod. You need to create a mod for Claude Code which is going to detect drops of connection with the API, and then you need to please mark this inside the status line of the aggregate connection and work on solutions
+
+**Status:** in work.
