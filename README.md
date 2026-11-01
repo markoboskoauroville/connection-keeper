@@ -309,3 +309,12 @@ ck-net get https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-
 ck-net list        ck-net resume <id>        ck-net test health        ck-net test speed
 ```
 The download shows on the stripe's bottom line (RESUME when broken) and on the Download Monitor.
+
+## The balance by real speed, 5G only for big downloads, the stripe stays put (v47–v48, 1.11.2026)
+
+Each line's speed is measured live (bytes per second and a recent peak) and measured again whenever a phone switches
+4G ↔ 5G or gets a new address, so new connections go to the line with the most free speed: the Pixel on 5G (~139
+Mbit/s) is no longer treated as a 10 Mbit/s line. The phones rest on 4G; after five minutes of fast downloading (15
+Mbit/s or more) they go to 5G, and after five quiet minutes back to 4G. A connection already open stays on its line;
+one big file over every line needs several connections (ck-net, or Chrome's parallel downloading). The stripe stays
+on the desktop and display where it is; a click on its menu bar icon brings it to you.

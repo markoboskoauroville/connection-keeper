@@ -558,15 +558,19 @@ final class Stripe: NSObject {
         if Date().timeIntervalSince(last) >= Double(h) * 3600 { checkData(visible: false) }
     }
 
-    // On top: above ordinary and floating windows, on every Space, beside full-screen apps. Off: an ordinary window.
+    // On top: above ordinary and floating windows. Off: an ordinary window.
+    // v48 (request 68, Marko 1.11.2026: "make my application not follow me everywhere. If it's open on one screen, it
+    // needs to stay there ... When I switch desktops, monitors, it's following me all around"): no .canJoinAllSpaces
+    // any more, which put it on every desktop of every display. It stays on the desktop and the display where it is;
+    // only a click on its menu bar icon brings it to where he is (menuBarClicked, .moveToActiveSpace for that moment).
     func applyOnTop() {
         if OnTop.on {
             panel.level = .statusBar
-            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+            panel.collectionBehavior = [.managed, .fullScreenAuxiliary, .ignoresCycle]
             if !MenuBarPrefs.stripeHidden { panel.orderFrontRegardless() }
         } else {
             panel.level = .normal
-            panel.collectionBehavior = [.canJoinAllSpaces, .ignoresCycle]
+            panel.collectionBehavior = [.managed, .ignoresCycle]
         }
     }
 

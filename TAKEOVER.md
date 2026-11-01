@@ -435,3 +435,11 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
   30 s later). `/status` now shows rate, capacity, probed, radio; the log writes `balance:` every 30 s while traffic moves.
 - Measured: Pixel 5G 128–140, 4G 38–40 Mbit/s; mantra 12–36. Live through the tunnel 117.6 Mbit/s, Pixel 127 MB / mantra 36.
 - An open connection cannot be moved to another line. One big file over all lines: ck-net, or Chrome's parallel downloading flag.
+
+## 1.11.2026, v48: 5G only for big downloads; the stripe stays on its desktop (requests 67, 68)
+
+- Sources/Aggregate/Boost.swift, called each second from the balance loop with the sum of every line's rate:
+  ≥ `boostMbps` (15) for `boostAfter` (300 s) → `setRadios(phones, fiveG: true)`; < `restMbps` (5) for `backAfter`
+  (300 s) → 4G. boost.json in Application Support keeps the state. Test copy: CK_AGG_BOOST_AFTER / _BACK / _MBPS.
+- The stripe: no `.canJoinAllSpaces` (main.swift applyOnTop); menuBarClicked adds `.moveToActiveSpace` for 0.5 s.
+- Left: the Pixel on 4G; Marko to switch desktops once and see the stripe stay.

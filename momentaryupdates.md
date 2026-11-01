@@ -609,4 +609,10 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > Please.Close this session, write in the manifest everything what was learned, all the lessons, and before quitting switch my phone to 4G. So, there should be also one more feature before you go. If I'm downloading huge files, you need to switch all my phones to 5G, but only after 5 minutes of downloading. and when fast download is finished when big download is finished you need to bring it back to 4G and now before quitting build this feature test it and bring my phones to 4G this should be 5G is only used after five minutes of constant downloading at the high speed then it speeds up and when the speed drops after five minutes you go back to 4G
 
-**Status:** saved, building.
+**Status:** done 1.11.2026 (v48, Sources/Aggregate/Boost.swift): the phones rest on 4G; all lines together ≥ 15 Mbit/s down for 5 minutes without a break → every phone to 5G; < 5 Mbit/s for 5 minutes → back to 4G; the state in boost.json. Tested on the test copy with 40/30 s windows: 4G → 5G at 11:14:40 after 40 s at 84 Mbit/s (the Pixel then 123 Mbit/s), back to 4G at 11:15:47 after 30 s quiet. Installed 11:18 (gap 0.2 s, no download running). The Pixel left on 4G (LTE CA); the Nothing is not plugged in (on 4G since his press at 04:33). Lessons in MANTRA_MANIFEST modules/network-aggregation.md and lessons-learned.md.
+
+## 1.11.2026, request 68 (the stripe must not follow him to every desktop and display)
+
+> Please make my application not follow me everywhere. If it's open on one screen, it needs to stay there. I don't know what's going on. When I switch desktops, monitors, it's following me all around.
+
+**Status:** done 1.11.2026 (v48): `.canJoinAllSpaces` taken off the stripe in both TOP modes (`.managed` now); a click on the menu bar icon still brings it to his desktop (`.moveToActiveSpace` for half a second). Installed; switching desktops is his hand to try (never driven for him).

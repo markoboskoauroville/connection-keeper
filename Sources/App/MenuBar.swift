@@ -112,7 +112,9 @@ extension Stripe {
         }
         keepOnScreen()
         applyOnTop()
+        panel.collectionBehavior.insert(.moveToActiveSpace)          // v48: to his desktop on this click only
         panel.orderFrontRegardless()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.applyOnTop() }
         appendLog("\(logStamp()) MENU BAR click: stripe in front on \(screen?.localizedName ?? "?")")
     }
 }

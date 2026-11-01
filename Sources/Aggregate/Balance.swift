@@ -41,6 +41,7 @@ extension Server {
     func startBalance() {
         Thread.detachNewThread { [self] in
             var tick = 0
+            let boost = Boost()                                  // v48: 5G only for big downloads (Boost.swift)
             while true {
                 sleep(1); tick += 1
                 lock.lock()
@@ -52,7 +53,9 @@ extension Server {
                     m.peak = max(m.peak * 0.99885, m.rate)          // half-life ~10 min
                 }
                 let ls = lines
+                let total = ls.reduce(0) { $0 + $1.meter.rate }
                 lock.unlock()
+                boostTick(boost, total: total, phones: ls.compactMap { $0.cellular ? $0.phone : nil })
                 if tick % 10 == 0 { for u in ls { checkRadio(u) } }
                 if tick % 30 == 0 { logBalance(ls) }
             }

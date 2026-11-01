@@ -322,3 +322,9 @@ the default 10 Mbit/s sent every heavy connection to the slowest line for five h
 counters per second, a decaying peak) and re-measured when the radio or the public address changes; a probe right
 after a 4G/5G switch reads far too low (6.7 instead of 38), wait ~6 s and look again 30 s later. Counting connections
 is no measure of load: the Pixel had more connections than mantra and a seventh of its bytes.
+
+## 1.11.2026 (v48): test copies and windows
+
+`pkill -f` must match the command line as it runs: the test copy started as `./ck-aggregate serve` survived a kill by
+its full path, kept port 8957, and one test ran on the old build. A window with `.canJoinAllSpaces` is on every desktop
+of every display: to Marko it "follows him around". The rules are in MANTRA_MANIFEST network-aggregation.md.
