@@ -554,3 +554,7 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > find algorithms which can, through ADB, quickly first of all check what's there. Also, I want to have, next to each Wi-Fi connection, a Wi-Fi icon. I want to have icons for any device supporting it. A phone is for sure 5G or 4G, so I can remotely, through ADB, switch my quality of connection please make two buttons next to the Wi-Fi icon, 4G and 5G, and I can remotely change that on my phone
 
 **Status:** started 1.11.2026.
+
+> please read me in voice. What is left to do for this aggregate service? Is anything left to do? Where are we now with the project? I don't have 5G or 4G. I told you at the beginning of line. When there is a Wi-Fi at the beginning of line, the switcher: please move the buttons
+
+**Status:** started 1.11.2026 04:12: read by voice; the 4G / 5G words go to the beginning of the line, beside the Wi-Fi icon.
