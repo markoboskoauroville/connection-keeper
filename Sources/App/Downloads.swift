@@ -65,6 +65,7 @@ enum Downloads {
     static func rows() -> [DownloadRow] {
         var out: [DownloadRow] = []
         if let s = speedRow() { out.append(s) }
+        if let c = ClaudeDrops.row() { out.append(c) }      // v46, request 65
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
         let mono = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         let bold = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)

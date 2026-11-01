@@ -422,6 +422,7 @@ final class Stripe: NSObject {
         // displayed in the status line at the bottom"): ck-net's quick test of all lines together (about 150 MB) replaces
         // speedtest.net at start; it waits 20 s for the lines to be found. A click on the speed still opens speedtest.net.
         checkData(visible: false) {}
+        ClaudeDrops.start()      // v46 (request 65): Claude Code's drops followed while the app runs
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.startSpeedTest() }
         for n in [NSApplication.didBecomeActiveNotification, NSApplication.didUnhideNotification] {
             NotificationCenter.default.addObserver(forName: n, object: nil, queue: .main) { [weak self] _ in self?.restoreStripe() }

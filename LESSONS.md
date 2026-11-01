@@ -304,3 +304,13 @@ the job and tries the bootstrap up to five times.
   "nothing happens".
 - **An Accessibility press is not a click.** AX presses the button's action directly; a real click goes through hit
   testing and misses a button that stands outside its superview's bounds. Put clickable things in the row itself.
+
+## 1.11.2026
+
+- Through the tunnel (utun99, hev-socks5-tunnel) a TCP connect succeeds in 1 ms whatever is behind it: a probe of the
+  internet through the aggregate must finish a TLS handshake, or it proves nothing.
+- uBlock Origin copied into a profile's extensions folder is active on the next start, but its first start loads the
+  filter lists after the page: the first page still has its ads.
+- Claude Code's own record of a drop is in the transcript (`subtype: api_error`, `error.connection.code`,
+  `retryAttempt`); the mod engine shows the retry only as an opaque marker, so the watcher reads the transcripts.
+- A name for a Claude Code mod cannot start with "claude-" (reserved): the mod is `api-drops`.

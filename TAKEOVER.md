@@ -411,3 +411,17 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
 - **v45 (request 63):** Hover.scale grows the hovered button 1.25× about its centre (layer transform, zPosition 10) with a
   26 % plate and a white 1-point rim; Hover.add gives every button width ≥ word + 8 and height ≥ 22 at priority 750 (a
   fixed slot wins), so the click area is larger than the word.
+
+## 1.11.2026, v46 (requests 64 and 65)
+
+- speedtest-firefox: `bare_window()` writes chrome/userChrome.css into the test's own profile (tabs, address bar,
+  toolbars, side bar hidden; `browser.tabs.inTitlebar` 0 keeps the native title bar and its close button);
+  `bring_ublock()` copies uBlock0@raymondhill.net.xpi from the newest of his Firefox profiles at every start
+  (`extensions.autoDisableScopes` 0 switches it on). The first start after a copy still shows ads while uBlock loads.
+- ck-claude (Tools/ck-claude, Resources/ck-claude, ~/.local/bin): `watch --parent <pid>` (the app starts it in
+  `ClaudeDrops.start()`, it ends with the app), `status`, `report`, `history`. Episodes: tries of one session less than
+  180 s apart; closed by the session's next assistant row (recovered) or 30 min of silence (gave up).
+  The probe is a TLS handshake: through utun99 a bare TCP connect is answered by hev locally in 1 ms.
+- ClaudeDrops.swift: the `☁ CLAUDE` row among the bottom rows (Downloads.rows()), dismissable with ✕.
+- mods/api-drops: the Claude Code mod (status line every 10 s from claude-drops-state.json, a toast on a turn that
+  ends on an API error). Loaded in every session by `CLAUDE_CODE_PLUGIN_DIRS` in the env block of ~/.claude/settings.json.

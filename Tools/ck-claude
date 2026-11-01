@@ -1,0 +1,467 @@
+#!/Users/markobosko/.pyenv/versions/3.10.14/bin/python3
+"""
+ck-claude: Claude Code's connection drops, caught the second they happen, with the state of the lines beside them.
+
+Marko, 1.11.2026 (request 65): "Claude code usually gets some drops, and then it gets me API errors or messages that it
+cannot reach the server ... detect that the connection dropped with Claude Code locally, and then slowly understand why
+this is happening and build some kind of protection for these drops ... mark this inside the status line of the
+aggregate connection".
+
+Claude Code writes every failed try into the session's transcript (~/.claude/projects/<folder>/<session>.jsonl) as a
+row {"type":"system","subtype":"api_error","error":{"formatted":"Connection dropped (ECONNRESET)",...},"retryAttempt":4}.
+This program follows every transcript of every session (terminal, desktop, subagents) and, when such a row appears,
+writes it down with a snapshot of the Mac's connection at that second: the mode (mac / aggregate / both), the tunnel,
+the interface the API's address is routed through, the lines of the aggregate, a DNS answer and a TCP handshake to the
+API. Every 15 s it also probes the API itself with a real TLS handshake (through the tunnel a bare TCP
+connect answers locally in 1 ms and proves nothing; EPROTO is a failed TLS handshake), so a drop no session saw
+is written too. A row of tries in one session is one EPISODE; it ends when the session gets an answer again.
+
+    ck-claude watch [--parent PID]   follow the transcripts (the app runs it; it ends with the app)
+    ck-claude status [--json]        the last drop, today's drops, the last probe
+    ck-claude report [--days N]      the history: kinds, days, and what the lines were doing at each drop
+    ck-claude history [--days N]     the same from the transcripts alone (drops before the watcher existed)
+
+Files (~/Library/Application Support/connection-keeper/): claude-drops.jsonl (every try, with its snapshot),
+claude-episodes.jsonl (one line per episode, when it ends), claude-drops-state.json (what the stripe and the
+Claude Code mod show).
+"""
+import glob, json, os, socket, subprocess, sys, time
+from datetime import datetime, timezone
+
+SUPPORT = os.path.expanduser('~/Library/Application Support/connection-keeper')
+DROPS = os.path.join(SUPPORT, 'claude-drops.jsonl')
+EPISODES = os.path.join(SUPPORT, 'claude-episodes.jsonl')
+STATE = os.path.join(SUPPORT, 'claude-drops-state.json')
+LOG = os.path.expanduser('~/Library/Logs/connection-keeper.log')
+PROJECTS = os.path.expanduser('~/.claude/projects')
+API = 'api.anthropic.com'
+PROBE_EVERY = 30       # a TLS handshake, about 6 KB: some 17 MB a day of SIM data
+EPISODE_GAP = 180        # tries further apart than this are two episodes
+
+
+def now():
+    return time.time()
+
+
+def stamp(t=None):
+    return datetime.fromtimestamp(t or now()).astimezone().isoformat(timespec='seconds')
+
+
+def log(msg):
+    try:
+        with open(LOG, 'a') as f:
+            f.write(f'{stamp()} CLAUDE {msg}\n')
+    except OSError:
+        pass
+
+
+def read(path, default=None):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def kind_of(err):
+    """ENOTFOUND / ECONNRESET / EPROTO / 529 ... : the short word of a Claude Code api_error."""
+    conn = err.get('connection') or {}
+    if conn.get('code'):
+        return conn['code']
+    f = err.get('formatted') or err.get('message') or ''
+    for w in ('ENOTFOUND', 'ECONNRESET', 'EPROTO', 'ETIMEDOUT', 'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH'):
+        if w in f:
+            return w
+    if f.startswith(('401', '403', '429', '500', '502', '503', '504', '529')):
+        return f[:3]
+    if 'No response' in f:
+        return 'NO-RESPONSE'
+    return (f or '?')[:24]
+
+
+# ---------------------------------------------------------------------------------------------------- the snapshot
+
+def dns(host=API, timeout=3.0):
+    t = now()
+    socket.setdefaulttimeout(timeout)
+    try:
+        ips = sorted({a[4][0] for a in socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)})
+        return {'ok': True, 'ms': round((now() - t) * 1000), 'ips': ips}
+    except OSError as e:
+        return {'ok': False, 'ms': round((now() - t) * 1000), 'error': str(e)[:80]}
+
+
+def tcp(ip, timeout=4.0):
+    t = now()
+    s = socket.socket()
+    s.settimeout(timeout)
+    try:
+        s.connect((ip, 443))
+        return {'ok': True, 'ms': round((now() - t) * 1000)}
+    except OSError as e:
+        return {'ok': False, 'ms': round((now() - t) * 1000), 'error': str(e)[:80]}
+    finally:
+        s.close()
+
+
+def tls(ip, timeout=6.0):
+    """The step that fails as EPROTO: a full TLS handshake with the API's name, nothing sent after it."""
+    import ssl
+    t = now()
+    try:
+        raw = socket.create_connection((ip, 443), timeout=timeout)
+    except OSError as e:
+        return {'ok': False, 'ms': round((now() - t) * 1000), 'error': 'tcp: ' + str(e)[:70]}
+    try:
+        ctx = ssl.create_default_context()
+        with ctx.wrap_socket(raw, server_hostname=API) as s:
+            s.settimeout(timeout)
+            return {'ok': True, 'ms': round((now() - t) * 1000), 'tls': s.version()}
+    except (OSError, ssl.SSLError) as e:
+        return {'ok': False, 'ms': round((now() - t) * 1000), 'error': 'tls: ' + str(e)[:70]}
+    finally:
+        raw.close()
+
+
+def route_iface(ip):
+    try:
+        out = subprocess.run(['/sbin/route', '-n', 'get', ip], capture_output=True, text=True, timeout=3).stdout
+        for line in out.splitlines():
+            if 'interface:' in line:
+                return line.split(':', 1)[1].strip()
+    except Exception:
+        pass
+    return '?'
+
+
+def lines():
+    try:
+        return [l.get('name', '?') for l in json.load(open(os.path.join(SUPPORT, 'aggregate-lines.json')))]
+    except (OSError, ValueError):
+        return []
+
+
+def snapshot(probe_tcp=True):
+    d = dns()
+    ip = d['ips'][0] if d.get('ips') else '160.79.104.10'
+    s = {'mode': read(os.path.join(SUPPORT, 'mode'), '?'),
+         'tunnel': os.path.exists(os.path.join(SUPPORT, 'tunnel-on')),
+         'via': route_iface(ip), 'lines': lines(), 'dns': d}
+    try:
+        st = json.load(open(os.path.join(SUPPORT, 'state.json')))
+        s['keeper'] = st.get('current')
+    except (OSError, ValueError):
+        pass
+    if probe_tcp:
+        s['tcp'] = tls(ip)
+    return s
+
+
+# ---------------------------------------------------------------------------------------------------- the watcher
+
+class Watcher:
+    def __init__(self):
+        self.offsets = {}        # transcript -> bytes read
+        self.started = now()
+        self.episodes = {}       # session -> open episode
+        self.last_probe = None
+        self.probe_down_since = None
+        self.state = self.load_state()
+
+    def load_state(self):
+        try:
+            return json.load(open(STATE))
+        except (OSError, ValueError):
+            return {}
+
+    def files(self):
+        fs = glob.glob(os.path.join(PROJECTS, '*', '*.jsonl')) + glob.glob(os.path.join(PROJECTS, '*', '*', 'subagents', '*.jsonl'))
+        cut = now() - 6 * 3600
+        out = []
+        for f in fs:
+            try:
+                if os.path.getmtime(f) > cut:
+                    out.append(f)
+            except OSError:
+                pass
+        return out
+
+    def scan(self):
+        for f in self.files():
+            try:
+                size = os.path.getsize(f)
+            except OSError:
+                continue
+            if f not in self.offsets:
+                # a transcript already there when the watcher started: only what comes from now on
+                self.offsets[f] = size if os.path.getmtime(f) < self.started else 0
+            off = self.offsets[f]
+            if size < off:
+                off = 0
+            if size == off:
+                continue
+            with open(f, 'rb') as fh:
+                fh.seek(off)
+                chunk = fh.read(size - off)
+            end = chunk.rfind(b'\n')
+            if end < 0:
+                continue
+            self.offsets[f] = off + end + 1
+            for raw in chunk[:end].split(b'\n'):
+                if b'"api_error"' in raw:
+                    self.drop(raw, f)
+                elif b'"type":"assistant"' in raw:
+                    self.answered(raw)
+
+    def drop(self, raw, path):
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            return
+        if d.get('subtype') != 'api_error':
+            return
+        err = d.get('error') or {}
+        sess = d.get('sessionId') or os.path.basename(path)[:-6]
+        rec = {'at': stamp(), 'ts': now(), 'session': sess, 'folder': os.path.basename(d.get('cwd') or '') or '?',
+               'kind': kind_of(err), 'text': err.get('formatted') or err.get('message'),
+               'try': d.get('retryAttempt'), 'max': d.get('maxRetries'), 'retryInMs': d.get('retryInMs'),
+               'networkDown': err.get('isNetworkDown'), 'entry': d.get('entrypoint'),
+               'snap': snapshot()}
+        with open(DROPS, 'a') as fh:
+            fh.write(json.dumps(rec) + '\n')
+        ep = self.episodes.get(sess)
+        if not ep or rec['ts'] - ep['lastTs'] > EPISODE_GAP:
+            if ep:
+                self.close_episode(sess, recovered=False)
+            ep = self.episodes[sess] = {'session': sess, 'folder': rec['folder'], 'start': rec['at'], 'startTs': rec['ts'],
+                                        'kinds': {}, 'tries': 0, 'snap': rec['snap']}
+            s = rec['snap']
+            log(f"DROP {rec['folder']}: {rec['text']} (mode {s['mode']}, tunnel {'on' if s['tunnel'] else 'off'}, "
+                f"via {s['via']}, DNS {'ok' if s['dns']['ok'] else 'FAILED'}, TLS {'ok' if s.get('tcp', {}).get('ok') else 'FAILED ' + s.get('tcp', {}).get('error', '')})")
+        ep['tries'] += 1
+        ep['lastTs'] = rec['ts']
+        ep['last'] = rec['at']
+        ep['kinds'][rec['kind']] = ep['kinds'].get(rec['kind'], 0) + 1
+        self.state['last'] = {k: ep[k] for k in ('folder', 'start', 'kinds', 'tries')} | {'open': True, 'snap': rec['snap']}
+        self.count(rec)
+        self.write_state()
+
+    def answered(self, raw):
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            return
+        sess = d.get('sessionId')
+        if sess in self.episodes and not d.get('isApiErrorMessage'):
+            self.close_episode(sess, recovered=True)
+
+    def close_episode(self, sess, recovered):
+        ep = self.episodes.pop(sess)
+        ep['end'] = stamp()
+        ep['seconds'] = round(now() - ep['startTs'])
+        ep['recovered'] = recovered
+        with open(EPISODES, 'a') as fh:
+            fh.write(json.dumps({k: v for k, v in ep.items() if k not in ('startTs', 'lastTs')}) + '\n')
+        log(f"{'RECOVERED' if recovered else 'GAVE UP'} {ep['folder']} after {ep['seconds']} s, {ep['tries']} tries "
+            + ', '.join(f'{k}×{v}' for k, v in ep['kinds'].items()))
+        last = self.state.get('last') or {}
+        if last.get('start') == ep['start']:
+            last.update({'open': False, 'seconds': ep['seconds'], 'recovered': recovered})
+        self.write_state()
+
+    def count(self, rec):
+        day = rec['at'][:10]
+        t = self.state.get('today') or {}
+        if t.get('day') != day:
+            t = {'day': day, 'tries': 0, 'episodes': 0, 'kinds': {}}
+        t['tries'] += 1
+        if self.episodes[rec['session']]['tries'] == 1:
+            t['episodes'] += 1
+        t['kinds'][rec['kind']] = t['kinds'].get(rec['kind'], 0) + 1
+        self.state['today'] = t
+
+    def probe(self):
+        d = dns(timeout=3)
+        p = {'at': stamp(), 'dns': d}
+        if d['ok']:
+            p['tcp'] = tls(d['ips'][0])
+        ok = d['ok'] and p.get('tcp', {}).get('ok')
+        p['ok'] = bool(ok)
+        if not ok and self.probe_down_since is None:
+            self.probe_down_since = now()
+            rec = {'at': stamp(), 'ts': now(), 'session': 'probe', 'folder': '(probe)',
+                   'kind': 'DNS' if not d['ok'] else 'TLS', 'text': (d.get('error') or p['tcp'].get('error')),
+                   'snap': snapshot(probe_tcp=False)}
+            with open(DROPS, 'a') as fh:
+                fh.write(json.dumps(rec) + '\n')
+            log(f"PROBE: the API is not reachable from the Mac ({rec['kind']}: {rec['text']}, via {rec['snap']['via']})")
+        elif ok and self.probe_down_since is not None:
+            log(f'PROBE: the API reachable again after {round(now() - self.probe_down_since)} s')
+            self.probe_down_since = None
+        p['downSince'] = stamp(self.probe_down_since) if self.probe_down_since else None
+        self.state['probe'] = p
+        self.write_state()
+
+    def write_state(self):
+        self.state['updated'] = stamp()
+        self.state['watcher'] = os.getpid()
+        tmp = STATE + '.tmp'
+        with open(tmp, 'w') as fh:
+            json.dump(self.state, fh, indent=1)
+        os.replace(tmp, STATE)
+
+    def run(self, parent=None):
+        log(f'watcher started, pid {os.getpid()}')
+        nextp = 0
+        while True:
+            if parent and not alive(parent):
+                return 0
+            try:
+                self.scan()
+                for s, ep in list(self.episodes.items()):        # a session silent long after its last try
+                    if now() - ep['lastTs'] > 1800:
+                        self.close_episode(s, recovered=False)
+                if now() >= nextp:
+                    nextp = now() + PROBE_EVERY
+                    self.probe()
+            except Exception as e:
+                log(f'watcher error: {e}')
+            time.sleep(2)
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+# ---------------------------------------------------------------------------------------------------- reading
+
+def history(days):
+    """Every api_error in the transcripts of the last N days (no snapshot: the lines were not watched then)."""
+    cut = now() - days * 86400
+    out = []
+    for f in glob.glob(os.path.join(PROJECTS, '*', '*.jsonl')) + glob.glob(os.path.join(PROJECTS, '*', '*', 'subagents', '*.jsonl')):
+        try:
+            if os.path.getmtime(f) < cut:
+                continue
+            with open(f, 'rb') as fh:
+                for raw in fh:
+                    if b'"api_error"' not in raw:
+                        continue
+                    d = json.loads(raw)
+                    if d.get('subtype') != 'api_error':
+                        continue
+                    t = datetime.fromisoformat(d['timestamp'].replace('Z', '+00:00')).timestamp()
+                    if t >= cut:
+                        out.append({'ts': t, 'session': d.get('sessionId'), 'folder': os.path.basename(d.get('cwd') or ''),
+                                    'kind': kind_of(d.get('error') or {}), 'try': d.get('retryAttempt')})
+        except (OSError, ValueError):
+            continue
+    return sorted(out, key=lambda r: r['ts'])
+
+
+def episodes_of(rows):
+    eps, open_ = [], {}
+    for r in rows:
+        e = open_.get(r['session'])
+        if not e or r['ts'] - e['last'] > EPISODE_GAP:
+            e = open_[r['session']] = {'session': r['session'], 'folder': r['folder'], 'first': r['ts'], 'last': r['ts'], 'tries': 0, 'kinds': {}}
+            eps.append(e)
+        e['last'] = r['ts']
+        e['tries'] += 1
+        e['kinds'][r['kind']] = e['kinds'].get(r['kind'], 0) + 1
+    return eps
+
+
+def print_history(days):
+    rows = history(days)
+    eps = episodes_of(rows)
+    print(f'Claude Code drops in the last {days} days: {len(rows)} failed tries in {len(eps)} episodes\n')
+    by = {}
+    for r in rows:
+        by[r['kind']] = by.get(r['kind'], 0) + 1
+    for k, v in sorted(by.items(), key=lambda x: -x[1]):
+        print(f'  {v:6d}  {k}')
+    print('\nEpisodes (start, length, session folder, tries):')
+    for e in eps[-40:]:
+        print(f"  {datetime.fromtimestamp(e['first']).strftime('%d.%m %H:%M:%S')}  {int(e['last'] - e['first']):6d} s  "
+              f"{e['folder'][:28]:28s}  {e['tries']:4d}  " + ', '.join(f'{k}×{v}' for k, v in e['kinds'].items()))
+
+
+def print_report(days):
+    cut = now() - days * 86400
+    rows = []
+    try:
+        for line in open(DROPS):
+            r = json.loads(line)
+            if r.get('ts', 0) >= cut:
+                rows.append(r)
+    except (OSError, ValueError):
+        pass
+    if not rows:
+        print('No drop watched yet (ck-claude watch writes them from its start on). `ck-claude history` reads older ones.')
+        return
+    print(f'{len(rows)} watched tries in the last {days} days\n')
+    table = {}
+    for r in rows:
+        s = r.get('snap') or {}
+        key = (r['kind'], s.get('mode'), 'tunnel on' if s.get('tunnel') else 'tunnel off', s.get('via'),
+               'DNS ok' if (s.get('dns') or {}).get('ok') else 'DNS FAIL',
+               'TLS ok' if (s.get('tcp') or {}).get('ok') else ('TLS FAIL' if s.get('tcp') else '-'))
+        table[key] = table.get(key, 0) + 1
+    print('  tries  kind          mode        tunnel      via       DNS       TLS')
+    for k, v in sorted(table.items(), key=lambda x: -x[1]):
+        print(f'  {v:5d}  {k[0]:12s}  {str(k[1]):10s}  {k[2]:10s}  {str(k[3]):8s}  {k[4]:8s}  {k[5]}')
+    try:
+        eps = [json.loads(l) for l in open(EPISODES)]
+        print('\nEpisodes:')
+        for e in eps[-20:]:
+            print(f"  {e['start'][5:19]}  {e['seconds']:5d} s  {'recovered' if e['recovered'] else 'GAVE UP  '}  "
+                  f"{e['folder'][:26]:26s} {e['tries']:3d} tries  " + ', '.join(f'{k}×{v}' for k, v in e['kinds'].items()))
+    except (OSError, ValueError):
+        pass
+
+
+def main(argv):
+    if not argv or argv[0] in ('-h', '--help', 'help'):
+        print(__doc__.strip())
+        return 0
+    os.makedirs(SUPPORT, exist_ok=True)
+    days = int(argv[argv.index('--days') + 1]) if '--days' in argv else 7
+    cmd = argv[0]
+    if cmd == 'watch':
+        parent = int(argv[argv.index('--parent') + 1]) if '--parent' in argv else None
+        import fcntl
+        lock = open(STATE + '.lock', 'a')
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            print('ck-claude: a watcher is already running')
+            return 0
+        return Watcher().run(parent)
+    if cmd == 'status':
+        try:
+            st = json.load(open(STATE))
+        except (OSError, ValueError):
+            print('no state yet: is ck-claude watch running?')
+            return 1
+        if '--json' in argv:
+            print(json.dumps(st))
+        else:
+            print(json.dumps(st, indent=1))
+        return 0
+    if cmd == 'report':
+        print_report(days)
+        return 0
+    if cmd == 'history':
+        print_history(days)
+        return 0
+    print(__doc__.strip())
+    return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))
