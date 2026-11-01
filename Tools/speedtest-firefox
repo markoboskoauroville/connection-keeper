@@ -51,6 +51,8 @@ class Browser:
         os.makedirs(PROFILE, exist_ok=True)
         with open(os.path.join(PROFILE, 'user.js'), 'w') as f:   # no first-run pages; his add-ons stay switched on
             f.write(USER_JS)
+        bare_window(PROFILE)       # v46: no tabs, no address bar, no toolbars: the page and the close button
+        bring_ublock(PROFILE)      # v46: his uBlock Origin, so no commercials on speedtest.net
         self.port = free_port()
         look = ['--width', '1200', '--height', '860'] if visible else ['--headless']
         self.proc = subprocess.Popen(
@@ -109,6 +111,46 @@ class Browser:
                 self.proc.kill()
 
 
+# v46 (Marko 1.11.2026, request 64: "open it without any user interface parts. Only X will be there to close the test
+# ... Use uBlock to block it"). The window keeps only the native macOS title bar (its red close button); everything
+# Firefox draws (tabs, address bar, bookmarks, side bar) is hidden by userChrome.css. uBlock Origin is copied from his
+# own Firefox profile into ours at every start, so a newer one he installs comes along.
+USERCHROME = '''#TabsToolbar, #nav-bar, #PersonalToolbar, #titlebar, #sidebar-box, #sidebar-main, #sidebar-splitter,
+#notifications-toolbar, .notificationbox-stack, #tabbrowser-tabbox > .browserSidebarContainer > .notificationbox-stack
+{ visibility: collapse !important; }
+#navigator-toolbox { border: none !important; min-height: 0 !important; }
+'''
+UBLOCK = 'uBlock0@raymondhill.net.xpi'
+
+
+def bare_window(profile):
+    d = os.path.join(profile, 'chrome')
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, 'userChrome.css'), 'w') as f:
+        f.write(USERCHROME)
+
+
+def his_ublock():
+    """The newest uBlock Origin in any of his own Firefox profiles."""
+    import glob
+    found = glob.glob(os.path.expanduser('~/Library/Application Support/Firefox/Profiles/*/extensions/' + UBLOCK))
+    return max(found, key=os.path.getmtime) if found else None
+
+
+def bring_ublock(profile):
+    import shutil
+    src = his_ublock()
+    if not src:
+        log('uBlock Origin not found in his Firefox: the test runs without it')
+        return
+    d = os.path.join(profile, 'extensions')
+    os.makedirs(d, exist_ok=True)
+    dst = os.path.join(d, UBLOCK)
+    if not os.path.exists(dst) or os.path.getmtime(src) > os.path.getmtime(dst) or os.path.getsize(src) != os.path.getsize(dst):
+        shutil.copy2(src, dst)
+        log('uBlock Origin copied from his Firefox (' + src.split('/Profiles/')[1].split('/')[0] + ')')
+
+
 USER_JS = '''user_pref("remote.prefs.recommended", false);
 user_pref("browser.aboutwelcome.enabled", false);
 user_pref("browser.startup.homepage_override.mstone", "ignore");
@@ -117,6 +159,14 @@ user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.sessionstore.resume_from_crash", false);
 user_pref("extensions.autoDisableScopes", 0);
+user_pref("extensions.enabledScopes", 15);
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+user_pref("browser.tabs.inTitlebar", 0);
+user_pref("sidebar.revamp", false);
+user_pref("sidebar.verticalTabs", false);
+user_pref("browser.toolbars.bookmarks.visibility", "never");
+user_pref("extensions.ui.notifyUnsigned", false);
+user_pref("extensions.webextensions.restrictedDomains", "");
 '''
 
 VIS = 'const vis = e => !!(e && e.offsetParent);'

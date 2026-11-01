@@ -591,7 +591,7 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > please, we are working on my adblock connection application. We need to fix the opening of the Firefox window. First of all, you need to open it without any user interface parts. Only X will be there to close the test. Second of all, you need to load this application in the Firefox window. When it opens, you block the extension. It is working in my normal Firefox. I installed it, but I don't know why this window is opening in its own special Firefox without any of my settings. You block is blocking commercials, which are on this speed test site. I don't want to see commercials. Use uBlock to block it. Please now build this upgrade for speed test. When I test speed, when I click on the number
 
-**Status:** in work.
+**Status:** done 1.11.2026 (speedtest-firefox v46): the window has no tabs, address bar or toolbars, only the macOS title bar with its close button (userChrome.css, seen in a screenshot); his own uBlock Origin 1.75.0 is copied from his Firefox profile into the test's profile at every start (a newer one he installs comes along). Seen: speedtest.net with 0 ad frames (before: 11, Google and Amazon ads). The first start after the copy still showed ads while uBlock loaded its lists; from the second start on, clean.
 
 ## 1.11.2026, request 65 (Claude Code's connection drops: detected, shown in the status line, protected against)
 
