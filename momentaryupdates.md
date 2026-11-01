@@ -615,4 +615,4 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > Please make my application not follow me everywhere. If it's open on one screen, it needs to stay there. I don't know what's going on. When I switch desktops, monitors, it's following me all around.
 
-**Status:** done 1.11.2026 (v48): `.canJoinAllSpaces` taken off the stripe in both TOP modes (`.managed` now); a click on the menu bar icon still brings it to his desktop (`.moveToActiveSpace` for half a second). Installed; switching desktops is his hand to try (never driven for him).
+**Status:** done 1.11.2026 (v48): `.canJoinAllSpaces` taken off the stripe in both TOP modes (`.managed` now); a click on the menu bar icon still brings it to his desktop (`.moveToActiveSpace` for half a second). Installed; Marko confirmed 1.11.2026: "now the stripe stay put". He also switched on Chrome's parallel downloading.
