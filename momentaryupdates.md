@@ -561,4 +561,12 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > please fix my user interface. You need to put "Test", then "Column", and then "Speed Health". Not two times: "Test Speed Test Health". Between "Test", "Speed", and "Health", you need to put a pipe
 
-**Status:** started 1.11.2026: read as `TEST: SPEED | HEALTH` ("Column" = colon).
+**Status:** done 1.11.2026 04:20: `TEST: SPEED | HEALTH` on the stripe (seen).
+
+## 1.11.2026, request 61 (4G / 5G tested; a speed test at every start in the bottom line; ✕ on every status line)
+
+> please test switching between 5G and 4G. Is it working? Always, at the end, at the starting, not at the end, at the starting of the app, you need to do a speed test, and that speed test is displayed in the status line at the bottom of the app
+
+> at the next to each status line, put a small gray X at the end so I can close the status line. It's not stuck on the screen forever
+
+**Status:** started 1.11.2026.
