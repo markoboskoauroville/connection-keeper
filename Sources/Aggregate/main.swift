@@ -38,6 +38,7 @@ final class Uplink {
     // the connections being dialled plus those that moved bytes in the last 5 s, by their client socket.
     var pending = 0, seen: [Int32: Date] = [:]
     var lastGood = Date.distantPast, probing = false     // v31: the last proof it carries; a check under way
+    let meter = LineMeter()                               // v47: live rate, peak, probe (Balance.swift)
     func busy(_ now: Date) -> Int { pending + seen.values.filter { now.timeIntervalSince($0) < 5 }.count }
     init(iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?) {
         self.iface = iface; self.name = name; self.gateway = gateway; self.gatewayMAC = gatewayMAC; self.publicIP = publicIP
@@ -323,10 +324,7 @@ final class Server {
             lock.lock()
             let now = Date()
             let alive = lines.filter { !tried.contains($0.iface) }
-            guard let u = alive.min(by: { a, b in
-                if a.alive != b.alive { return a.alive }
-                return Double(a.busy(now) + 1) / a.mbps < Double(b.busy(now) + 1) / b.mbps
-            }) else { lock.unlock(); return nil }
+            guard let u = alive.min(by: { load($0, now) < load($1, now) }) else { lock.unlock(); return nil }
             u.active += 1; u.pending += 1
             lock.unlock()
             if let fd = u.phone.map({ Phones.dial(host, port, via: $0.port) }) ?? dial(host, port, via: u.iface) {
@@ -367,6 +365,7 @@ final class Server {
         // v31 (request 48): every line checked every 3 s (Failover.swift), not every 20 s
         Resolver.lines = { [self] in lock.lock(); defer { lock.unlock() }; return lines }
         Thread.detachNewThread { [self] in while true { sleep(3); checkLines() } }
+        startBalance()                                   // v47: live rate, probes on 4G ↔ 5G (Balance.swift)
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
         // v32 (request 49): at once too when a device comes or goes (a phone plugged in, a cable), and when ⟳ is pressed.
         Thread.detachNewThread { [self] in
@@ -513,7 +512,7 @@ extension Server {
         for _ in 0..<100 { lock.lock(); let none = lines.isEmpty; lock.unlock(); if !none { break }; usleep(200_000) }
         lock.lock()
         let now = Date()
-        let pick = lines.filter { $0.alive && $0.phone == nil }.min { Double($0.busy(now) + 1) / $0.mbps < Double($1.busy(now) + 1) / $1.mbps } ?? lines.first { $0.phone == nil }   // adb carries TCP only: UDP never goes to a phone
+        let pick = lines.filter { $0.alive && $0.phone == nil }.min { load($0, now) < load($1, now) } ?? lines.first { $0.phone == nil }   // adb carries TCP only: UDP never goes to a phone
         if let u = pick { u.active += 1; u.connections += 1; u.seen[c] = now }
         lock.unlock()
         let fail: [UInt8] = [5, 1, 0, 1, 0, 0, 0, 0, 0, 0]
@@ -698,7 +697,7 @@ extension Server {
     func status() -> String {
         lock.lock(); defer { lock.unlock() }
         let ls: [[String: Any]] = lines.map { u in
-            ["name": u.name, "device": u.iface, "publicIP": u.publicIP ?? "", "gateway": u.gateway ?? "", "mbps": u.mbps,
+            ["name": u.name, "device": u.iface, "publicIP": u.publicIP ?? "", "gateway": u.gateway ?? "", "mbps": u.mbps, "rate": u.meter.rate, "capacity": u.capacity, "probed": u.meter.probed ?? 0, "radio": u.meter.radio ?? "",
              "alive": u.alive, "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6]
         }
         let ig: [[String: String]] = ignored.map { ["name": $0.0.name, "device": $0.0.iface, "sameLineAs": $0.1.name] }

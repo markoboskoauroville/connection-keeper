@@ -2,7 +2,7 @@
 import Foundation
 
 // v38 (30.10.2026, Marko: "If permissions are not set, it needs to have text in the top right"): PERMISSIONS
-let CKVersion = 46
+let CKVersion = 47
 
 // The phase the keeper writes when the current connection is dead and no other one works (v5).
 let noOtherPrefix = "NO OTHER CONNECTION"

@@ -127,10 +127,7 @@ extension Server {
         for _ in 0..<100 { lock.lock(); let none = lines.isEmpty; lock.unlock(); if !none { break }; usleep(200_000) }
         lock.lock()
         let now = Date()
-        let order = lines.sorted { a, b in
-            if a.alive != b.alive { return a.alive }
-            return Double(a.busy(now) + 1) / a.mbps < Double(b.busy(now) + 1) / b.mbps
-        }
+        let order = lines.sorted { load($0, now) < load($1, now) }   // v47: live rate and capacity (Balance.swift)
         lock.unlock()
         let r = Race()
         var started = 0

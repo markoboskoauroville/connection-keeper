@@ -425,3 +425,13 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
 - ClaudeDrops.swift: the `☁ CLAUDE` row among the bottom rows (Downloads.rows()), dismissable with ✕.
 - mods/api-drops: the Claude Code mod (status line every 10 s from claude-drops-state.json, a toast on a turn that
   ends on an API error). Loaded in every session by `CLAUDE_CODE_PLUGIN_DIRS` in the env block of ~/.claude/settings.json.
+
+## 1.11.2026, v47: the load balance follows the lines' real speed (request 66)
+
+- Sources/Aggregate/Balance.swift: each `Uplink` has a `LineMeter` (rate each second from its byte counters, peak with
+  a ~10 min half-life, `probed`), `capacity` = max(stored test, peak, probed); `Server.load()` = (rate + 2 × busy) ÷
+  capacity orders the race, `openOneByOne` and the UDP pick. Every 10 s the phones' radio (PhoneRadio.read) and every
+  line's public IP are checked: a change, or no known speed, runs a 3 s two-stream probe (radio: after 6 s, and again
+  30 s later). `/status` now shows rate, capacity, probed, radio; the log writes `balance:` every 30 s while traffic moves.
+- Measured: Pixel 5G 128–140, 4G 38–40 Mbit/s; mantra 12–36. Live through the tunnel 117.6 Mbit/s, Pixel 127 MB / mantra 36.
+- An open connection cannot be moved to another line. One big file over all lines: ck-net, or Chrome's parallel downloading flag.

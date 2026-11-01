@@ -314,3 +314,11 @@ the job and tries the bootstrap up to five times.
 - Claude Code's own record of a drop is in the transcript (`subtype: api_error`, `error.connection.code`,
   `retryAttempt`); the mod engine shows the retry only as an opaque marker, so the watcher reads the transcripts.
 - A name for a Claude Code mod cannot start with "claude-" (reserved): the mod is `api-drops`.
+
+## 1.11.2026 (v47): a stored speed is not a capacity
+
+The balance used `ck-aggregate test` results stored by public IP. A phone's new 5G address had never been tested, so
+the default 10 Mbit/s sent every heavy connection to the slowest line for five hours. Speeds must be live (byte
+counters per second, a decaying peak) and re-measured when the radio or the public address changes; a probe right
+after a 4G/5G switch reads far too low (6.7 instead of 38), wait ~6 s and look again 30 s later. Counting connections
+is no measure of load: the Pixel had more connections than mantra and a seventh of its bytes.
