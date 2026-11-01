@@ -387,7 +387,12 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
   comes to the display whose icon was clicked, in front.
 - **ck-aggregate**: in WIRES a phone found on a Wi-Fi gets its Wi-Fi switched off (`svc wifi disable`).
 - **Measured 03:50**: alone ↓/↑ Mbit/s AX88179B 34/26 (171 at 03:43), Nothing 140/167, Pixel 146/118; all together 157/182
-  (49 % of the sum down): the two phones together ≈ one phone: **adb over USB is the ceiling**. Health 99/100.
+  (49 % of the sum down); at 04:25 the start test gave all lines together **293 ↓ 331 ↑** (Pixel 132/157, Nothing 138/167,
+  AX88179B 22/5): so 03:50 was a busy minute, not an adb ceiling. Health 99/100.
+- **v43 later the same night (request 61)**: `ck-net test speed --quick` (all lines together, 4 s + 4 s, ~150–300 MB)
+  runs 20 s after every start of the stripe instead of speedtest.net, shown as the bottom status line `⇅ SPEED`; every
+  bottom line has a grey ✕ (hidden until it says something new; UserDefaults dismissedStatusLines). 4G ↔ 5G tested on
+  both phones from adb: NR_NSA → LTE_CA → NR_NSA. `TEST: SPEED | HEALTH`, no pipe before TEST: (manifest one-line-stripe).
 - **Waiting for Marko**: `sudo ./tunnel.sh install` (the v43 helper: v42's retry fix + strict AGGREGATE). Until then
   AGGREGATE behaves as BOTH. Never checked on screen by me: the TEST SPEED window (its data and code are tested; the
   health window was seen).

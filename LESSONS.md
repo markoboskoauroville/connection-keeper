@@ -295,8 +295,9 @@ the job and tries the bootstrap up to five times.
   make nonsense claims": look at the phone before saying what it is on.
 - **One file over many lines needs pieces, not connections.** The server balances connections, so one download stays on
   one line; ck-net asks byte ranges per line itself. With pwrite at the offset, a cut costs only the bytes in flight.
-- **adb is the phones' ceiling.** Each phone alone ~140 Mbit/s, both together ~130–180: they share adb's forwarding on
-  one USB. A phone as a real network card (Pixel's NCM tethering) would bypass it: not tried yet.
+- **One speed test is one moment.** At 03:50 both phones together gave ~130 Mbit/s (≈ one phone) and adb looked like
+  the ceiling; at 04:25 they gave 132 + 138 down, 157 + 167 up together (all lines 293 ↓ 331 ↑). The cell's load at that
+  minute decides; the report's BOTTLENECK note is a hint for that run only, never a verdict without a second run.
 - **A phone whose data drops joins the house Wi-Fi and stays.** Its line becomes "the same line" as the router's; in WIRES
   the server now switches the phone's Wi-Fi off.
 - **The menu bar icon is on every display.** Toggling the stripe on a display other than the clicked one looks like

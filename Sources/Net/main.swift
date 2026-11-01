@@ -362,11 +362,13 @@ func loadPhase(_ lines: [NetLine], up: Bool, secs: Double, t0: Double, publish: 
     return (meters, pings, rates)
 }
 
-func testSpeed() {
-    let out = support.appendingPathComponent("linetest-speed.json")
+// quick (v43, request 61, the test at every start of the app): no line alone, all lines together 4 s down and 4 s up,
+// each line's part counted; about 150 MB. Written to linetest-start.json for the stripe's bottom line.
+func testSpeed(quick: Bool = false) {
+    let out = support.appendingPathComponent(quick ? "linetest-start.json" : "linetest-speed.json")
     let lines = currentLines()
     let t0 = now()
-    let secs = 5.0
+    let secs = quick ? 4.0 : 5.0
     var doc: [String: Any] = ["kind": "speed", "started": t0, "running": true, "seconds": secs, "lines": lines.map { ["name": $0.name, "kind": $0.kind] }]
     var series: [String: [[Double]]] = [:]
     var pingSeries: [String: [[Double]]] = [:]
@@ -388,7 +390,7 @@ func testSpeed() {
     doc["rows"] = rows
 
     // each line alone
-    for (i, l) in lines.enumerated() {
+    for (i, l) in lines.enumerated() where !quick {
         for up in [false, true] {
             let key = "\(l.name)|\(up ? "up" : "down")"
             let base = pingSeries[l.name] ?? []
@@ -732,7 +734,7 @@ func list() {
 let a = Array(CommandLine.arguments.dropFirst())
 switch (a.first, a.dropFirst().first) {
 case ("test", "health"): testHealth()
-case ("test", "speed"): testSpeed()
+case ("test", "speed"): testSpeed(quick: a.contains("--quick"))
 case ("get", _): exit(get(Array(a.dropFirst())))
 case ("resume", let id?): exit(resume(id))
 case ("stop", let id?):

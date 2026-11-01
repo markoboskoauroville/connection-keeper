@@ -159,8 +159,9 @@ final class Stripe: NSObject {
     lazy var macWord = word("MAC", Ink.grey, #selector(pickMac), id: "route-mac", tip: "MAC: the Mac on its own connection (its Wi-Fi or cable), the aggregation off")
     lazy var aggWord = word("AGGREGATE", Ink.grey, #selector(pickAggregateRoute), id: "route-aggregate", tip: "AGGREGATE: everything through the joined lines; the Mac's own Wi-Fi never used, even when they stumble")
     lazy var bothWord = word("BOTH", Ink.grey, #selector(pickBoth), id: "route-both", tip: "BOTH: through the joined lines; when they stop carrying traffic the Mac's own connection takes over within seconds, and gives back when they work again")
-    lazy var testSpeedWord = word("TEST SPEED", Ink.text, #selector(testSpeedPressed), id: "test-speed", tip: "Every line alone, then all together: download, upload, the ping under load, in a report window with graphs (about 50 s, about 600 MB of SIM data)")
-    lazy var testHealthWord = word("TEST HEALTH", Ink.text, #selector(testHealthPressed), id: "test-health", tip: "Every line at once: ping, jitter, loss, HTTPS times, public address, the phones' radio, in a report window (10 s, almost no data)")
+    lazy var testWord: NSTextField = { let t = NSTextField(labelWithString: "TEST:"); t.font = .monospacedSystemFont(ofSize: 12, weight: .bold); t.textColor = Ink.dim; t.setContentHuggingPriority(.required, for: .horizontal); return t }()
+    lazy var testSpeedWord = word("SPEED", Ink.text, #selector(testSpeedPressed), id: "test-speed", tip: "Every line alone, then all together: download, upload, the ping under load, in a report window with graphs (about 50 s, about 600 MB of SIM data)")
+    lazy var testHealthWord = word("HEALTH", Ink.text, #selector(testHealthPressed), id: "test-health", tip: "Every line at once: ping, jitter, loss, HTTPS times, public address, the phones' radio, in a report window (10 s, almost no data)")
     let dlBox = NSStackView()
     var downloadIDs: [String] = []
     var downloadTick = 0
@@ -336,7 +337,7 @@ final class Stripe: NSObject {
         permissions.setContentHuggingPriority(.required, for: .horizontal)
         permissions.toolTip = "Accessibility is off: joining a Wi-Fi through Control Centre cannot work. This opens its page in System Settings"
         permissions.isHidden = Permissions.missing.isEmpty
-        let row = NSStackView(views: [minimize, onWord, offWord, pipe(), macWord, aggWord, bothWord, pipe(), gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, pipe(), testSpeedWord, testHealthWord, pipe(), topWord, led, permissions])
+        let row = NSStackView(views: [minimize, onWord, offWord, pipe(), macWord, aggWord, bothWord, pipe(), gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testWord, testSpeedWord, pipe(), testHealthWord, pipe(), topWord, led, permissions])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -412,7 +413,11 @@ final class Stripe: NSObject {
         testMark = "..."
         setSpeed(nil, nil)
         pingNow()
-        checkData(visible: false) { [weak self] in self?.testSpeed(visible: false) }
+        // v43 (request 61, Marko 1.11.2026: "at the starting of the app, you need to do a speed test, and that speed test is
+        // displayed in the status line at the bottom"): ck-net's quick test of all lines together (about 150 MB) replaces
+        // speedtest.net at start; it waits 20 s for the lines to be found. A click on the speed still opens speedtest.net.
+        checkData(visible: false) {}
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.startSpeedTest() }
         for n in [NSApplication.didBecomeActiveNotification, NSApplication.didUnhideNotification] {
             NotificationCenter.default.addObserver(forName: n, object: nil, queue: .main) { [weak self] _ in self?.restoreStripe() }
         }

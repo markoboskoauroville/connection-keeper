@@ -569,4 +569,8 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > at the next to each status line, put a small gray X at the end so I can close the status line. It's not stuck on the screen forever
 
-**Status:** started 1.11.2026.
+**Status:** done 1.11.2026 04:26: 4G ↔ 5G tested on both phones (NR_NSA → LTE_CA → NR_NSA); the quick test at every start (04:25: ↓ 293 ↑ 331 Mbit/s all lines together) in the bottom line; ✕ pressed, the line closed.
+
+> write in the manifested note that pipe is there to divide options, so there is. With that rule, it's not possible that before test pipe appears, so remove it before test text
+
+**Status:** done 1.11.2026: no pipe before `TEST:`; the rule written in MANTRA_MANIFEST modules/one-line-stripe.md.
