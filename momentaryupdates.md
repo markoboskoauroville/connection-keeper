@@ -585,4 +585,4 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > please build in hover over so I know where are the buttons which can be pressed. The most maybe easy way is just to enlarge its buttons so even its area of clicking is enlarging
 
-**Status:** started 1.11.2026.
+**Status:** built 1.11.2026 (v45): under the mouse a button grows by a quarter about its centre, a brighter plate (26 %) with a white rim, the pointing hand; every button's click area at least 8 points wider than its word and 22 high. The layout seen unchanged in a screenshot; the hover itself only Marko's mouse can show.

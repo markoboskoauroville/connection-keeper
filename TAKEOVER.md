@@ -408,3 +408,6 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
   of the lead they stood partly outside it, so real clicks on them could miss (Accessibility presses still worked, which
   hid the fault from the tests). Proven by Marko's own click at 04:33:31: Nothing → LTE_CA in 9 s.
 - The tunnel helper v43 is installed (Marko, 1.11.2026): AGGREGATE is strict now.
+- **v45 (request 63):** Hover.scale grows the hovered button 1.25× about its centre (layer transform, zPosition 10) with a
+  26 % plate and a white 1-point rim; Hover.add gives every button width ≥ word + 8 and height ≥ 22 at priority 750 (a
+  fixed slot wins), so the click area is larger than the word.

@@ -7,7 +7,9 @@ import AppKit
 
 final class Hover: NSObject {
     static var owners: [ObjectIdentifier: Hover] = [:]
-    static let over = NSColor(calibratedWhite: 1, alpha: 0.16).cgColor
+    static let over = NSColor(calibratedWhite: 1, alpha: 0.26).cgColor
+    static let rim = NSColor(calibratedWhite: 1, alpha: 0.55).cgColor
+    static let grow: CGFloat = 1.25     // v45 (request 63): the word under the mouse grows by a quarter
     static let press = NSColor(calibratedRed: 0.30, green: 0.82, blue: 0.45, alpha: 0.45).cgColor
     weak var button: NSButton?
     var inside = false
@@ -19,6 +21,13 @@ final class Hover: NSObject {
         owners[id] = h
         b.wantsLayer = true
         b.layer?.cornerRadius = 4
+        // v45 (request 63: "enlarge its buttons so even its area of clicking is enlarging"): every button is at least
+        // 8 points wider and 22 high than its word, so the click lands near it too; a fixed slot (a lower priority
+        // here) keeps its own width.
+        let fit = b.fittingSize
+        b.translatesAutoresizingMaskIntoConstraints = false
+        let w = b.widthAnchor.constraint(greaterThanOrEqualToConstant: fit.width + 8); w.priority = .defaultHigh; w.isActive = true
+        let hgt = b.heightAnchor.constraint(greaterThanOrEqualToConstant: 22); hgt.priority = .defaultHigh; hgt.isActive = true
         b.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: h, userInfo: nil))
     }
 
@@ -31,12 +40,31 @@ final class Hover: NSObject {
         guard let b = button, b.isEnabled, b.alphaValue > 0 else { return }
         inside = true
         b.layer?.backgroundColor = Hover.over
+        b.layer?.borderColor = Hover.rim
+        b.layer?.borderWidth = 1
+        Hover.scale(b, Hover.grow)
         NSCursor.pointingHand.set()
     }
     @objc func mouseExited(with e: NSEvent) {
         inside = false
         button?.layer?.backgroundColor = nil
+        button?.layer?.borderWidth = 0
+        if let b = button { Hover.scale(b, 1) }
         NSCursor.arrow.set()
+    }
+
+    // Grows the button about its own centre (the layer's anchor is its corner), above its neighbours.
+    static func scale(_ b: NSButton, _ k: CGFloat) {
+        guard let l = b.layer else { return }
+        let w = b.bounds.width, h = b.bounds.height
+        var t = CATransform3DMakeTranslation(w / 2, h / 2, 0)
+        t = CATransform3DScale(t, k, k, 1)
+        t = CATransform3DTranslate(t, -w / 2, -h / 2, 0)
+        CATransaction.begin(); CATransaction.setAnimationDuration(0.08)
+        l.transform = k == 1 ? CATransform3DIdentity : t
+        l.zPosition = k == 1 ? 0 : 10
+        CATransaction.commit()
+        b.superview?.layer?.masksToBounds = false
     }
 
     // A press anywhere in our windows: the button under it flashes.
