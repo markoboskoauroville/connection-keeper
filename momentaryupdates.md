@@ -574,3 +574,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > write in the manifested note that pipe is there to divide options, so there is. With that rule, it's not possible that before test pipe appears, so remove it before test text
 
 **Status:** done 1.11.2026: no pipe before `TEST:`; the rule written in MANTRA_MANIFEST modules/one-line-stripe.md.
+
+## 1.11.2026, request 62 (separator lines, the Nothing's 4G/5G, hover on every button)
+
+> Tunnel is installed now. First of all, in the user interface, I need horizontal lines to see separate parts of the interface. Under the first line, put the horizontal line. Then all my connections are coming, and then another horizontal line for status. I'm not able to remotely switch between 5G and 4G. On Nothing Phone, Google works. Nothing Phone doesn't work. Please make it work I need to have a hover over. When I'm under any button, it's changing color. It becomes much more. I don't know how to find the way. Something so I know I'm over that, and when I click, it's going to react.
+
+**Status:** started 1.11.2026.
