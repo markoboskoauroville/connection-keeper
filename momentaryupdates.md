@@ -544,3 +544,13 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > please also give me the switch on the screen. It will be a two-grade output, basically. One is always green, and one is gray. It's a simple on-off switch we have on every app, which is going to allow me to switch between Mac connection or aggregate connection. Connection column: Mac, aggregate. I can switch between them. If I have my computer on Wi-Fi, I can just switch to Wi-Fi and ignore bypassing the aggregate. If I'm on aggregate, I'm bypassing the Wi-Fi of my computer or anything my computer does. It's either of these two connections that I can work with Third option is both. That means there is a fallback mechanism: if aggregate doesn't work, then local is working. It is fallback mechanism.Make this application enterprise-grade quality. Intelligent design makes it bug-free and with optimized code, and it works on the low level of the computer so it can work fast.
 
 **Status:** started 1.11.2026.
+
+> both phones are on ADB. Take a screenshot. They are on 5G. Don't make nonsense claims. Android, not 5G. What is this? You can control my phone and confirm what's there. Set it up and make it fit
+
+**Status:** confirmed 1.11.2026 04:02: both data SIMs show 5G NSA (TelephonyDisplayInfo overrideNetwork=NR_NSA; the Nothing's data on SIM 2 Telemach, the Pixel's on SIM 1). ck-net read the LTE anchor (gsm.network.type) and the wrong SIM's signal on the Nothing: now it reads the data SIM's own block, as the status bar does.
+
+## 1.11.2026, request 60 (4G / 5G buttons per phone)
+
+> find algorithms which can, through ADB, quickly first of all check what's there. Also, I want to have, next to each Wi-Fi connection, a Wi-Fi icon. I want to have icons for any device supporting it. A phone is for sure 5G or 4G, so I can remotely, through ADB, switch my quality of connection please make two buttons next to the Wi-Fi icon, 4G and 5G, and I can remotely change that on my phone
+
+**Status:** started 1.11.2026.
