@@ -558,3 +558,7 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > please read me in voice. What is left to do for this aggregate service? Is anything left to do? Where are we now with the project? I don't have 5G or 4G. I told you at the beginning of line. When there is a Wi-Fi at the beginning of line, the switcher: please move the buttons
 
 **Status:** done 1.11.2026 04:20: read by voice; 4G 5G at the beginning of the line, left of the Wi-Fi icon (seen on the stripe).
+
+> please fix my user interface. You need to put "Test", then "Column", and then "Speed Health". Not two times: "Test Speed Test Health". Between "Test", "Speed", and "Health", you need to put a pipe
+
+**Status:** started 1.11.2026: read as `TEST: SPEED | HEALTH` ("Column" = colon).
