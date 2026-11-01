@@ -586,3 +586,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > please build in hover over so I know where are the buttons which can be pressed. The most maybe easy way is just to enlarge its buttons so even its area of clicking is enlarging
 
 **Status:** built 1.11.2026 (v45): under the mouse a button grows by a quarter about its centre, a brighter plate (26 %) with a white rim, the pointing hand; every button's click area at least 8 points wider than its word and 22 high. The layout seen unchanged in a screenshot; the hover itself only Marko's mouse can show.
+
+## 1.11.2026, request 64 (the speed test window: no Firefox interface, only the close button; uBlock Origin inside)
+
+> please, we are working on my adblock connection application. We need to fix the opening of the Firefox window. First of all, you need to open it without any user interface parts. Only X will be there to close the test. Second of all, you need to load this application in the Firefox window. When it opens, you block the extension. It is working in my normal Firefox. I installed it, but I don't know why this window is opening in its own special Firefox without any of my settings. You block is blocking commercials, which are on this speed test site. I don't want to see commercials. Use uBlock to block it. Please now build this upgrade for speed test. When I test speed, when I click on the number
+
+**Status:** in work.
