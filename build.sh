@@ -12,6 +12,7 @@ APP="build/$NAME.app"
 rm -rf build && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/Daemon/*.swift -o "$APP/Contents/MacOS/connection-keeperd"
 swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/Aggregate/*.swift -o "$APP/Contents/MacOS/ck-aggregate"
+swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/Net/*.swift -o "$APP/Contents/MacOS/ck-net"
 swiftc -O -swift-version 5 Sources/Tunnel/*.swift -o "$APP/Contents/MacOS/ck-tunnel"
 # hev-socks5-tunnel (MIT, github.com/heiher/hev-socks5-tunnel) for the virtual device: fetched once, pinned by its
 # fingerprint, never kept in this repository (on the Download Monitor first; 316 KB of SIM data).
@@ -36,6 +37,7 @@ iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 
 codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.keeper "$APP/Contents/MacOS/connection-keeperd"
 codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.aggregate "$APP/Contents/MacOS/ck-aggregate"
+codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.net "$APP/Contents/MacOS/ck-net"
 codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.tunnel "$APP/Contents/MacOS/ck-tunnel"
 codesign --force -s "Mantra Apps" "$APP"
 codesign --verify --deep "$APP"
@@ -44,4 +46,5 @@ if pgrep -xq "Connection Keeper"; then echo "the stripe is running: quit it firs
 rm -rf "/Applications/$NAME.app"
 cp -R "$APP" /Applications/
 ditto -c -k --keepParent "$APP" "build/$V-connection-keeper-v$V.zip"
+mkdir -p ~/.local/bin && ln -sf "/Applications/$NAME.app/Contents/MacOS/ck-net" ~/.local/bin/ck-net
 echo "built v$V: /Applications/$NAME.app and build/$V-connection-keeper-v$V.zip"

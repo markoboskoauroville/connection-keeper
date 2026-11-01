@@ -90,16 +90,29 @@ extension Stripe {
         if up != lastMenuUp { lastMenuUp = up; showMenuBarSpeed(lastMenuSpeed.0, lastMenuSpeed.1) }   // the dot follows
     }
 
+    // v43 (Marko 1.11.2026: "I have an icon on the menu bar. When I click it, nothing happens. When I click it, my user
+    // interface should come in front and be on top"): the icon stands in the menu bar of every display, and the stripe
+    // stayed on the MacBook while he clicked on the BenQ's, so the click hid or showed it where he was not looking.
+    // Now a click brings the stripe to the display whose icon was clicked (top middle, unless it is on that display
+    // already), on top of everything; only a click while it stands there, in front, hides it again.
     @objc func menuBarClicked() {
-        if panel.isVisible {
+        let screen = menuItem?.button?.window?.screen ?? NSScreen.main
+        let here = panel.isVisible && panel.screen == screen && panel.occlusionState.contains(.visible) && !MenuBarPrefs.stripeHidden
+        if here {
             MenuBarPrefs.stripeHidden = true
             panel.orderOut(nil)
-        } else {
-            MenuBarPrefs.stripeHidden = false
-            if let f = minimizedFrame { minimizedFrame = nil; panel.setFrame(f, display: true) }
-            keepOnScreen()
-            applyOnTop()
-            panel.orderFrontRegardless()
+            appendLog("\(logStamp()) MENU BAR click: stripe hidden")
+            return
         }
+        MenuBarPrefs.stripeHidden = false
+        if let f = minimizedFrame { minimizedFrame = nil; panel.setFrame(f, display: true) }
+        if let s = screen, panel.screen != s {
+            let v = s.visibleFrame
+            panel.setFrameOrigin(NSPoint(x: v.midX - panel.frame.width / 2, y: v.maxY - panel.frame.height - 6))
+        }
+        keepOnScreen()
+        applyOnTop()
+        panel.orderFrontRegardless()
+        appendLog("\(logStamp()) MENU BAR click: stripe in front on \(screen?.localizedName ?? "?")")
     }
 }

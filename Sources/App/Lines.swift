@@ -20,6 +20,8 @@ final class LineRow {
     let lead = NSView()
     let wifi = NSButton()           // v34 (request 51): in WIRES, this line shared over Wi-Fi to the house, in the lead's space
     let name: NSTextField
+    // v43 (request 60): 4G and 5G beside the name on a phone's row; the one allowed now green, the other grey
+    let g4 = NSButton(title: "4G", target: nil, action: nil), g5 = NSButton(title: "5G", target: nil, action: nil)
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
     let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
     let info = label(textWidth("8 lines · 888 conn · 88.8× best, up 88.8×  ", monoFont), font: monoFont)
@@ -47,6 +49,20 @@ final class LineRow {
         speed.cell?.wraps = false
         ping.textColor = Ink.yellow
         info.textColor = Ink.dim
+        for (b, t) in [(g4, "4G"), (g5, "5G")] {
+            b.isBordered = false
+            b.font = .monospacedSystemFont(ofSize: 11, weight: .bold)
+            b.contentTintColor = Ink.grey
+            b.setContentHuggingPriority(.required, for: .horizontal)
+            b.alphaValue = 0                       // only a phone's row shows them; the slot stays so the columns align
+            b.isEnabled = false
+            b.setAccessibilityIdentifier("radio-\(t)")
+        }
+        // Marko 1.11.2026: "at the beginning of line ... when there is a Wi-Fi ... move the buttons": 4G 5G in the lead,
+        // just left of the Wi-Fi icon
+        for b in [g4, g5] { b.translatesAutoresizingMaskIntoConstraints = false; lead.addSubview(b) }
+        NSLayoutConstraint.activate([g5.trailingAnchor.constraint(equalTo: wifi.leadingAnchor, constant: -6), g5.centerYAnchor.constraint(equalTo: lead.centerYAnchor),
+                                     g4.trailingAnchor.constraint(equalTo: g5.leadingAnchor, constant: -4), g4.centerYAnchor.constraint(equalTo: lead.centerYAnchor)])
         view = NSStackView(views: [dot, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), info])
         view.orientation = .horizontal
         view.spacing = 3
@@ -149,8 +165,16 @@ extension Stripe {
             r.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
             r.wifi.target = self
             r.wifi.action = #selector(toggleShare(_:))
+            if Phones.isPhone(o.iface) {
+                let serial = String(o.iface.dropFirst(4))
+                for b in [r.g4, r.g5] {
+                    b.alphaValue = 1; b.isEnabled = true; b.target = self; b.action = #selector(radioPressed(_:))
+                    b.identifier = NSUserInterfaceItemIdentifier(serial)
+                }
+                showRadio(r, serial)
+            }
             lineRows[o.iface] = r
-            column.insertArrangedSubview(r.view, at: column.arrangedSubviews.count - 1)
+            column.insertArrangedSubview(r.view, at: column.arrangedSubviews.firstIndex(of: aggRow.view) ?? column.arrangedSubviews.count - 1)
             changed = true
         }
         for (dev, r) in lineRows where !shown.contains(where: { $0.iface == dev }) {
@@ -436,5 +460,55 @@ extension Stripe {
         UserDefaults.standard.set(expanded, forKey: "linesExpanded")
         layoutLines()
         fit()
+    }
+}
+
+// v43 (request 60): the phone's 4G / 5G, read every 15 s off the main thread (two adb calls a phone), switched on a click.
+extension Stripe {
+    func showRadio(_ r: LineRow, _ serial: String) {
+        let st = radioStates[serial]
+        let five = st?.fiveG
+        r.g5.contentTintColor = five == true ? Ink.green : Ink.grey
+        r.g4.contentTintColor = five == false ? Ink.green : Ink.grey
+        let tip = st.map { "Now on the phone's status bar: \($0.shown) (SIM \($0.slot + 1), the one carrying data)." } ?? "Reading the phone…"
+        r.g5.toolTip = tip + "\nClick: allow 5G on this phone (Settings → Preferred network type 5G), through adb."
+        r.g4.toolTip = tip + "\nClick: 4G only on this phone (5G not allowed), through adb."
+        r.g5.setAccessibilityValue(five == true ? "on" : "off"); r.g4.setAccessibilityValue(five == false ? "on" : "off")
+    }
+
+    func readRadios() {
+        if radioReading { return }
+        radioReading = true
+        let serials = lineRows.keys.filter(Phones.isPhone).map { String($0.dropFirst(4)) }
+        DispatchQueue.global().async {
+            var got: [String: (fiveG: Bool?, shown: String, slot: Int)] = [:]
+            for s in serials { if let st = PhoneRadio.state(s) { got[s] = st } }
+            DispatchQueue.main.async {
+                for (k, v) in got { self.radioStates[k] = v }
+                for (dev, r) in self.lineRows where Phones.isPhone(dev) { self.showRadio(r, String(dev.dropFirst(4))) }
+                self.radioReading = false
+            }
+        }
+    }
+
+    @objc func radioPressed(_ b: NSButton) {
+        guard let serial = b.identifier?.rawValue else { return }
+        let five = b.title == "5G"
+        let slot = radioStates[serial]?.slot
+        b.contentTintColor = Ink.amber
+        appendLog("\(logStamp()) RADIO \(serial): \(five ? "5G" : "4G") pressed")
+        DispatchQueue.global().async {
+            let sl = slot ?? PhoneRadio.state(serial)?.slot ?? 0
+            let ok = PhoneRadio.set(serial, slot: sl, fiveG: five)
+            // the phone takes some seconds to move to the other carrier; read it back after 8 s
+            sleep(8)
+            let st = PhoneRadio.state(serial)
+            DispatchQueue.main.async {
+                if let st { self.radioStates[serial] = st }
+                appendLog("\(logStamp()) RADIO \(serial): \(ok ? "set" : "NOT set"), the phone shows \(st?.shown ?? "?")")
+                for (dev, r) in self.lineRows where dev == "adb:\(serial)" { self.showRadio(r, serial) }
+                self.show(ok ? "\(five ? "5G" : "4G"): the phone shows \(st?.shown ?? "?")" : "the phone did not take the change (adb)", ok ? Ink.green : Ink.red, for: 8)
+            }
+        }
     }
 }

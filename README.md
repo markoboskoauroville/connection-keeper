@@ -296,3 +296,16 @@ I want to have some kind of refresh or push button."* The stripe now reads `🟡
   of them, every program it started (ifconfig, adb) said nothing, and from 17:58 on 28.10.2026 it had no line at all, so
   nothing plugged in could ever appear. Fixed in `shell()` (Sources/Shared/Net.swift); the server and the keeper keep
   0 pipes over time now.
+
+## Test speed, test health, the aggregate download, MAC · AGGREGATE · BOTH, 4G · 5G (v43, 1.11.2026)
+
+**TEST SPEED** and **TEST HEALTH** at the top of the stripe open a report window: every line alone and all together,
+ping, jitter, loss, latency under load with a grade, HTTPS times, the phones' radio, graphs over time. **MAC** (the Mac's
+own connection), **AGGREGATE** (only the joined lines) or **BOTH** (the lines, the Mac's connection when they fail).
+**4G / 5G** on each phone's line switch the phone through adb. Downloads over all lines at once, resumable, checked:
+
+```
+ck-net get https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin --to ~/Downloads
+ck-net list        ck-net resume <id>        ck-net test health        ck-net test speed
+```
+The download shows on the stripe's bottom line (RESUME when broken) and on the Download Monitor.

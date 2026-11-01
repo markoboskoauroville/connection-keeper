@@ -364,3 +364,30 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
   the dying line, the device stepped aside for a minute. v42 waits a round. **v42's helper is built, not yet installed**
   (Marko's password): the v41 helper runs meanwhile.
 - The Pixel 7 drops off USB again and again on 31.10.2026 (13:22, 13:33): the cable (the other session found it charge-only).
+
+## 1.11.2026 (v43): TEST SPEED · TEST HEALTH, the Aggregate Download Monitor, MAC · AGGREGATE · BOTH, 4G · 5G (requests 58–60)
+
+- **ck-net** (Sources/Net/main.swift, Contents/MacOS/ck-net, linked to ~/.local/bin/ck-net): `test health` (10 s, all
+  lines at once: ping 1.1.1.1 every 0.2 s from the line itself, `ping -b en17` / `adb shell ping`; five HTTPS requests
+  for TLS and first byte; public IP and Cloudflare site; a phone's radio), `test speed` (each line alone 5 s down with 4
+  streams + 5 s up with 3 streams, a ping under load, then all lines together; ~600 MB), `get <url> [--to]`, `resume <id>`,
+  `stop <id>`, `list`. Results: linetest-health.json, linetest-speed.json (rewritten every 0.5 s), downloads/<id>.json.
+- **The download**: 8 MiB pieces; 3 curl connections per line (the cable `--interface en17`, a phone
+  `--socks5-hostname 127.0.0.1:<port>`); every block `pwrite` at its offset into `<file>.ckpart`; a cut piece keeps its
+  bytes and any line continues from its last byte; a failing line rests 2/4/6/10 s; lines re-read every 5 s; SHA-256
+  checked against Hugging Face's X-Linked-ETag; reported to the Download Monitor (/report, id `ck-<id>`).
+  **Proven 1.11.2026 04:08–04:09:** ggml-large-v3-turbo-q8_0.bin (874.2 MB) → ~/Developer/VOICE_ENGINES/ggml: Pixel data
+  off 12 s at 15 %, `kill -9` at 40 % then RESUME pressed on the stripe (AX), Nothing data off 12 s at 65 %: 7 breaks
+  stitched, 1 resume, SHA-256 matches. 92 s in all.
+- **Stripe**: MAC AGGREGATE BOTH after ON OFF (Route.swift; AGGREGATE = file `tunnel-strict`, the v43 helper then never
+  steps aside); TEST SPEED TEST HEALTH before TOP (Tests.swift, a report window: table, throughput graph, round-trip graph,
+  findings); the download rows at the bottom (Downloads.swift, RESUME / STOP); 4G 5G left of the Wi-Fi icon on a phone row
+  (Shared/Radio.swift: `cmd phone set-allowed-network-types-for-users -s <data slot>` with or without the NR bit; read
+  from telephony.registry's TelephonyDisplayInfo of the SIM with mDataConnectionState=2). Menu bar click: the stripe
+  comes to the display whose icon was clicked, in front.
+- **ck-aggregate**: in WIRES a phone found on a Wi-Fi gets its Wi-Fi switched off (`svc wifi disable`).
+- **Measured 03:50**: alone ↓/↑ Mbit/s AX88179B 34/26 (171 at 03:43), Nothing 140/167, Pixel 146/118; all together 157/182
+  (49 % of the sum down): the two phones together ≈ one phone: **adb over USB is the ceiling**. Health 99/100.
+- **Waiting for Marko**: `sudo ./tunnel.sh install` (the v43 helper: v42's retry fix + strict AGGREGATE). Until then
+  AGGREGATE behaves as BOTH. Never checked on screen by me: the TEST SPEED window (its data and code are tested; the
+  health window was seen).

@@ -155,6 +155,17 @@ final class Stripe: NSObject {
     lazy var offWord = word("OFF", Ink.grey, #selector(switchOff), id: "off",
         tip: "Off: the aggregation, the tunnel, the proxy, the keeper and the phones' helper stopped, nothing of the app left between the Mac and the internet; then the app quits. The Wi-Fi radios stay as they are.")
     lazy var topWord = word("TOP", OnTop.on ? Ink.green : Ink.grey, #selector(toggleTop), id: "top", tip: "Always on top: green, the stripe stays above every other window")
+    // v43 (requests 58, 59): MAC AGGREGATE BOTH (Route.swift), TEST SPEED TEST HEALTH (Tests.swift), the downloads (Downloads.swift)
+    lazy var macWord = word("MAC", Ink.grey, #selector(pickMac), id: "route-mac", tip: "MAC: the Mac on its own connection (its Wi-Fi or cable), the aggregation off")
+    lazy var aggWord = word("AGGREGATE", Ink.grey, #selector(pickAggregateRoute), id: "route-aggregate", tip: "AGGREGATE: everything through the joined lines; the Mac's own Wi-Fi never used, even when they stumble")
+    lazy var bothWord = word("BOTH", Ink.grey, #selector(pickBoth), id: "route-both", tip: "BOTH: through the joined lines; when they stop carrying traffic the Mac's own connection takes over within seconds, and gives back when they work again")
+    lazy var testSpeedWord = word("TEST SPEED", Ink.text, #selector(testSpeedPressed), id: "test-speed", tip: "Every line alone, then all together: download, upload, the ping under load, in a report window with graphs (about 50 s, about 600 MB of SIM data)")
+    lazy var testHealthWord = word("TEST HEALTH", Ink.text, #selector(testHealthPressed), id: "test-health", tip: "Every line at once: ping, jitter, loss, HTTPS times, public address, the phones' radio, in a report window (10 s, almost no data)")
+    let dlBox = NSStackView()
+    var downloadIDs: [String] = []
+    var downloadTick = 0
+    var radioStates: [String: (fiveG: Bool?, shown: String, slot: Int)] = [:]
+    var radioReading = false
     var wiresBusy = false
     var sharing: Set<String> = []        // v34: the lines whose Wi-Fi share is switching
     var minimizedFrame: NSRect?
@@ -325,20 +336,24 @@ final class Stripe: NSObject {
         permissions.setContentHuggingPriority(.required, for: .horizontal)
         permissions.toolTip = "Accessibility is off: joining a Wi-Fi through Control Centre cannot work. This opens its page in System Settings"
         permissions.isHidden = Permissions.missing.isEmpty
-        let row = NSStackView(views: [minimize, onWord, offWord, gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, topWord, led, permissions])
+        let row = NSStackView(views: [minimize, onWord, offWord, pipe(), macWord, aggWord, bothWord, pipe(), gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, pipe(), testSpeedWord, testHealthWord, pipe(), topWord, led, permissions])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
-        aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + 6 + gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
+        aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + 6 + macWord.fittingSize.width + aggWord.fittingSize.width + bothWord.fittingSize.width + 2 * pipe().fittingSize.width + 15 + gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
         aggRow.view.edgeInsets.left += 12
         aggRow.dot.isHidden = true
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
         aggRow.speed.toolTip = "All joined lines' live speed added; in parentheses the last joined test, down and up.\nClick: test every line alone, then all joined, to compare (about 40 s)."
-        let column = NSStackView(views: [row, aggRow.view])
+        dlBox.orientation = .vertical
+        dlBox.alignment = .leading
+        dlBox.spacing = 0
+        dlBox.isHidden = true
+        let column = NSStackView(views: [row, aggRow.view, dlBox])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 0
@@ -385,6 +400,8 @@ final class Stripe: NSObject {
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData(); self?.newDay(); loadAgents(); if Wires.on { DispatchQueue.global().async { Wires.refreshShares() } } }
         loadAgents()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.scanLines() }
+        Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.readRadios() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.readRadios() }
         layoutLines()
         scanLines()
         // At every start, behind the scenes (request 17): the data left, then the speed test, one after the other so
@@ -544,6 +561,8 @@ final class Stripe: NSObject {
 
     func refresh() {
         reading()
+        showDownloads()
+        showRoute()
         applyAlert()
         showLed()
         // v28: the dot is gone from the stripe; when it would have been red or amber the name says it in that colour

@@ -90,6 +90,16 @@ enum Lines {
         for p in Phones.list() where ticked.isEmpty || ticked.contains(p.name) {
             if let note = Phones.ensure(p) { log("\(p.name): \(note)") }
             guard Phones.answers(p) else { continue }
+            // v43 (1.11.2026): in WIRES a phone is a line by its mobile data only. When its data went off for a moment
+            // (the cut test at 04:08) Android joined the house Wi-Fi and stayed on it after the data came back; its
+            // traffic then left through the TP-Link and the line was dropped as "the same line as AX88179B". Its Wi-Fi
+            // goes off here, as WIRES means (the radios are off in WIRES), and it is looked at again.
+            if !Phones.onMobileData(p), let adb = Phones.adb,
+               ((try? String(contentsOf: Paths.support.appendingPathComponent("wires"), encoding: .utf8)) ?? "").hasPrefix("wires") {
+                shell(adb, ["-s", p.serial, "shell", "svc", "wifi", "disable"], timeout: 6)
+                log("\(p.name) was on a Wi-Fi in WIRES: its Wi-Fi switched off, so it goes out on its mobile data")
+                for _ in 0..<10 where !Phones.onMobileData(p) { usleep(500_000) }
+            }
             let u = Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: Phones.publicIP(p) ?? known[p.device])
             u.phone = p; u.cellular = Phones.onMobileData(p); found.append(u)
         }

@@ -286,3 +286,18 @@ the job and tries the bootstrap up to five times.
   and starting on them makes it 0.2–0.4 s. A remembered line that is gone is harmless: the race moves on in ≤1 s.
 - A health check retried at once tests the same broken path twice in the same second; one dropped cable became two
   misses and a needless fail-open (13:33:22). A retry waits long enough for the server's own line check (3 s rounds).
+
+## 1.11.2026 (v43)
+
+- **5G is TelephonyDisplayInfo, not gsm.network.type.** 5G NSA rides an LTE anchor: getprop and the RIL say LTE, the
+  status bar says 5G from `overrideNetwork=NR_NSA`. Read the SIM that carries data (`Phone Id=N` block with
+  `mDataConnectionState=2`); on the Nothing that is SIM 2, and SIM 1's signal was read by mistake first. Marko: "Don't
+  make nonsense claims": look at the phone before saying what it is on.
+- **One file over many lines needs pieces, not connections.** The server balances connections, so one download stays on
+  one line; ck-net asks byte ranges per line itself. With pwrite at the offset, a cut costs only the bytes in flight.
+- **adb is the phones' ceiling.** Each phone alone ~140 Mbit/s, both together ~130–180: they share adb's forwarding on
+  one USB. A phone as a real network card (Pixel's NCM tethering) would bypass it: not tried yet.
+- **A phone whose data drops joins the house Wi-Fi and stays.** Its line becomes "the same line" as the router's; in WIRES
+  the server now switches the phone's Wi-Fi off.
+- **The menu bar icon is on every display.** Toggling the stripe on a display other than the clicked one looks like
+  "nothing happens".

@@ -47,6 +47,10 @@ func run(_ path: String, _ args: [String]) -> (status: Int32, out: String) {
 
 guard let home = arg("--home") else { log("usage: ck-tunnel --home /Users/<name> [--dir <folder>] [--for <seconds>]"); exit(2) }
 let flag = home + "/Library/Application Support/connection-keeper/tunnel-on"
+// v43 (request 59): AGGREGATE = strict, never the Mac's own connection; the stripe leaves this file. BOTH = no file:
+// the fail-open below (the Mac's own connection while the lines do not carry traffic).
+let strictFlag = home + "/Library/Application Support/connection-keeper/tunnel-strict"
+var strict: Bool { FileManager.default.fileExists(atPath: strictFlag) }
 let endAt = arg("--for").flatMap(Double.init).map { Date().addingTimeInterval($0) }
 
 // The server answers a TCP connect on 127.0.0.1:8857 within a second.
@@ -182,7 +186,8 @@ for s in [SIGTERM, SIGINT] {
     _ = Unmanaged.passRetained(src)   // kept for the life of the process
 }
 
-log("ck-tunnel started, flag \(flag)")
+log("ck-tunnel v43 started, flag \(flag), strict file \(strictFlag)")
+try? "43\n".write(toFile: dir + "/version", atomically: true, encoding: .utf8)
 deleteRoutes()                         // a crash may have left them
 writeState("off")
 var misses = 0
@@ -205,11 +210,11 @@ while true {
     if let p = hev {
         if !p.isRunning { down("hev-socks5-tunnel stopped (status \(p.terminationStatus))") }
         else if !want { down("aggregation off") }
-        else if misses >= 3 { down("the aggregation server does not answer") }
+        else if misses >= 3 && !strict { down("the aggregation server does not answer") }
         else if !routesPresent() {
             // macOS took them away again and again (12:17–12:19 on 18.10.2026, every 2.5 s): fighting it is worse than off
             readds = readds.filter { $0 > Date().addingTimeInterval(-60) } + [Date()]
-            if readds.count > 4 { readds = []; rest("the routes keep vanishing (\(device) fights a network change)") }
+            if readds.count > 4 && !strict { readds = []; rest("the routes keep vanishing (\(device) fights a network change)") }
             else { addRoutes(); log("routes were gone (a network change): added again") }
         } else {
             addScopedDefaults()                        // a line that became the main one meanwhile
@@ -222,7 +227,8 @@ while true {
                 else {
                     blocked += 1
                     log("traffic did not pass through \(device) (\(blocked) of 2)")
-                    if blocked >= 2 { blocked = 0; rest("traffic does not pass through \(device)") }
+                    if blocked >= 2 && strict { blocked = 0; log("strict (AGGREGATE): the lines do not carry traffic, the device stays (no fallback to the Mac)") }
+                    else if blocked >= 2 { blocked = 0; rest("traffic does not pass through \(device)") }
                 }
             }
         }
