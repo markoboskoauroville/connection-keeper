@@ -532,3 +532,15 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > for my aggregate services right now, the three phones connected basically are one router (TP-Link) and two phones, all on USB. Please, in the user interface at the top, are the buttons Test Speed and Test Health. It tests both things and gives a report in a pop-up window, reporting for each interface: - Speed - Speed together for uploading and downloading - Health You can also access different means using ping. There is an overall health graph, like speed and other things, which you think make sense for professional engineers in networking, in computer networking All three connections are here on 5G, so we are expecting around 150 or 200 Mbps. Please let's test it and let me know how it goes. If there are bugs, can this application aggregate downloads? Can my computer download fast? Can it stitch if it broke? I need you to take some 3D model, for example, a Whisper model online, which is around 1 gigabyte, and just break the connection and start the connection a few times. Keep Wi-Fi as a backup Wi-Fi mantra so you don't lose connection, and test all these features: connecting, continuing the broken download. Mani Svemir Whisper. Basically, you need to now connect my download monitor and my aggregate in one application. Down in the status line, it registers the file which is downloading. This is Aggregate Download Monitor. It registers the downloading file, and you can just press Resume if a download is broken. It gave verbose data about downloading status, speed, percentage, and estimated time of arrival. We do it on a real file from the Internet Whisper model.
 
 **Status:** started 1.11.2026.
+
+> please show me the user interface of this application
+
+> I don't need a screenshot. I need to see it on the screen. Open it on the Mac
+
+**Status:** done 1.11.2026 03:55: the stripe was hidden in the menu bar; shown again through its menu bar item (AX), on the MacBook screen.
+
+## 1.11.2026, request 59 (MAC | AGGREGATE | BOTH, enterprise grade)
+
+> please also give me the switch on the screen. It will be a two-grade output, basically. One is always green, and one is gray. It's a simple on-off switch we have on every app, which is going to allow me to switch between Mac connection or aggregate connection. Connection column: Mac, aggregate. I can switch between them. If I have my computer on Wi-Fi, I can just switch to Wi-Fi and ignore bypassing the aggregate. If I'm on aggregate, I'm bypassing the Wi-Fi of my computer or anything my computer does. It's either of these two connections that I can work with Third option is both. That means there is a fallback mechanism: if aggregate doesn't work, then local is working. It is fallback mechanism.Make this application enterprise-grade quality. Intelligent design makes it bug-free and with optimized code, and it works on the low level of the computer so it can work fast.
+
+**Status:** started 1.11.2026.
