@@ -396,3 +396,15 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
 - **Waiting for Marko**: `sudo ./tunnel.sh install` (the v43 helper: v42's retry fix + strict AGGREGATE). Until then
   AGGREGATE behaves as BOTH. Never checked on screen by me: the TEST SPEED window (its data and code are tested; the
   health window was seen).
+
+## 1.11.2026 (v44): rules, hover, the 4G/5G click (request 62)
+
+- `Rule` (Hover.swift): a 1-point grey line under the first row (`ruleLines`) and above the status lines (`ruleStatus`,
+  hidden with them); both set in fit().
+- `Hover`: every NSButton found by `Hover.walk` (fit() and the report window) gets a tracking area: a white 16 % rounded
+  plate and the pointing hand while the mouse is over it; a local leftMouseDown monitor flashes the pressed button green
+  for 0.25 s. The minimize circle keeps its own look.
+- 4G / 5G are arranged items of the row (`[dot, g4, g5, lead, name, …]`), the lead narrower by their width. As subviews
+  of the lead they stood partly outside it, so real clicks on them could miss (Accessibility presses still worked, which
+  hid the fault from the tests). Proven by Marko's own click at 04:33:31: Nothing → LTE_CA in 9 s.
+- The tunnel helper v43 is installed (Marko, 1.11.2026): AGGREGATE is strict now.

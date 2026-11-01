@@ -302,3 +302,5 @@ the job and tries the bootstrap up to five times.
   the server now switches the phone's Wi-Fi off.
 - **The menu bar icon is on every display.** Toggling the stripe on a display other than the clicked one looks like
   "nothing happens".
+- **An Accessibility press is not a click.** AX presses the button's action directly; a real click goes through hit
+  testing and misses a button that stands outside its superview's bounds. Put clickable things in the row itself.

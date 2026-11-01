@@ -185,6 +185,7 @@ final class LineTestWindow: NSObject, NSWindowDelegate {
             let v = s.visibleFrame
             window.setFrame(NSRect(x: v.midX - min(590, v.width / 2 - 10), y: v.midY - min(390, v.height / 2 - 10), width: min(1180, v.width - 20), height: min(780, v.height - 20)), display: false)
         }
+        Hover.walk(window.contentView!)
         head.stringValue = "\(window.title): starting…"
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

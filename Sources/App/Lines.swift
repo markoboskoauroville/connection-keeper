@@ -34,7 +34,6 @@ final class LineRow {
         dot.widthAnchor.constraint(equalToConstant: 12).isActive = true
         dot.heightAnchor.constraint(equalToConstant: 12).isActive = true
         lead.translatesAutoresizingMaskIntoConstraints = false
-        lead.widthAnchor.constraint(equalToConstant: leadWidth).isActive = true
         wifi.image = NSImage(systemSymbolName: "wifi", accessibilityDescription: "share this line over Wi-Fi")
         wifi.imagePosition = .imageOnly
         wifi.isBordered = false
@@ -58,12 +57,12 @@ final class LineRow {
             b.isEnabled = false
             b.setAccessibilityIdentifier("radio-\(t)")
         }
-        // Marko 1.11.2026: "at the beginning of line ... when there is a Wi-Fi ... move the buttons": 4G 5G in the lead,
-        // just left of the Wi-Fi icon
-        for b in [g4, g5] { b.translatesAutoresizingMaskIntoConstraints = false; lead.addSubview(b) }
-        NSLayoutConstraint.activate([g5.trailingAnchor.constraint(equalTo: wifi.leadingAnchor, constant: -6), g5.centerYAnchor.constraint(equalTo: lead.centerYAnchor),
-                                     g4.trailingAnchor.constraint(equalTo: g5.leadingAnchor, constant: -4), g4.centerYAnchor.constraint(equalTo: lead.centerYAnchor)])
-        view = NSStackView(views: [dot, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), info])
+        // Marko 1.11.2026: "at the beginning of line ... move the buttons", then "Nothing Phone doesn't work": inside the
+        // lead they stood partly outside it and a click could miss them; now they are items of the row, first in it,
+        // and the lead is narrower by their width so nothing else moves.
+        for b in [g4, g5] { b.setContentHuggingPriority(.required, for: .horizontal) }
+        lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - 6)).isActive = true
+        view = NSStackView(views: [dot, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), info])
         view.orientation = .horizontal
         view.spacing = 3
         view.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)

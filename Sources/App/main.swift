@@ -163,6 +163,7 @@ final class Stripe: NSObject {
     lazy var testSpeedWord = word("SPEED", Ink.text, #selector(testSpeedPressed), id: "test-speed", tip: "Every line alone, then all together: download, upload, the ping under load, in a report window with graphs (about 50 s, about 600 MB of SIM data)")
     lazy var testHealthWord = word("HEALTH", Ink.text, #selector(testHealthPressed), id: "test-health", tip: "Every line at once: ping, jitter, loss, HTTPS times, public address, the phones' radio, in a report window (10 s, almost no data)")
     let dlBox = NSStackView()
+    let ruleLines = Rule(), ruleStatus = Rule()      // v44 (request 62): under the first row, above the status lines
     var downloadIDs: [String] = []
     var downloadTick = 0
     var radioStates: [String: (fiveG: Bool?, shown: String, slot: Int)] = [:]
@@ -354,13 +355,17 @@ final class Stripe: NSObject {
         dlBox.alignment = .leading
         dlBox.spacing = 0
         dlBox.isHidden = true
-        let column = NSStackView(views: [row, aggRow.view, dlBox])
+        let column = NSStackView(views: [row, ruleLines, aggRow.view, ruleStatus, dlBox])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 0
         column.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 20)   // the right 20 points: the grip
         column.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(column)
+        for r in [ruleLines, ruleStatus] { r.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -16).isActive = true }
+        column.setCustomSpacing(3, after: row); column.setCustomSpacing(3, after: ruleLines)
+        column.setCustomSpacing(3, after: aggRow.view); column.setCustomSpacing(3, after: ruleStatus)
+        Hover.watchPresses()
         // the grip at the right end of the column (the column, not the root: the root's own edge is the unscaled one)
         grip.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(grip)
@@ -652,6 +657,9 @@ final class Stripe: NSObject {
     // The stripe keeps its left and top edges and takes the size its words and rows need.
     func fit() {
         guard let root = panel.contentView, let column = root.subviews.first else { return }
+        Hover.walk(root)
+        ruleStatus.isHidden = dlBox.isHidden || dlBox.arrangedSubviews.isEmpty
+        ruleLines.isHidden = lineRows.isEmpty && aggRow.view.isHidden
         let t = checked.stringValue
         let quiet = t.isEmpty || t.hasPrefix("checked ") || t == "keeper not running"
         checked.isHidden = false; checkedPipe.isHidden = false          // v29: the status slot keeps its place
