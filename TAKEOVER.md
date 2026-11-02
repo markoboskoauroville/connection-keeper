@@ -443,3 +443,6 @@ Never proven: the drag by a hand other than his (he confirmed "all works" on v28
   (300 s) → 4G. boost.json in Application Support keeps the state. Test copy: CK_AGG_BOOST_AFTER / _BACK / _MBPS.
 - The stripe: no `.canJoinAllSpaces` (main.swift applyOnTop); menuBarClicked adds `.moveToActiveSpace` for 0.5 s.
 - Left: the Pixel on 4G; Marko to switch desktops once and see the stripe stay.
+
+## 2.11.2026 (evening)
+Tools/phones5g (5G only during transfers, shared count). Found: both adb forwards pointed at the Pixel once (linewatch/emupload-lines now set one port per phone); macOS sends Google through utun99 whatever --bind says.
