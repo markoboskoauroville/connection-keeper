@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""phones5g: both phones to 5G only while something big goes up or down, back to 4G after it (Marko, 2.11.2026).
+
+Marko: "when you start to upload things to the drive, switch both phones to 5G to speed up", then "make a rule for
+uploading and downloading. Momentarily put it at 5G. When it's over, you need to bring it back to 4G ... It's burning my
+brain, and there's no need because there is no action on the internet."
+
+    phones5g on                 every phone on adb: 5G allowed (Settings -> Preferred network type, as the stripe's 5G)
+    phones5g off                every phone: 4G (every type but NR)
+    phones5g status             what each phone allows now
+    phones5g during CMD ...     5G, run CMD, 4G again however CMD ends (Ctrl-C, error, kill)
+
+Uploads (emupload copy) and downloads use `during`, or call on/off themselves. Several at once share a count in
+~/Library/Application Support/connection-keeper/5g.count: the phones go back to 4G only when the last one ends.
+The switch is Android's `cmd phone set-allowed-network-types-for-users` (connection-keeper Sources/Shared/Radio.swift).
+"""
+import fcntl, os, signal, subprocess, sys
+
+ADB = os.path.expanduser("~/Library/Android/sdk/platform-tools/adb")
+ALL, NO_NR = "11111111111111111111", "01111111111111111111"
+COUNT = os.path.expanduser("~/Library/Application Support/connection-keeper/5g.count")
+
+
+def phones():
+    out = subprocess.run([ADB, "devices"], capture_output=True, text=True).stdout.splitlines()[1:]
+    return [l.split()[0] for l in out if l.strip().endswith("device")]
+
+
+def setall(mask):
+    for s in phones():
+        for slot in (0, 1):
+            r = subprocess.run([ADB, "-s", s, "shell", "cmd", "phone", "set-allowed-network-types-for-users", "-s",
+                                str(slot), mask], capture_output=True, text=True, timeout=15)
+            if "completed" in r.stdout:
+                print("%s slot %d: %s" % (s, slot, "5G" if mask == ALL else "4G"))
+
+
+def count(delta):
+    os.makedirs(os.path.dirname(COUNT), exist_ok=True)
+    with open(COUNT, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.seek(0)
+        n = max(0, int((f.read().strip() or "0")) + delta)
+        f.seek(0); f.truncate(); f.write(str(n))
+        return n
+
+
+def status():
+    for s in phones():
+        for slot in (0, 1):
+            r = subprocess.run([ADB, "-s", s, "shell", "cmd", "phone", "get-allowed-network-types-for-users", "-s",
+                                str(slot)], capture_output=True, text=True, timeout=15).stdout
+            if "LTE" in r:
+                print("%s slot %d: %s" % (s, slot, "5G allowed" if "|NR" in r else "4G"))
+
+
+def main(a):
+    if not a or a[0] == "status":
+        status(); return 0
+    if a[0] == "on":
+        count(+1); setall(ALL); return 0
+    if a[0] == "off":
+        if count(-1) == 0: setall(NO_NR)
+        else: print("another transfer still runs: 5G stays")
+        return 0
+    if a[0] == "reset":
+        count(-10**6); setall(NO_NR); return 0
+    if a[0] == "during":
+        count(+1); setall(ALL)
+        p = subprocess.Popen(a[1:])
+        signal.signal(signal.SIGTERM, lambda *_: p.terminate())
+        try:
+            rc = p.wait()
+        except KeyboardInterrupt:
+            p.terminate(); rc = p.wait()
+        finally:
+            if count(-1) == 0: setall(NO_NR)
+        return rc
+    print(__doc__); return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
