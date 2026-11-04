@@ -93,7 +93,13 @@ def router_balance():
     if r.get("left_mb") is not None:
         return {"line": "AX88179B (router)", "sim": "Telemach", "at": r.get("at", ""), "used_mb": r.get("used_mb"),
                 "total_mb": r.get("total_mb"), "left_gb": round(r["left_mb"] / 1024, 1)}
-    return {"line": "AX88179B (router)", "error": r.get("error", "router-sms gave no balance")}
+    out = {"line": "AX88179B (router)", "error": r.get("error", "router-sms gave no balance")}
+    try:                                   # 4.11.2026: the last good answer goes with the failure (router-sms's own file)
+        g = json.load(open(os.path.expanduser("~/Library/Application Support/router-sms/balance.json")))
+        if g.get("left_mb") is not None: out.update(last_gb=round(g["left_mb"] / 1024, 1), last_at=g.get("at", ""))
+    except (OSError, ValueError):
+        pass
+    return out
 
 
 def check():
@@ -108,7 +114,7 @@ def show(state, js):
     when = time.strftime("%H:%M", time.localtime(state.get("checked", 0)))
     for r in state.get("lines", []):
         if "left_gb" in r: print(f"{r['line']}: {r['left_gb']} GB left ({r.get('sim', '')}, {r.get('at', '')})")
-        else: print(f"{r['line']}: {r.get('error')}")
+        else: print(f"{r['line']}: {r.get('error')}" + (f" (last {r['last_gb']} GB at {r['last_at']})" if "last_gb" in r else ""))
     if not state.get("lines"): print("no line found")
     print(f"(checked {when})")
 
