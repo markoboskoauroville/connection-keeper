@@ -1,1 +1,0 @@
-{ "name": "api-drops", "version": "0.1.0", "description": "Claude Code's API connection drops, from Connection Keeper's ck-claude watcher, in the status line", "author": { "name": "Marko Bosko" }, "license": "MIT" }

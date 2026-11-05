@@ -148,8 +148,8 @@ speedtest.net), and its window shows no Firefox interface: only the macOS title 
 `ck-claude` (Tools/, in the app's Resources, on the PATH) runs while the app runs. It follows every Claude Code
 transcript, writes each failed API try with the state of the lines at that second (mode, tunnel, route, DNS, a TLS
 handshake to api.anthropic.com) and probes the API with a TLS handshake every 30 s. The bottom row `☁ CLAUDE` shows
-the last drop, today's count and the probe. The Claude Code mod `mods/api-drops` puts the same in the status line of
-every session (loaded through `CLAUDE_CODE_PLUGIN_DIRS` in ~/.claude/settings.json). `ck-claude report` and
+the last drop, today's count and the probe. (The Claude Code mod `mods/api-drops` that put the same in every session's
+status line was removed on 5.11.2026 at Marko's word: "I don't need it. I don't want to see it.") `ck-claude report` and
 `ck-claude history --days 7` read it back. The rule: MANTRA_MANIFEST modules/claude-api-drops.md.
 
 ## Aggregation: two lines at once (v13, 18.10.2026)
