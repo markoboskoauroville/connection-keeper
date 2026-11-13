@@ -170,6 +170,7 @@ final class Stripe: NSObject {
     var probing = false
     var zoomPrev: (scale: CGFloat, x: CGFloat)?
     var phoneSampling = false
+    var menuPlaceLogged = false
     var signalTick = 0
     var wifiScan: [String] = []
     var wifiScanAt = Date.distantPast

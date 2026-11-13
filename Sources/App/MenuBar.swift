@@ -58,19 +58,17 @@ extension Stripe {
         }
     }
 
-    // After a display change or a start: when our item is not right beside iStat's, put it back (the item is made again
-    // with the preferred position corrected; macOS reads the position only when an item is created).
+    // v56: measured on this Mac (13.11.2026, a test status item made from Python): the "NSStatusItem Preferred Position"
+    // value only orders an item among the items that have a stored value (Control Centre, SoundSource, Hot ...). Any value
+    // above about 650 lands at the left end of that group (x about 2056 on the BenQ); every item without a stored value
+    // (iStat, Hammerspoon, Speechify, AutoRaise, BetterDisplay, Little Snitch, Claude ...) sits LEFT of that group in
+    // launch order, and a new item without a value goes to the far left. So a key cannot put us beside iStat; only a
+    // Cmd-drag by hand does, and macOS then stores the position. v55 recreated the item three times trying; v56 only logs
+    // the distance once and leaves the item alone.
     func checkMenuPlace(tries: Int) {
-        guard let item = menuItem, let w = item.button?.window, let istat = MenuBarPlace.istatLeft() else { return }
-        let gap = istat - w.frame.maxX
-        if abs(gap) <= 8 { return }
-        appendLog("\(logStamp()) MENU BAR item is \(Int(gap)) pt from iStat's network item: placed again (preferred position \(MenuBarPlace.preferred() ?? 0))")
-        NSStatusBar.system.removeStatusItem(item)
-        let n = MenuBarPlace.make()
-        configureStatusButton(n)
-        menuItem = n
-        showMenuBarSpeed(lastMenuSpeed.0, lastMenuSpeed.1)
-        if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.checkMenuPlace(tries: tries - 1) } }
+        guard !menuPlaceLogged, let item = menuItem, let w = item.button?.window, let istat = MenuBarPlace.istatLeft() else { return }
+        menuPlaceLogged = true
+        appendLog("\(logStamp()) MENU BAR item right edge \(Int(w.frame.maxX)), iStat's network item left edge \(Int(istat)): \(Int(istat - w.frame.maxX)) pt apart (Cmd-drag it once to sit beside iStat; macOS keeps that)")
     }
 
     // v37 (request 54, Marko 29.10.2026: "Take a screenshot of the menu bar, and you will see another app which is
