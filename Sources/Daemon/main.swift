@@ -243,6 +243,7 @@ final class Keeper {
         log("connection-keeper v\(CKVersion) started, pid \(getpid()), every \(cfg.intervalSeconds) s, list: " +
             cfg.connections.map { "\($0.kind):\($0.name)\($0.enabled ? "" : "(off)")" }.joined(separator: ", "))
         state.nextCheck = Date()
+        if !once { TailscaleGuard(dry: dryRunFlag || cfg.dryRun).start() }      // v52
         while true {
             cfg = Config.load()
             dryRun = dryRunFlag || cfg.dryRun

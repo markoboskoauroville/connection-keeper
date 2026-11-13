@@ -803,3 +803,6 @@ on the desktop and display where it is; a click on its menu bar icon brings it t
 - Second row (24 pt): ON OFF | gear rescan expand, connection name | live speed one number per direction (the test result is in the tooltip) | ping | data | status | speedometer and ECG icons | TOP, LED.
 - Line rows (24 pt): name | speed | "999 ms" | stacked thin meters: [4G or 5G] bar "-110 · -6" (RSRP · SINR), [wifi symbol] bar "-65 · 21" (RSSI · SNR); LAN link speed neutral | compact info "24·8MB", "2L·24c·1.8×".
 - The bottom CLAUDE row is gone.
+
+## v52 (13.11.2026): the Tailscale guard
+- Sources/Daemon/TailscaleGuard.swift runs inside connection-keeperd (not in --once): status every 60 s, `scutil --nc stop/start "Tailscale"` when unhealthy twice (once when triggered by a default-route change or a wake), back-off 2/5/15 min, 6 restarts an hour; state in tailscale-state.json; the stripe's icon (Sources/App/Tailscale.swift) reads it. The keeper must be restarted to run the guard (agent.sh load / kickstart).

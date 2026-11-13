@@ -157,6 +157,7 @@ final class Stripe: NSObject {
     lazy var cableLabel = word("CABLE", Ink.text, #selector(openCableList), id: "choose-cable", tip: "Tick: the cable first. Click the word: the wired interfaces and phones, tick the ones to use.")
     lazy var bothLabel = word("BOTH", Ink.text, #selector(tickBoth), id: "choose-both", tip: "Tick: aggregation over the ticked lines (the Wi-Fi in use and the ticked cables).")
     lazy var cloudWord = word("", Ink.green, #selector(cloudPressed), id: "claude-cloud", tip: "Watches Claude Code's connection to Anthropic")
+    lazy var tsWord = word("", Ink.grey, #selector(tsPressed), id: "tailscale", tip: "Tailscale")
     lazy var wifiNoData = noDataLabel()
     lazy var cableNoData = noDataLabel()
     let ruleChecks = Rule()
@@ -333,8 +334,8 @@ final class Stripe: NSObject {
         // v27 (request 45: "On the left side, make a minimize button which looks exactly as minimize button from the
         // macOS ... align that button with the rest of the text"): the yellow circle, "−" on it while the mouse is over
         wireLights()
-        for (w, sym) in [(testSpeedWord, "speedometer"), (testHealthWord, "waveform.path.ecg"), (cloudWord, "cloud.fill")] {
-            w.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil); w.title = ""; w.imagePosition = .imageOnly
+        for (w, sym) in [(testSpeedWord, "speedometer"), (testHealthWord, "waveform.path.ecg"), (cloudWord, "cloud.fill"), (tsWord, "point.3.connected.trianglepath.dotted")] {
+            w.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil); w.title = w.image == nil ? "TS" : ""; w.imagePosition = .imageOnly
         }
         // v27 ("On the right side, put the two vertical lines, which I'm dragging and resizing"): the grip scales the stripe
         grip.onDrag = { [weak self] w in self?.resize(toWidth: w) }
@@ -376,7 +377,7 @@ final class Stripe: NSObject {
         dlBox.alignment = .leading
         dlBox.spacing = 0
         dlBox.isHidden = true
-        let checkRow = NSStackView(views: [lights, wifiTick, wifiLabel, wifiNoData, pipe(), cableTick, cableLabel, cableNoData, pipe(), bothTick, bothLabel, cloudWord])
+        let checkRow = NSStackView(views: [lights, wifiTick, wifiLabel, wifiNoData, pipe(), cableTick, cableLabel, cableNoData, pipe(), bothTick, bothLabel, cloudWord, tsWord])
         checkRow.orientation = .horizontal
         checkRow.spacing = 3
         checkRow.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -608,7 +609,7 @@ final class Stripe: NSObject {
         showDownloads()
         showRoute()
         showChoice()
-        if tick % 5 == 0 { showCloud() }
+        if tick % 5 == 0 { showCloud(); showTailscale() }
         applyAlert()
         showLed()
         // v28: the dot is gone from the stripe; when it would have been red or amber the name says it in that colour

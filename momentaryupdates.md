@@ -649,3 +649,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status:** v51 in progress: stacked half-height meters with 4G / Wi-Fi icons, a narrower stripe, the CLAUDE row folded into one cloud icon with a plain tooltip, the API probe every 120 s instead of 30.
 
 **v51 (13.11.2026):** compact stripe: stacked thin meters with 4G/Wi-Fi-symbol tags, one number per direction, compact info words, test words as icons, Claude row replaced by a cloud icon (probe 120 s, switch in Settings).
+
+## 13.11.2026, request 72 (a Tailscale guard that never sleeps)
+
+> I don't want this thing to happen with Tailscale anymore. Can we also build some demons which are always active and controlling Tailscale? If I'm in the USA and I want to access my computer, and Tailscale is because it's all day awake and tired ... this demon is restarting it automatically, refreshing it
+
+**Status:** built 13.11.2026 (v52): the guard in connection-keeperd (TailscaleGuard.swift): `Tailscale status --json` every 60 s; a broken one (coordination server in Health, not Running, Self offline, every peer rx 0 and a ping failing; two checks in a row, internet working) is healed with `scutil --nc stop/start "Tailscale"`; back-off 2/5/15 min, 6 restarts an hour at most; also checked 15 s after a default-route change and after a wake; never signs out or changes settings; log lines TAILSCALE in connection-keeper.log; the icon on the stripe's top row. Cause today: the extension came up while the default route was the dead SIM cable.
