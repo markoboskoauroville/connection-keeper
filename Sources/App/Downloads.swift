@@ -65,7 +65,6 @@ enum Downloads {
     static func rows() -> [DownloadRow] {
         var out: [DownloadRow] = []
         if let s = speedRow() { out.append(s) }
-        if let c = ClaudeDrops.row() { out.append(c) }      // v46, request 65
         let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
         let mono = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         let bold = NSFont.monospacedSystemFont(ofSize: 12, weight: .bold)
@@ -180,7 +179,7 @@ extension Stripe {
                 row.orientation = .horizontal
                 row.spacing = 8
                 row.edgeInsets = NSEdgeInsets(top: 0, left: 20, bottom: 0, right: 6)
-                row.heightAnchor.constraint(equalToConstant: 22).isActive = true
+                row.heightAnchor.constraint(equalToConstant: 18).isActive = true
                 dlBox.addArrangedSubview(row)
             }
             fit()

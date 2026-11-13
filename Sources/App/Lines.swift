@@ -23,12 +23,15 @@ final class LineRow {
     // v43 (request 60): 4G and 5G beside the name on a phone's row; the one allowed now green, the other grey
     let g4 = NSButton(title: "4G", target: nil, action: nil), g5 = NSButton(title: "5G", target: nil, action: nil)
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
-    let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
-    // v49/v50: two signal slots (Signal.swift), each a tag, a VU meter and the exact numbers; a hotspot line uses both
+    let ping = label(textWidth("999 ms", monoFont), font: monoFont)
+    // v51: the two signal slots stacked in one small box (tag, a thin meter, "dBm · SINR"); Signal.swift fills them
+    static let tagFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .bold), sigFont = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
+    static let infoSample = "8L·888c·88.8×↑88.8×"
     let meter = VUMeter(), meter2 = VUMeter()
-    let tag1 = label(textWidth("MAC → PHONE (WI-FI)", .monospacedSystemFont(ofSize: 10, weight: .bold)), font: .monospacedSystemFont(ofSize: 10, weight: .bold)), tag2 = label(textWidth("MAC → PHONE (WI-FI)", .monospacedSystemFont(ofSize: 10, weight: .bold)), font: .monospacedSystemFont(ofSize: 10, weight: .bold))
-    let sig = label(textWidth("-111 dBm 4G+ SINR -11 ", monoFont), font: monoFont), sig2 = label(textWidth("-111 dBm 4G+ SINR -11 ", monoFont), font: monoFont)
-    let info = label(textWidth("8 lines · 888 conn · 88.8× best, up 88.8×  ", monoFont), font: monoFont)
+    let tag1 = label(18, font: LineRow.tagFont), tag2 = label(18, font: LineRow.tagFont)
+    let sig = label(textWidth("-110 · -11", LineRow.sigFont), font: LineRow.sigFont), sig2 = label(textWidth("-110 · -11", LineRow.sigFont), font: LineRow.sigFont)
+    let sigBox: NSStackView
+    let info = label(textWidth(LineRow.infoSample, monoFont), font: monoFont)
     var lastBytes: (rx: UInt64, tx: UInt64)?
     var lastAt: Date?, lastRate: (Double, Double)?      // a phone row: when the server's counters were read, the rate
 
@@ -66,19 +69,24 @@ final class LineRow {
         // and the lead is narrower by their width so nothing else moves.
         for b in [g4, g5] { b.setContentHuggingPriority(.required, for: .horizontal) }
         lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - 6)).isActive = true
-        view = NSStackView(views: [dot, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), tag1, meter, sig, tag2, meter2, sig2, linePipe(), info])
+        func mini(_ t: NSTextField, _ m: VUMeter, _ s: NSTextField) -> NSStackView {
+            let r = NSStackView(views: [t, m, s]); r.orientation = .horizontal; r.spacing = 3; r.alignment = .centerY; return r
+        }
+        sigBox = NSStackView(views: [mini(tag1, meter, sig), mini(tag2, meter2, sig2)])
+        sigBox.orientation = .vertical; sigBox.spacing = 0; sigBox.alignment = .leading
+        view = NSStackView(views: [dot, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), sigBox, linePipe(), info])
         view.orientation = .horizontal
         view.spacing = 3
         view.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         view.translatesAutoresizingMaskIntoConstraints = false
-        view.heightAnchor.constraint(equalToConstant: 22).isActive = true
+        view.heightAnchor.constraint(equalToConstant: 24).isActive = true
     }
 
     // Download green, upload red, each with a test in parentheses, as on the first row.
     func setSpeed(_ down: Double?, _ up: Double?, test: (Double, Double?)?, dim: Bool = false, mark: String? = nil) {
         let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
-        let d = "\(down.map(rate) ?? dash) \(testPart(test?.0, mark: mark))"
-        let u = "\(up.map(rate) ?? dash) \(test?.1 == nil && mark == nil ? "      " : testPart(test?.1, mark: mark))"
+        let d = down.map(rate) ?? dash
+        let u = up.map(rate) ?? dash
         let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: dim ? Ink.grey : Ink.green])
         t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: dim ? Ink.grey : Ink.red]))
         speed.attributedStringValue = t
@@ -194,10 +202,10 @@ extension Stripe {
             r.name.stringValue = gone ? o.name : Net.shown(o.name, o.iface)
             r.name.textColor = color
             r.dot.color = color
-            r.ping.stringValue = o.ms.map { String(format: "ping %3.0f ms", $0) } ?? "ping —"
+            r.ping.stringValue = o.ms.map { String(format: "%3.0f ms", $0) } ?? "—"
             r.ping.textColor = ok ? Ink.yellow : Ink.grey
             if gone {
-                r.info.stringValue = "not available · connected " + ago(seen[o.name]?.last)
+                r.info.stringValue = "gone " + ago(seen[o.name]?.last)
                 r.info.textColor = Ink.grey
                 r.name.toolTip = "Grey: connected before, not available now"
                 r.speed.toolTip = nil
@@ -208,11 +216,11 @@ extension Stripe {
             r.info.textColor = Ink.dim
             r.name.toolTip = color == Ink.green ? "Green: connected, carrying the internet" : "Red: here, but not connected (tick it in ▾ to join it)"
             let line = agg?.lines.first { $0.device == o.iface }
-            r.info.stringValue = o.sameAs.map { "same line as \($0): not joined" }
-                ?? (Aggregation.on && line != nil ? String(format: "joined · %d conn · %.0f MB", line!.active, line!.mbDown + line!.mbUp)
-                    : ok ? "not joined" : "no internet")
+            r.info.stringValue = o.sameAs.map { "same as \($0)" }
+                ?? (Aggregation.on && line != nil ? String(format: "%d·%.0fMB", line!.active, line!.mbDown + line!.mbUp)
+                    : ok ? "not joined" : "no net")
             if deadIfaces.contains(o.iface) { r.info.stringValue = "NO DATA"; r.info.textColor = Ink.amber; r.name.textColor = Ink.amber }
-            r.speed.toolTip = "Its own live speed (its default route); in parentheses its last test alone, down and up.\nClick: test this line now (Cloudflare, about 6 s each way)."
+            r.speed.toolTip = "Its own live speed (its default route).\nClick: test this line now (Cloudflare, about 6 s each way)."
             if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: !ok, mark: lineTesting.contains(o.name) ? "..." : nil) }
         }
         // A phone row's live speed: the server's bytes on it between two scans (the Mac has no counter for adb).
@@ -240,28 +248,28 @@ extension Stripe {
         a.name.toolTip = "Click: switch between one connection and aggregate connection"
         if !Aggregation.on {
             a.dot.color = Ink.grey; a.name.textColor = Ink.text
-            a.info.stringValue = Aggregation.selected.isEmpty ? "tick lines in ▾ to aggregate" : "click ONE CONNECTION to aggregate"
+            a.info.stringValue = Aggregation.selected.isEmpty ? "tick in ▾" : "click to join"
             a.info.textColor = Ink.dim
             a.ping.stringValue = ""
         } else if let st = agg {
             let alive = st.lines.filter(\.alive)
             a.dot.color = alive.count >= 2 ? Ink.green : Ink.amber
             a.name.textColor = alive.count >= 2 ? Ink.green : Ink.amber
-            a.ping.stringValue = "\(alive.count) of \(st.lines.count) up"
+            a.ping.stringValue = "\(alive.count)/\(st.lines.count) up"
             a.ping.textColor = alive.count == st.lines.count ? Ink.yellow : Ink.amber
             let conn = st.lines.reduce(0) { $0 + $1.active }
             // v13 (request 30, the end was cut): the names are on the rows above; here only the numbers
-            var words = "\(st.lines.count) lines · \(conn) conn"
+            var words = "\(st.lines.count)L·\(conn)c"
             let names = Set(st.lines.map(\.name))
             if let t = aggTest, let best = t.alone.filter({ names.contains($0.key) }).values.max(), best > 0 {
-                words += String(format: " · %.1f× best", t.joined / best)
-                if let up = t.joinedUp, let bestUp = t.aloneUp?.filter({ names.contains($0.key) }).values.max(), bestUp > 0 { words += String(format: ", up %.1f×", up / bestUp) }
+                words += String(format: "·%.1f×", t.joined / best)
+                if let up = t.joinedUp, let bestUp = t.aloneUp?.filter({ names.contains($0.key) }).values.max(), bestUp > 0 { words += String(format: "↑%.1f×", up / bestUp) }
             }
             a.info.stringValue = words; a.info.textColor = Ink.text
         } else {
             a.dot.color = Ink.red; a.name.textColor = Ink.red
             a.ping.stringValue = ""
-            a.info.stringValue = proxyDropped ? "server down: macOS's proxy off, restarting" : "server not answering on :\(aggPort)"
+            a.info.stringValue = proxyDropped ? "server down" : "no server"
             a.info.textColor = Ink.red
         }
         a.info.toolTip = "The aggregation server ck-aggregate on 127.0.0.1:\(aggPort): every new connection goes out through one of the joined lines, the faster one getting more. One single download stays on one line."

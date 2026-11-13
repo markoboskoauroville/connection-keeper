@@ -21,6 +21,7 @@ final class SettingsWindow: NSObject {
     let dataAuto = NSButton(checkboxWithTitle: "Check the data balance by itself every", target: nil, action: nil)
     let dataHours = NSTextField(string: "")
     let unitPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    let claudeProbe = NSButton(checkboxWithTitle: "Watch Claude Code's connection to Anthropic (a probe every 2 minutes, about 4 MB a day of SIM data)", target: nil, action: nil)
     var stackView: NSStackView!
 
     override init() {
@@ -48,6 +49,8 @@ final class SettingsWindow: NSObject {
         interval.action = #selector(intervalChanged)
         let intervalRow = NSStackView(views: [NSTextField(labelWithString: "Check every"), interval, NSTextField(labelWithString: "minutes")])
 
+        claudeProbe.target = self
+        claudeProbe.action = #selector(claudeProbeChanged)
         dry.target = self
         dry.action = #selector(dryChanged)
         onTop.target = self
@@ -89,7 +92,7 @@ final class SettingsWindow: NSObject {
         alertLine.maximumNumberOfLines = 0
         alertLine.preferredMaxLayoutWidth = 560
 
-        let stack = NSStackView(views: [alertLine, title, rows, speedRow, NSStackView(views: [addPopup, addLanPopup]), intervalRow, unitRow, dataRow, dataAutoRow, onTop, dry, version])
+        let stack = NSStackView(views: [alertLine, title, rows, speedRow, NSStackView(views: [addPopup, addLanPopup]), intervalRow, unitRow, dataRow, dataAutoRow, claudeProbe, onTop, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -162,6 +165,7 @@ final class SettingsWindow: NSObject {
         interval.stringValue = String(format: "%g", Double(cfg.intervalSeconds) / 60)
         dry.state = cfg.dryRun ? .on : .off
         onTop.state = OnTop.on ? .on : .off
+        claudeProbe.state = ClaudeDrops.probeOn ? .on : .off
         if let i = SpeedUnit.allCases.firstIndex(of: SpeedUnit.current) { unitPopup.selectItem(at: i) }
         DispatchQueue.main.async { self.sizeToContent() }
         dataLine.stringValue = DataBalance.load().map { "\($0.line)  (Telemach \($0.at))" } ?? "not asked yet"
@@ -257,6 +261,7 @@ final class SettingsWindow: NSObject {
         rebuild()
     }
 
+    @objc func claudeProbeChanged() { ClaudeDrops.probeOn = claudeProbe.state == .on; appendLog("\(logStamp()) CLAUDE probe \(claudeProbe.state == .on ? "on" : "off") (Settings)") }
     @objc func onTopChanged() { OnTop.on = onTop.state == .on }
 
     @objc func dryChanged() { cfg.dryRun = dry.state == .on; commit() }

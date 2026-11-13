@@ -61,3 +61,46 @@ enum ClaudeDrops {
         return r
     }
 }
+
+// v51 (Marko 13.11.2026: "I don't understand this line"): the bottom row is gone; one cloud icon on the top row. Green: the
+// last TLS probe to the API was fine and nothing dropped in the last 10 minutes; amber: a drop in the last 10 minutes;
+// red: a session is still retrying or the probe fails. Click or hover: one plain sentence. The probe (a TLS handshake
+// every 120 s, about 4 MB a day of SIM data) can be switched off in Settings (the file claude-probe-off, read by ck-claude).
+extension ClaudeDrops {
+    static let probeOffFile = Paths.support.appendingPathComponent("claude-probe-off")
+    static var probeOn: Bool {
+        get { !FileManager.default.fileExists(atPath: probeOffFile.path) }
+        set {
+            if newValue { try? FileManager.default.removeItem(at: probeOffFile) }
+            else { FileManager.default.createFile(atPath: probeOffFile.path, contents: Data()) }
+        }
+    }
+
+    static func summary() -> (NSColor, String) {
+        let head = "Watches Claude Code's connection to Anthropic: "
+        guard let d = try? Data(contentsOf: state), let j = (try? JSONSerialization.jsonObject(with: d)) as? [String: Any] else { return (Ink.grey, head + "not running yet") }
+        let iso = ISO8601DateFormatter()
+        let last = j["last"] as? [String: Any]
+        let probe = j["probe"] as? [String: Any] ?? [:]
+        let ok = probe["ok"] as? Bool ?? true
+        let open = last?["open"] as? Bool ?? false
+        let lastAt = (last?["start"] as? String).flatMap { iso.date(from: $0) }
+        let recent = lastAt.map { Date().timeIntervalSince($0) < 600 } ?? false
+        let day = DateFormatter(); day.dateFormat = "yyyy-MM-dd"
+        var n = 0
+        if let t = j["today"] as? [String: Any], (t["day"] as? String) == day.string(from: Date()) { n = t["episodes"] as? Int ?? 0 }
+        let ms = (probe["tcp"] as? [String: Any])?["ms"]
+        let p = !probeOn ? "probe off" : ok ? "last probe OK" + (ms.map { " \($0) ms" } ?? "") : "last probe FAILED"
+        let color: NSColor = open || (probeOn && !ok) ? Ink.red : recent ? Ink.amber : Ink.green
+        return (color, head + "drops today \(n), \(p)")
+    }
+}
+
+extension Stripe {
+    func showCloud() {
+        let (c, s) = ClaudeDrops.summary()
+        cloudWord.contentTintColor = c
+        cloudWord.toolTip = s
+    }
+    @objc func cloudPressed() { let (c, s) = ClaudeDrops.summary(); show(s, c, for: 10) }
+}

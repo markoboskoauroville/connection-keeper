@@ -797,3 +797,9 @@ on the desktop and display where it is; a click on its menu bar icon brings it t
 - Cable meter is neutral (grey, link speed as number; `MeterScale.neutral`), never red.
 - A hotspot line has two meters: WI-FI (Mac to phone, RSSI + SNR; "WI-FI · permission" amber when RSSI reads 0) and 4G (RSRP + SINR, coloured by the worse of the two). LineRow has tag1/meter/sig and tag2/meter2/sig2.
 - The MAC / AGGREGATE / BOTH words are gone from the second row; the WI-FI / CABLE / BOTH ticks are the one control.
+
+## v51 (13.11.2026): compact stripe
+- Top row (22 pt): red/yellow/green, [ ] WI-FI [ ] CABLE [ ] BOTH, NO DATA tags, cloud icon (Claude Code's connection: green / amber after a drop in 10 min / red; tooltip and click give one sentence; probe every 120 s, off with Settings, file claude-probe-off).
+- Second row (24 pt): ON OFF | gear rescan expand, connection name | live speed one number per direction (the test result is in the tooltip) | ping | data | status | speedometer and ECG icons | TOP, LED.
+- Line rows (24 pt): name | speed | "999 ms" | stacked thin meters: [4G or 5G] bar "-110 · -6" (RSRP · SINR), [wifi symbol] bar "-65 · 21" (RSSI · SNR); LAN link speed neutral | compact info "24·8MB", "2L·24c·1.8×".
+- The bottom CLAUDE row is gone.

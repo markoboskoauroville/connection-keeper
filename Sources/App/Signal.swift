@@ -114,7 +114,7 @@ final class SignalHub {
         add("NR ssRSRP ", "nrRsrp", "dBm", MeterScale.rsrp.word); add("NR ssRSRQ ", "nrRsrq", "dB"); add("NR ssSINR ", "nrSinr", "dB", sinrWord)
         if !t.isEmpty { d.append("Network: " + t) }
         let sinr = v["rssnr"] ?? v["nrSinr"]
-        put(key, scale: .rsrp, value: primary, text: primary.map { "\(Int($0)) dBm \(short) SINR \(sinr.map { String(Int($0)) } ?? "—")" } ?? "no signal", details: d)
+        put(key, scale: .rsrp, value: primary, text: primary.map { "\(Int($0)) · \(sinr.map { String(Int($0)) } ?? "—")" } ?? "no signal", details: d)
         // the colour is the worse of RSRP and SINR (SINR decides the speed): red poor, amber fair, green good
         if let p = primary {
             let rank = { (c: NSColor) -> Int in c == Ink.red ? 2 : c == Ink.amber ? 1 : 0 }
@@ -152,7 +152,7 @@ extension Stripe {
         let ch = c.wlanChannel().map { "channel \($0.channelNumber) \(band)" } ?? "channel ?"
         let d = ["Wi-Fi RSSI \(rssi) dBm  (\(MeterScale.wifi.word(Double(rssi))))", "noise \(noise) dBm", "SNR \(rssi - noise) dB",
                  String(format: "tx rate %.0f Mbit/s", c.transmitRate()), ch]
-        hub.put("wifi", scale: .wifi, value: Double(rssi), text: "\(rssi) dBm SNR \(rssi - noise)", details: d)
+        hub.put("wifi", scale: .wifi, value: Double(rssi), text: "\(rssi) · \(rssi - noise)", details: d)
     }
 
     // Every 2 s, one adb shell a phone, off the main thread; the tag (4G / 5G) every 16 s.
@@ -213,11 +213,23 @@ extension Stripe {
         }
     }
 
-    // The meters a line shows: a hotspot line has two, WI-FI (Mac to phone) and 4G (phone to tower).
+    // The meters a line shows (v51, only "4G"/"5G" and the Wi-Fi symbol on the stripe): a hotspot line has two, stacked.
     func signalKeys(_ o: OtherLine) -> [(String, String)] {
-        if Phones.isPhone(o.iface) { return [("PHONE → TOWER (4G)", "adb:" + String(o.iface.dropFirst(4)))] }
-        if o.wifi { return SignalHub.shared.lines["hot"]?.value != nil ? [("PHONE → TOWER (4G)", "hot"), ("MAC → PHONE (WI-FI)", "wifi")] : [("MAC → WI-FI", "wifi")] }
-        return [("LINK", "link:" + o.iface)]
+        let hub = SignalHub.shared
+        func g(_ key: String) -> String { (hub.tags[key] ?? "").contains("5G") ? "5G" : "4G" }
+        if Phones.isPhone(o.iface) { let k = "adb:" + String(o.iface.dropFirst(4)); return [(g(k), k)] }
+        if o.wifi { return hub.lines["hot"]?.value != nil ? [(g("hot"), "hot"), ("WIFI", "wifi")] : [("WIFI", "wifi")] }
+        return [("LAN", "link:" + o.iface)]
+    }
+
+    func setTag(_ t: NSTextField, _ name: String) {
+        if t.identifier?.rawValue == name { return }
+        t.identifier = NSUserInterfaceItemIdentifier(name)
+        if name == "WIFI" {
+            let att = NSTextAttachment()
+            att.image = NSImage(systemSymbolName: "wifi", accessibilityDescription: "Wi-Fi")?.withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [Ink.dim]))
+            t.attributedStringValue = NSAttributedString(attachment: att)
+        } else { t.stringValue = name; t.textColor = Ink.dim }
     }
 
     func updateMeters() {
@@ -228,9 +240,10 @@ extension Stripe {
             let slots = [(r.tag1, r.meter, r.sig), (r.tag2, r.meter2, r.sig2)]
             for (i, s) in slots.enumerated() {
                 let (tag, meter, sig) = s
-                guard i < keys.count else { tag.stringValue = ""; meter.alphaValue = 0; meter.onClick = nil; sig.stringValue = ""; continue }
+                guard i < keys.count else { tag.stringValue = ""; tag.identifier = nil; meter.alphaValue = 0; meter.onClick = nil; sig.stringValue = ""; continue }
                 let (name, key) = keys[i]
-                tag.stringValue = name; tag.textColor = Ink.dim; meter.alphaValue = 1
+                setTag(tag, name); meter.alphaValue = 1
+                let full = name == "WIFI" ? "Mac → phone (Wi-Fi)" : name == "LAN" ? "Cable" : "Phone → tower (\(name))"
                 if key == "wifi" && hub.wifiNeedsLocation {
                     meter.value = nil; meter.peak = nil; meter.needsDisplay = true
                     sig.stringValue = "permission"; sig.textColor = Ink.amber
@@ -241,8 +254,8 @@ extension Stripe {
                 meter.scale = l.scale; meter.value = l.value; meter.peak = l.peak; meter.needsDisplay = true
                 sig.stringValue = l.text
                 sig.textColor = l.tint ?? l.value.map { l.scale.color($0) } ?? Ink.dim
-                meter.toolTip = l.details.joined(separator: "\n") + "\nClick: a larger meter with a 5-minute history."
-                meter.onClick = { SignalWindow.show(key: key, title: o.name + " · " + name) }
+                meter.toolTip = full + "\n" + l.details.joined(separator: "\n") + "\nClick: a larger meter with a 5-minute history."
+                meter.onClick = { SignalWindow.show(key: key, title: o.name + " · " + full) }
             }
         }
         SignalWindow.updateAll()
@@ -256,10 +269,10 @@ final class VUMeter: NSView {
     var peak: Double?
     var big = false
     var onClick: (() -> Void)?
-    override var intrinsicContentSize: NSSize { NSSize(width: big ? NSView.noIntrinsicMetric : 150, height: big ? 30 : 14) }
+    override var intrinsicContentSize: NSSize { NSSize(width: big ? NSView.noIntrinsicMetric : 70, height: big ? 30 : 6) }   // v51: half the height, less than half the width
     override func draw(_ r: NSRect) {
         let w = bounds.width, h = bounds.height
-        let track = NSRect(x: 0, y: h * 0.2, width: w, height: h * 0.6)
+        let track = big ? NSRect(x: 0, y: h * 0.2, width: w, height: h * 0.6) : bounds
         for z in scale.zones {
             let x0 = w * scale.frac(z.0), x1 = w * scale.frac(z.1)
             z.2.withAlphaComponent(0.25).setFill()
