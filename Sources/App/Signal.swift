@@ -235,7 +235,7 @@ extension Stripe {
     func updateMeters() {
         let hub = SignalHub.shared
         for o in others {
-            guard let r = lineRows[o.iface] else { continue }
+            for r in [lineRows[o.iface], allRows["dev:" + o.iface]].compactMap({ $0 }) {
             let keys = signalKeys(o)
             let slots = [(r.tag1, r.meter, r.sig), (r.tag2, r.meter2, r.sig2)]
             for (i, s) in slots.enumerated() {
@@ -256,6 +256,7 @@ extension Stripe {
                 sig.textColor = l.tint ?? l.value.map { l.scale.color($0) } ?? Ink.dim
                 meter.toolTip = full + "\n" + l.details.joined(separator: "\n") + "\nClick: a larger meter with a 5-minute history."
                 meter.onClick = { SignalWindow.show(key: key, title: o.name + " · " + full) }
+            }
             }
         }
         SignalWindow.updateAll()

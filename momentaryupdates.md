@@ -661,3 +661,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > It registered that pixel is connected with the cable, and it put it in the pool of connections. But if you look at my pixel, it's in airplane mode and is using a connection already existing in the network over Wi-Fi. This aggregation is total nonsense. Please make my application more intelligent, not to share these kinds of connections
 
 **Status:** built 13.11.2026 (v53): `Phones.uplink` (one adb shell: airplane_mode_on, mobile_data, Wi-Fi state, transports of the default network in dumpsys connectivity); in ck-aggregate's discover a phone with AIRPLANE, VIA WI-FI or DATA OFF stays out of the pool, a phone with the same public address is SAME UPLINK; each is logged on change, shown in the ▾ and CABLE lists greyed with that word, and joins by itself at the next look (every minute) when it has its own uplink again. Measured before: the Pixel 7 had airplane_mode_on 1 and sat on "Something", the Mac's own Wi-Fi line.
+
+## 13.11.2026, request 74 (two tabs: ALL and IN USE)
+
+> we need to make this connection keeper again clearer to understand the problem. Now there are so many connections, some of which are here like this Wi-Fi looping, blah blah. I want to have a very simple user interface, a very simple one. I have two tabs. There will be all connections on the first tab, and the second tab will be connections in use. I can see everything which phone can see, and then I can see what is actually in use.
+
+**Status:** built 13.11.2026 (v54, Tabs.swift): tabs ALL / IN USE centred under the second row; IN USE default.

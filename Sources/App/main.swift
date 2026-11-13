@@ -158,6 +158,10 @@ final class Stripe: NSObject {
     lazy var bothLabel = word("BOTH", Ink.text, #selector(tickBoth), id: "choose-both", tip: "Tick: aggregation over the ticked lines (the Wi-Fi in use and the ticked cables).")
     lazy var cloudWord = word("", Ink.green, #selector(cloudPressed), id: "claude-cloud", tip: "Watches Claude Code's connection to Anthropic")
     lazy var tsWord = word("", Ink.grey, #selector(tsPressed), id: "tailscale", tip: "Tailscale")
+    lazy var tabAll = word("ALL", Ink.grey, #selector(pickTabAll), id: "tab-all", tip: "Every connection the Mac can see: Wi-Fi networks in range, cables, phones, each with its state and signal")
+    lazy var tabUse = word("IN USE", Ink.green, #selector(pickTabUse), id: "tab-inuse", tip: "Only the lines carrying traffic now, with their signal and live speed")
+    var tab = UserDefaults.standard.string(forKey: "linesTab") ?? "inuse"
+    var allRows: [String: LineRow] = [:]
     lazy var wifiNoData = noDataLabel()
     lazy var cableNoData = noDataLabel()
     let ruleChecks = Rule()
@@ -216,7 +220,7 @@ final class Stripe: NSObject {
     var aggRow: LineRow!
     var others: [OtherLine] = []
     let expand = NSButton(title: "▸", target: nil, action: nil)   // v23, request 41: opens the rows under the one line
-    var expanded = UserDefaults.standard.bool(forKey: "linesExpanded")
+    var expanded = true                         // v54: the rows are always there; the tabs ALL / IN USE choose which
     var seen = SeenLines.load()                 // v22, request 40: the lines once connected (grey when gone)
     var agg: AggStatus?
     var aggMainLast: (rx: UInt64, tx: UInt64)?
@@ -361,14 +365,14 @@ final class Stripe: NSObject {
         permissions.setContentHuggingPriority(.required, for: .horizontal)
         permissions.toolTip = "A permission is off (Accessibility: joining a Wi-Fi through Control Centre; Location: the Wi-Fi signal reading). This opens its page in System Settings"
         permissions.isHidden = Permissions.missing.isEmpty
-        let row = NSStackView(views: [onWord, offWord, pipe(), gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testSpeedWord, testHealthWord, topWord, led, permissions])
+        let row = NSStackView(views: [onWord, offWord, pipe(), gear, rescan, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testSpeedWord, testHealthWord, topWord, led, permissions])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 24).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
-        aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + pipe().fittingSize.width + 12 + gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
+        aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + pipe().fittingSize.width + 12 + gear.fittingSize.width + rescan.fittingSize.width + 6, nameWidth: connectionWidth())
         aggRow.dot.isHidden = true
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
@@ -384,13 +388,22 @@ final class Stripe: NSObject {
         checkRow.translatesAutoresizingMaskIntoConstraints = false
         checkRow.heightAnchor.constraint(equalToConstant: 22).isActive = true
         aggRow.sigBox.alphaValue = 0
-        let column = NSStackView(views: [checkRow, ruleChecks, row, ruleLines, aggRow.view, ruleStatus, dlBox])
+        let spacerL = NSView(), spacerR = NSView()
+        for sp in [spacerL, spacerR] { sp.translatesAutoresizingMaskIntoConstraints = false; sp.setContentHuggingPriority(.defaultLow, for: .horizontal) }
+        spacerL.widthAnchor.constraint(equalTo: spacerR.widthAnchor).isActive = true
+        let tabRow = NSStackView(views: [spacerL, tabAll, tabUse, spacerR])
+        tabRow.orientation = .horizontal; tabRow.spacing = 18
+        tabRow.translatesAutoresizingMaskIntoConstraints = false
+        tabRow.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        showTabs()
+        let column = NSStackView(views: [checkRow, ruleChecks, row, ruleLines, tabRow, aggRow.view, ruleStatus, dlBox])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 0
         column.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 20)   // the right 20 points: the grip
         column.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(column)
+        tabRow.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -16).isActive = true
         for r in [ruleChecks, ruleLines, ruleStatus] { r.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -16).isActive = true }
         column.setCustomSpacing(3, after: checkRow); column.setCustomSpacing(3, after: ruleChecks); column.setCustomSpacing(3, after: row); column.setCustomSpacing(3, after: ruleLines)
         column.setCustomSpacing(3, after: aggRow.view); column.setCustomSpacing(3, after: ruleStatus)

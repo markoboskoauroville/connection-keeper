@@ -237,9 +237,10 @@ extension Stripe {
             r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil, mark: lineTesting.contains(o.name) ? "..." : nil)
         }
         // v23 (request 41): the rows only when ▸ is opened; the one line is the whole stripe otherwise
-        for r in lineRows.values where r.view.isHidden == expanded { r.view.isHidden = !expanded; changed = true }
+        let showUse = tab == "inuse"
+        for r in lineRows.values where r.view.isHidden == showUse { r.view.isHidden = !showUse; changed = true }
         // aggregating, the one line already is AGGREGATE CONNECTION: no second row saying it again
-        let aggHidden = !expanded || Aggregation.on
+        let aggHidden = true             // v54: the one total is the first row's live speed; no second total row
         if let a = aggRow, a.view.isHidden != aggHidden { a.view.isHidden = aggHidden; changed = true }
         expand.title = expanded ? "▾" : "▸"
         // The aggregation row: always the last.
@@ -273,6 +274,7 @@ extension Stripe {
             a.info.textColor = Ink.red
         }
         a.info.toolTip = "The aggregation server ck-aggregate on 127.0.0.1:\(aggPort): every new connection goes out through one of the joined lines, the faster one getting more. One single download stays on one line."
+        layoutAll()
         if changed { fit() }
     }
 
