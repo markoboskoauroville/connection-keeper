@@ -338,3 +338,6 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 
 ## 13.11.2026 (v50): the system's window buttons are grey in a non-key panel
 - A non-activating panel is never key, so NSWindow.standardWindowButton draws the inactive grey look. Draw the three circles ourselves in the exact colours. A link speed is not a quality: no red zone for a cable. For a phone the SINR decides the speed, so it sits beside RSRP and sets the colour.
+
+## 13.11.2026 (v55): a constraint between views that are not in one hierarchy crashes the launch
+- v54 activated `spacerL.width == spacerR.width` before both were in the tab row: NSGenericException "no common ancestor" in Stripe.init, the app died at every start. Activate a constraint only after both views are subviews of one parent. The CI now runs the built app with `--selftest` (build the stripe, lay it out, run the timers 4 s, exit 0), so a launch crash fails the workflow.

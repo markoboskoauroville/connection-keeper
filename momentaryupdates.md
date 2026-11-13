@@ -667,3 +667,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > we need to make this connection keeper again clearer to understand the problem. Now there are so many connections, some of which are here like this Wi-Fi looping, blah blah. I want to have a very simple user interface, a very simple one. I have two tabs. There will be all connections on the first tab, and the second tab will be connections in use. I can see everything which phone can see, and then I can see what is actually in use.
 
 **Status:** built 13.11.2026 (v54, Tabs.swift): tabs ALL / IN USE centred under the second row; IN USE default.
+
+**v55 (13.11.2026):** fixed the launch crash of v54 (tab spacer constraint activated before the views had a common ancestor); `--selftest` flag and a CI step that runs it.

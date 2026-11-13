@@ -390,8 +390,8 @@ final class Stripe: NSObject {
         aggRow.sigBox.alphaValue = 0
         let spacerL = NSView(), spacerR = NSView()
         for sp in [spacerL, spacerR] { sp.translatesAutoresizingMaskIntoConstraints = false; sp.setContentHuggingPriority(.defaultLow, for: .horizontal) }
-        spacerL.widthAnchor.constraint(equalTo: spacerR.widthAnchor).isActive = true
         let tabRow = NSStackView(views: [spacerL, tabAll, tabUse, spacerR])
+        spacerL.widthAnchor.constraint(equalTo: spacerR.widthAnchor).isActive = true      // only after both are in tabRow (v55: before it crashed at launch)
         tabRow.orientation = .horizontal; tabRow.spacing = 18
         tabRow.translatesAutoresizingMaskIntoConstraints = false
         tabRow.heightAnchor.constraint(equalToConstant: 20).isActive = true
@@ -1195,6 +1195,16 @@ let stripe = Stripe()
 if CommandLine.arguments.contains("--settings") { stripe.openSettings() }
 if CommandLine.arguments.contains("--check-data") { stripe.checkDataByHand() }    // v8: the same as a click on the data item
 if CommandLine.arguments.contains("--rescan") { stripe.rescanNow() }             // v32: the same as ⟳
+// v55: `--selftest` builds the whole stripe, lays it out, lets the timers run for 4 s and exits 0 (CI runs it; a crash in
+// Stripe.init, like the v54 constraint without a common ancestor, fails the workflow instead of shipping).
+if CommandLine.arguments.contains("--selftest") {
+    stripe.panel.orderOut(nil)
+    stripe.fit(); stripe.layoutLines()
+    RunLoop.current.run(until: Date().addingTimeInterval(4))
+    stripe.fit()
+    print("selftest OK: Stripe built, laid out, \(stripe.panel.frame.size)")
+    exit(0)
+}
 app.run()
 
 extension CGFloat {

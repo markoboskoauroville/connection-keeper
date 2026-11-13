@@ -18,6 +18,9 @@ jobs:
           go-version: "1.22"
       - name: Build
         run: SIGN=- NO_INSTALL=1 ./build.sh
+      - name: Self-test (the app must start)
+        run: |
+          perl -e 'alarm 90; exec @ARGV' "build/$APP.app/Contents/MacOS/Connection Keeper" --selftest
       - name: Pack
         run: cd build && cp "$(ls *-connection-keeper-v*.zip | head -1)" app.zip
       - name: Release (Latest)
