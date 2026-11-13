@@ -631,3 +631,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > fix the user interface of this application. On the left side, like any window in the Mac OS, I need to have a red button, a yellow button, and a green button. Same here, only on the left side. Now I have one yellow on the left and one green on the right, which is a disaster
 
 **Status:** in progress.
+
+## 13.11.2026, request 71 (precision signal meters, like a VU meter)
+
+> for Wi-Fi connections, I need precision signal measuring, professional ones, like a VU meter on the audio equipment that precise I need to install some Android application on my phone to make these readings 100% accurate. We can do that as well that phone is accessible over tail scale, so you can edit, beat, and install anything on it. It's yours that's nothing fun, which is now saving my ass
+
+**Status:** 13.11.2026: the Nothing A142 on the roof reached over adb through its own hotspot (10.146.4.205:5555; Tailscale down). Live: LTE RSRP −98 dBm, RSRQ −9 dB, SNR 6 dB, level 3. No app needed for the values (the modem gives them to dumpsys exactly as to any app). VU-style meters with peak hold and a large meter window added to the v49 build.
