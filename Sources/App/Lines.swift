@@ -26,7 +26,7 @@ final class LineRow {
     let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
     // v49/v50: two signal slots (Signal.swift), each a tag, a VU meter and the exact numbers; a hotspot line uses both
     let meter = VUMeter(), meter2 = VUMeter()
-    let tag1 = label(textWidth("WI-FI · ", monoFont), font: .monospacedSystemFont(ofSize: 11, weight: .bold)), tag2 = label(textWidth("WI-FI · ", monoFont), font: .monospacedSystemFont(ofSize: 11, weight: .bold))
+    let tag1 = label(textWidth("MAC → PHONE (WI-FI)", .monospacedSystemFont(ofSize: 10, weight: .bold)), font: .monospacedSystemFont(ofSize: 10, weight: .bold)), tag2 = label(textWidth("MAC → PHONE (WI-FI)", .monospacedSystemFont(ofSize: 10, weight: .bold)), font: .monospacedSystemFont(ofSize: 10, weight: .bold))
     let sig = label(textWidth("-111 dBm 4G+ SINR -11 ", monoFont), font: monoFont), sig2 = label(textWidth("-111 dBm 4G+ SINR -11 ", monoFont), font: monoFont)
     let info = label(textWidth("8 lines · 888 conn · 88.8× best, up 88.8×  ", monoFont), font: monoFont)
     var lastBytes: (rx: UInt64, tx: UInt64)?

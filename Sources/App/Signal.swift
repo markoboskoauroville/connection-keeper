@@ -215,8 +215,8 @@ extension Stripe {
 
     // The meters a line shows: a hotspot line has two, WI-FI (Mac to phone) and 4G (phone to tower).
     func signalKeys(_ o: OtherLine) -> [(String, String)] {
-        if Phones.isPhone(o.iface) { return [("4G", "adb:" + String(o.iface.dropFirst(4)))] }
-        if o.wifi { return SignalHub.shared.lines["hot"]?.value != nil ? [("WI-FI", "wifi"), ("4G", "hot")] : [("WI-FI", "wifi")] }
+        if Phones.isPhone(o.iface) { return [("PHONE → TOWER (4G)", "adb:" + String(o.iface.dropFirst(4)))] }
+        if o.wifi { return SignalHub.shared.lines["hot"]?.value != nil ? [("PHONE → TOWER (4G)", "hot"), ("MAC → PHONE (WI-FI)", "wifi")] : [("MAC → WI-FI", "wifi")] }
         return [("LINK", "link:" + o.iface)]
     }
 
@@ -232,7 +232,7 @@ extension Stripe {
                 let (name, key) = keys[i]
                 tag.stringValue = name; tag.textColor = Ink.dim; meter.alphaValue = 1
                 if key == "wifi" && hub.wifiNeedsLocation {
-                    tag.stringValue = "WI-FI ·"; meter.value = nil; meter.peak = nil; meter.needsDisplay = true
+                    meter.value = nil; meter.peak = nil; meter.needsDisplay = true
                     sig.stringValue = "permission"; sig.textColor = Ink.amber
                     meter.toolTip = "The Mac's Wi-Fi signal needs the Location permission: PERMISSIONS, top right."
                     continue
@@ -290,27 +290,31 @@ final class VUMeter: NSView {
 
 // The 5-minute history of one line.
 final class HistoryGraph: NSView {
-    var scale = MeterScale.wifi
-    var points: [(at: Date, v: Double)] = []
+    var series: [(name: String, color: NSColor, scale: MeterScale, points: [(at: Date, v: Double)])] = []
     override func draw(_ r: NSRect) {
+        guard let first = series.first else { return }
         let w = bounds.width, h = bounds.height
-        func y(_ v: Double) -> CGFloat { h * scale.frac(v) }
-        for z in scale.zones {
+        for z in first.scale.zones {
             z.2.withAlphaComponent(0.15).setFill()
-            NSRect(x: 0, y: y(z.0), width: w, height: y(z.1) - y(z.0)).fill()
+            NSRect(x: 0, y: h * first.scale.frac(z.0), width: w, height: h * (first.scale.frac(z.1) - first.scale.frac(z.0))).fill()
         }
         let now = Date()
-        let path = NSBezierPath()
-        for (i, p) in points.enumerated() {
-            let x = w * CGFloat(1 - now.timeIntervalSince(p.at) / 300)
-            if i == 0 { path.move(to: NSPoint(x: x, y: y(p.v))) } else { path.line(to: NSPoint(x: x, y: y(p.v))) }
-        }
-        NSColor.white.setStroke(); path.lineWidth = 1.5; path.stroke()
         let a: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 10, weight: .regular), .foregroundColor: Ink.dim]
-        ("\(Int(scale.hi)) \(scale.unit)" as NSString).draw(at: NSPoint(x: 4, y: h - 14), withAttributes: a)
-        ("\(Int(scale.lo)) \(scale.unit)" as NSString).draw(at: NSPoint(x: 4, y: 2), withAttributes: a)
+        for (n, s) in series.enumerated() {
+            let path = NSBezierPath()
+            for (i, p) in s.points.enumerated() {
+                let pt = NSPoint(x: w * CGFloat(1 - now.timeIntervalSince(p.at) / 300), y: h * s.scale.frac(p.v))
+                if i == 0 { path.move(to: pt) } else { path.line(to: pt) }
+            }
+            s.color.setStroke(); path.lineWidth = 1.5; path.stroke()
+            let la: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold), .foregroundColor: s.color]
+            (s.name as NSString).draw(at: NSPoint(x: 40, y: h - 14 - CGFloat(n) * 13), withAttributes: la)
+            let x = n == 0 ? CGFloat(4) : w - 62
+            ("\(Int(s.scale.hi)) \(s.scale.unit)" as NSString).draw(at: NSPoint(x: x, y: h - 14), withAttributes: a)
+            ("\(Int(s.scale.lo)) \(s.scale.unit)" as NSString).draw(at: NSPoint(x: x, y: 2), withAttributes: a)
+        }
         ("−5 min" as NSString).draw(at: NSPoint(x: 4, y: h / 2 - 6), withAttributes: a)
-        ("now" as NSString).draw(at: NSPoint(x: w - 28, y: 2), withAttributes: a)
+        ("now" as NSString).draw(at: NSPoint(x: w - 28, y: h / 2 - 6), withAttributes: a)
     }
 }
 
@@ -319,7 +323,7 @@ final class SignalWindow: NSObject, NSWindowDelegate {
     static var open: [String: SignalWindow] = [:]
     let key: String
     let window: NSWindow
-    let meter = VUMeter(), graph = HistoryGraph()
+    let meter = VUMeter(), meter2 = VUMeter(), graph = HistoryGraph()
     let text = NSTextField(wrappingLabelWithString: "")
 
     static func show(key: String, title: String) {
@@ -351,7 +355,11 @@ final class SignalWindow: NSObject, NSWindowDelegate {
         graph.translatesAutoresizingMaskIntoConstraints = false
         graph.heightAnchor.constraint(greaterThanOrEqualToConstant: 150).isActive = true
         graph.setContentHuggingPriority(.defaultLow, for: .vertical)
-        let stack = NSStackView(views: [meter, text, graph])
+        meter2.big = true
+        meter2.translatesAutoresizingMaskIntoConstraints = false
+        meter2.heightAnchor.constraint(equalToConstant: 30).isActive = true
+        meter2.isHidden = key != "hot"
+        let stack = NSStackView(views: [meter, meter2, text, graph])
         stack.orientation = .vertical
         stack.alignment = .width
         stack.spacing = 12
@@ -365,7 +373,12 @@ final class SignalWindow: NSObject, NSWindowDelegate {
         var lines = [l.value.map { "\(l.text)   \(l.scale.word($0))" } ?? l.text] + l.details
         if key == "hot", let w = SignalHub.shared.lines["wifi"] { lines += ["", "Mac Wi-Fi to the phone's hotspot:"] + w.details }
         text.stringValue = lines.joined(separator: "\n")
-        graph.scale = l.scale; graph.points = l.history; graph.needsDisplay = true
+        graph.series = [(key == "hot" ? "PHONE → TOWER (4G RSRP)" : "signal", NSColor.white, l.scale, l.history)]
+        if key == "hot", let w = SignalHub.shared.lines["wifi"] {
+            meter2.scale = w.scale; meter2.value = w.value; meter2.peak = w.peak; meter2.needsDisplay = true
+            graph.series.append(("MAC → PHONE (WI-FI RSSI)", NSColor.cyan, w.scale, w.history))
+        }
+        graph.needsDisplay = true
     }
 
     func windowWillClose(_ n: Notification) { SignalWindow.open[key] = nil }
