@@ -1,0 +1,29 @@
+name: build
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+env:
+  APP: "Network Aggregate Connection Keeper (Mantra)"
+  VERSION_FILE: Sources/Shared/Model.swift
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Build
+        run: SIGN=- NO_INSTALL=1 ./build.sh
+      - name: Pack
+        run: cd build && cp "$(ls *-connection-keeper-v*.zip | head -1)" app.zip
+      - name: Release (Latest)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(sed -n 's/^let CKVersion = \([0-9]*\)/\1/p' "$VERSION_FILE")
+          if gh release view "v$V" >/dev/null 2>&1; then gh release upload "v$V" build/app.zip --clobber
+          else gh release create "v$V" build/app.zip --target "$GITHUB_SHA" --latest --title "$APP v$V" --notes "$(git log -1 --format=%s)"; fi

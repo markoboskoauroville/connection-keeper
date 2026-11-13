@@ -19,7 +19,7 @@ swiftc -O -swift-version 5 Sources/Tunnel/*.swift -o "$APP/Contents/MacOS/ck-tun
 HEV=Resources/tunnel/hev-socks5-tunnel
 HEVSHA=c72e2d99b698542105e10777a5105a60bb04f4d80bfbf95f20f3365cb77e5d47
 if [ "$(shasum -a 256 "$HEV" 2>/dev/null | cut -d' ' -f1)" != "$HEVSHA" ]; then
-  python3 ~/Developer/DOWNLOAD_MONITOR/dlmon.py add hev-socks5-tunnel --name "hev-socks5-tunnel 2.19.0" --want-mb 0.3 --file "$PWD/$HEV" --info "Connection Keeper build" || true
+  [ -f ~/Developer/DOWNLOAD_MONITOR/dlmon.py ] && python3 ~/Developer/DOWNLOAD_MONITOR/dlmon.py add hev-socks5-tunnel --name "hev-socks5-tunnel 2.19.0" --want-mb 0.3 --file "$PWD/$HEV" --info "Connection Keeper build" || true
   curl -sL -o "$HEV" https://github.com/heiher/hev-socks5-tunnel/releases/download/2.19.0/hev-socks5-tunnel-darwin-arm64
   [ "$(shasum -a 256 "$HEV" | cut -d' ' -f1)" = "$HEVSHA" ] || { echo "hev-socks5-tunnel: wrong fingerprint, not used"; rm -f "$HEV"; exit 1; }
   chmod +x "$HEV"
@@ -37,13 +37,15 @@ sed "s/__VERSION__/$V/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 swift Tools/make_icon.swift build/AppIcon.iconset "$V"
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 
-codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.keeper "$APP/Contents/MacOS/connection-keeperd"
-codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.aggregate "$APP/Contents/MacOS/ck-aggregate"
-codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.net "$APP/Contents/MacOS/ck-net"
-codesign --force -s "Mantra Apps" -i com.mantra.connectionkeeper.tunnel "$APP/Contents/MacOS/ck-tunnel"
-codesign --force -s "Mantra Apps" "$APP"
+codesign --force -s "${SIGN:-Mantra Apps}" -i com.mantra.connectionkeeper.keeper "$APP/Contents/MacOS/connection-keeperd"
+codesign --force -s "${SIGN:-Mantra Apps}" -i com.mantra.connectionkeeper.aggregate "$APP/Contents/MacOS/ck-aggregate"
+codesign --force -s "${SIGN:-Mantra Apps}" -i com.mantra.connectionkeeper.net "$APP/Contents/MacOS/ck-net"
+codesign --force -s "${SIGN:-Mantra Apps}" -i com.mantra.connectionkeeper.tunnel "$APP/Contents/MacOS/ck-tunnel"
+codesign --force -s "${SIGN:-Mantra Apps}" "$APP"
 codesign --verify --deep "$APP"
 
+ditto -c -k --keepParent "$APP" "build/$V-connection-keeper-v$V.zip"
+if [ -n "${NO_INSTALL:-}" ]; then echo "built v$V (not installed)"; exit 0; fi
 if pgrep -xq "Connection Keeper"; then echo "the stripe is running: quit it first, then build again"; exit 1; fi
 rm -rf "/Applications/$NAME.app"
 cp -R "$APP" /Applications/
