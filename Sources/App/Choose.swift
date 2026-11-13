@@ -181,7 +181,7 @@ extension Stripe {
             any = true
         }
         for o in others where Phones.isPhone(o.iface) {
-            listItem(menu, o.name + "   (phone over adb)", ticked: ticks == nil || ticks!.contains(o.name), id: o.name, action: #selector(pickCable(_:)))
+            listItem(menu, o.name + (o.sameAs.map { "   (\($0))" } ?? "   (phone over adb)"), ticked: o.sameAs == nil && (ticks == nil || ticks!.contains(o.name)), enabled: o.sameAs == nil, id: o.name, action: #selector(pickCable(_:)))
             any = true
         }
         if !any { listHead(menu, "  no wired interface found") }

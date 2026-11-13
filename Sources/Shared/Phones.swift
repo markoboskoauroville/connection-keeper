@@ -134,6 +134,40 @@ enum Phones {
         return r.status == 0 && !r.out.isEmpty && !r.out.contains("connected to")
     }
 
+    // v53 (Marko 13.11.2026: "It registered that pixel is connected with the cable, and it put it in the pool ... but it's in
+    // airplane mode and is using a connection already existing in the network over Wi-Fi. This aggregation is total
+    // nonsense"): a phone is a line only with its OWN uplink. One adb shell: airplane_mode_on, mobile_data, the Wi-Fi
+    // state, and the transports of the default network (dumpsys connectivity). Words for the stripe: AIRPLANE, VIA WI-FI,
+    // DATA OFF; nil word = its own cellular uplink (or its own Ethernet). A phone whose answer cannot be read counts as
+    // joinable (the same public address check in the server still catches a shared uplink: SAME UPLINK).
+    static func uplink(_ p: Phone) -> (cellular: Bool, word: String?) {
+        guard let adb else { return (false, nil) }
+        let cmd = "echo A=$(settings get global airplane_mode_on); echo D=$(settings get global mobile_data); echo W=$(cmd wifi status 2>/dev/null | head -2 | tr '\\n' ' '); dumpsys connectivity 2>/dev/null | grep -E 'Active default network|NetworkAgentInfo[{]network'"
+        let r = shell(adb, ["-s", p.serial, "shell", cmd], timeout: 10)
+        guard r.status == 0, r.out.contains("A=") else { return (false, nil) }
+        var air = false, dataOff = false, wifiUp = false
+        var def: String?
+        var nets: [String] = []
+        for line in r.out.components(separatedBy: "\n") {
+            let t = line.trimmingCharacters(in: .whitespaces)
+            if t.hasPrefix("A=") { air = t.dropFirst(2).trimmingCharacters(in: .whitespaces) == "1" }
+            else if t.hasPrefix("D=") { dataOff = t.dropFirst(2).trimmingCharacters(in: .whitespaces) == "0" }
+            else if t.hasPrefix("W=") { wifiUp = t.contains("connected to") }
+            else if t.contains("Active default network:") { def = t.components(separatedBy: ":").last?.trimmingCharacters(in: .whitespaces) }
+            else if t.contains("NetworkAgentInfo{") { nets.append(t) }
+        }
+        if air { return (false, "AIRPLANE") }
+        var transport: String?
+        if let def, let l = nets.first(where: { $0.contains("network{\(def)}") }) {
+            if l.contains("Transports: CELLULAR") || l.contains("type: MOBILE") { transport = "CELLULAR" }
+            else if l.contains("Transports: ETHERNET") || l.contains("type: ETHERNET") { transport = "ETHERNET" }
+            else if l.contains("WIFI") { transport = "WIFI" }
+        }
+        if transport == "WIFI" || (transport == nil && wifiUp) { return (false, "VIA WI-FI") }
+        if dataOff && transport != "ETHERNET" { return (false, "DATA OFF") }
+        return (transport == "CELLULAR", nil)
+    }
+
     // The internet through the phone: the ms to open a connection to 1.1.1.1:443 (or `host`) through it, or nil.
     static func online(_ p: Phone, host: String = "1.1.1.1") -> Double? {
         let t = Date()

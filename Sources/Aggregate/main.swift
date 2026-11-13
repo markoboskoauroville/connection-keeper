@@ -43,6 +43,7 @@ final class Uplink {
     init(iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?) {
         self.iface = iface; self.name = name; self.gateway = gateway; self.gatewayMAC = gatewayMAC; self.publicIP = publicIP
     }
+    static var reasons: [String: String] = [:]           // v53: the phones kept out of the pool, and why
     var cellular = false                                 // a phone whose internet is its mobile data, not a Wi-Fi
     func sameLine(_ o: Uplink) -> Bool {
         // Two 4G lines of the same operator can leave through the same public address (carrier NAT): at 09:06 on
@@ -82,7 +83,7 @@ enum Lines {
     static func discover(known: [String: String] = [:], anyLine: Bool = false) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
         let wifi = Net.wifiInterface()
         let ticked = anyLine ? [] : Set(Aggregation.joinable)
-        var found: [Uplink] = []
+        var found: [Uplink] = [], refused: [(Uplink, Uplink)] = []
         for i in Net.activeInterfaces() {
             guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
             found.append(Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i]))
@@ -101,14 +102,23 @@ enum Lines {
                 log("\(p.name) was on a Wi-Fi in WIRES: its Wi-Fi switched off, so it goes out on its mobile data")
                 for _ in 0..<10 where !Phones.onMobileData(p) { usleep(500_000) }
             }
+            // v53: only a phone with its own uplink joins (Phones.uplink); the others stay out, greyed with the reason.
+            let up = Phones.uplink(p)
+            if let word = up.word {
+                if Uplink.reasons[p.device] != word { log("\(p.name) is not joined: \(word)\(word == "AIRPLANE" ? " (airplane mode on)" : word == "VIA WI-FI" ? " (its internet goes over a Wi-Fi, not its own SIM)" : " (mobile data off)")"); Uplink.reasons[p.device] = word }
+                refused.append((Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: nil), Uplink(iface: "reason", name: word, gateway: nil, gatewayMAC: nil, publicIP: nil)))
+                continue
+            }
+            if Uplink.reasons[p.device] != nil { log("\(p.name) has its own uplink again: joined"); Uplink.reasons[p.device] = nil }
             let u = Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: Phones.publicIP(p) ?? known[p.device])
-            u.phone = p; u.cellular = Phones.onMobileData(p); found.append(u)
+            u.phone = p; u.cellular = up.cellular || Phones.onMobileData(p); found.append(u)
         }
         found.sort { ($0.iface == wifi ? 1 : 0) < ($1.iface == wifi ? 1 : 0) }
         var lines: [Uplink] = [], ignored: [(Uplink, Uplink)] = []
         for u in found {
-            if let kept = lines.first(where: { $0.sameLine(u) }) { ignored.append((u, kept)) } else { lines.append(u) }
+            if let kept = lines.first(where: { $0.sameLine(u) }) { ignored.append((u, Uplink(iface: kept.iface, name: "SAME UPLINK", gateway: nil, gatewayMAC: nil, publicIP: nil))); log("\(u.name): SAME UPLINK as \(kept.name), not joined") } else { lines.append(u) }
         }
+        ignored += refused
         let w = savedSpeeds()
         for u in lines { if let m = w[u.publicIP ?? u.iface] { u.mbps = max(m, 0.5) } }
         // NO TICKED LINE HERE (31.10.2026, 10:17: Marko pulled the cable and the Nothing and plugged in the Pixel; the Mac's

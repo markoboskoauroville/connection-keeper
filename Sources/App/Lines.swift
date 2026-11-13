@@ -216,7 +216,7 @@ extension Stripe {
             r.info.textColor = Ink.dim
             r.name.toolTip = color == Ink.green ? "Green: connected, carrying the internet" : "Red: here, but not connected (tick it in ▾ to join it)"
             let line = agg?.lines.first { $0.device == o.iface }
-            r.info.stringValue = o.sameAs.map { "same as \($0)" }
+            r.info.stringValue = o.sameAs.map { $0 }
                 ?? (Aggregation.on && line != nil ? String(format: "%d·%.0fMB", line!.active, line!.mbDown + line!.mbUp)
                     : ok ? "not joined" : "no net")
             if deadIfaces.contains(o.iface) { r.info.stringValue = "NO DATA"; r.info.textColor = Ink.amber; r.name.textColor = Ink.amber }
@@ -388,9 +388,9 @@ extension Stripe {
         let ticked = Set(Aggregation.selected)
         for (name, ok, dev) in names {
             let same = others.first { $0.name == name }?.sameAs
-            let b = NSButton(checkboxWithTitle: Net.shown(name, dev) + (same.map { "   (same line as \($0), ignored)" } ?? ""), target: self, action: #selector(toggleJoin(_:)))
+            let b = NSButton(checkboxWithTitle: Net.shown(name, dev) + (same.map { "   (\($0))" } ?? ""), target: self, action: #selector(toggleJoin(_:)))
             b.state = ticked.contains(name) ? .on : .off
-            b.isEnabled = ok
+            b.isEnabled = ok && same == nil
             b.identifier = NSUserInterfaceItemIdentifier(name)
             b.font = .menuFont(ofSize: 0)
             let v = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 24))
