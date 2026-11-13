@@ -669,3 +669,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status:** built 13.11.2026 (v54, Tabs.swift): tabs ALL / IN USE centred under the second row; IN USE default.
 
 **v55 (13.11.2026):** fixed the launch crash of v54 (tab spacer constraint activated before the views had a common ancestor); `--selftest` flag and a CI step that runs it.
+
+## 13.11.2026, request 75 (the menu bar item, always, beside iStat)
+
+> please put My Connection Keeper Always Available in the menu bar. Make it start by system and let it be there, always positioned next to this ISTAT. They need to be next to each other; they are partners.
+
+**Status:** built 13.11.2026 (v55, MenuBar.swift MenuBarPlace): login item through SMAppService.mainApp at every start; the status item has the autosave name ConnectionKeeperItem and its preferred position (display width minus iStat network item's left edge) is written to our own defaults before the item is made, checked 3 s after start and after a display change, remade when more than 8 pt from iStat. iStat's preferences are never written.

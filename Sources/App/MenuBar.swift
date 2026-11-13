@@ -33,13 +33,8 @@ func menuBarRate(_ bytesPerSecond: Double?) -> String {
 
 extension Stripe {
     func setUpMenuBar() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let b = item.button {
-            b.imagePosition = .imageOnly
-            b.target = self
-            b.action = #selector(menuBarClicked)
-            b.toolTip = "Network Aggregate Connection Keeper\nInternet speed now: upload on top, download below (as iStat Menus).\nThe dot: green connected, red disconnected. Click: show or hide the stripe."
-        }
+        let item = MenuBarPlace.make()
+        configureStatusButton(item)
         menuItem = item
         showMenuBarSpeed(nil, nil)
         led.translatesAutoresizingMaskIntoConstraints = false
@@ -47,6 +42,35 @@ extension Stripe {
         led.heightAnchor.constraint(equalToConstant: 12).isActive = true
         led.toolTip = "Internet: green connected, red disconnected"
         if MenuBarPrefs.stripeHidden { panel.orderOut(nil) }
+        // v55: next to iStat Menus' network item, kept there (see MenuBarPlace)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.checkMenuPlace(tries: 2) }
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.checkMenuPlace(tries: 2) }
+        }
+    }
+
+    func configureStatusButton(_ item: NSStatusItem) {
+        if let b = item.button {
+            b.imagePosition = .imageOnly
+            b.target = self
+            b.action = #selector(menuBarClicked)
+            b.toolTip = "Network Aggregate Connection Keeper\nInternet speed now: upload on top, download below (as iStat Menus).\nThe dot: green connected, red disconnected. Click: show or hide the stripe."
+        }
+    }
+
+    // After a display change or a start: when our item is not right beside iStat's, put it back (the item is made again
+    // with the preferred position corrected; macOS reads the position only when an item is created).
+    func checkMenuPlace(tries: Int) {
+        guard let item = menuItem, let w = item.button?.window, let istat = MenuBarPlace.istatLeft() else { return }
+        let gap = istat - w.frame.maxX
+        if abs(gap) <= 8 { return }
+        appendLog("\(logStamp()) MENU BAR item is \(Int(gap)) pt from iStat's network item: placed again (preferred position \(MenuBarPlace.preferred() ?? 0))")
+        NSStatusBar.system.removeStatusItem(item)
+        let n = MenuBarPlace.make()
+        configureStatusButton(n)
+        menuItem = n
+        showMenuBarSpeed(lastMenuSpeed.0, lastMenuSpeed.1)
+        if tries > 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.checkMenuPlace(tries: tries - 1) } }
     }
 
     // v37 (request 54, Marko 29.10.2026: "Take a screenshot of the menu bar, and you will see another app which is
@@ -116,5 +140,57 @@ extension Stripe {
         panel.orderFrontRegardless()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.applyOnTop() }
         appendLog("\(logStamp()) MENU BAR click: stripe in front on \(screen?.localizedName ?? "?")")
+    }
+}
+
+// MY CONNECTION KEEPER ALWAYS AVAILABLE, BESIDE ISTAT (v55, Marko 13.11.2026: "please put My Connection Keeper Always
+// Available in the menu bar. Make it start by system and let it be there, always positioned next to this ISTAT. They need
+// to be next to each other; they are partners"). macOS keeps a status item's place in the defaults key
+// "NSStatusItem Preferred Position <autosaveName>" (our own domain), the distance in points from the RIGHT edge of the
+// menu bar display, read when the item is created. iStat's item is found by its window (owner "iStat Menus Status",
+// layer 25, on the main display; its name "com.bjango.istatmenus.network" is only readable with the Screen Recording
+// permission, so without it the leftmost iStat item on that display is used). Ours is put with its right edge at iStat's
+// left edge: preferred = display width - iStat's x. iStat's own preferences are never written.
+import ServiceManagement
+
+enum MenuBarPlace {
+    static let name = "ConnectionKeeperItem"
+    static var key: String { "NSStatusItem Preferred Position " + name }
+
+    // iStat's network item's left edge on the main display, in points (window coordinates, origin top-left).
+    static func istatLeft() -> CGFloat? {
+        let main = CGDisplayBounds(CGMainDisplayID())
+        guard let list = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return nil }
+        var xs: [(CGFloat, String)] = []
+        for w in list where (w[kCGWindowOwnerName as String] as? String) == "iStat Menus Status" && (w[kCGWindowLayer as String] as? Int) == 25 {
+            guard let b = w[kCGWindowBounds as String] as? [String: CGFloat], let x = b["X"], let wd = b["Width"], let h = b["Height"],
+                  h <= 40, x >= main.minX, x + wd <= main.maxX else { continue }
+            xs.append((x, (w[kCGWindowName as String] as? String) ?? ""))
+        }
+        if let n = xs.first(where: { $0.1.hasSuffix(".network") }) { return n.0 }
+        return xs.map(\.0).min()
+    }
+
+    static func preferred() -> Double? {
+        guard let x = istatLeft() else { return nil }
+        return Double(CGDisplayBounds(CGMainDisplayID()).width - x)
+    }
+
+    // The item, with the position set first (nothing is written to iStat's domain).
+    static func make() -> NSStatusItem {
+        if let p = preferred() { UserDefaults.standard.set(p, forKey: key) }
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.autosaveName = name
+        item.isVisible = true
+        return item
+    }
+
+    // At every start: the app is a login item, so the menu bar item is there after a restart, stripe shown or not.
+    static func registerLogin() {
+        let s = SMAppService.mainApp
+        if s.status != .enabled {
+            do { try s.register(); appendLog("\(logStamp()) LOGIN ITEM registered (status \(s.status.rawValue))") }
+            catch { appendLog("\(logStamp()) LOGIN ITEM could not be registered: \(error.localizedDescription) (System Settings > General > Login Items)") }
+        }
     }
 }
