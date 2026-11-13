@@ -619,3 +619,15 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 ## 2.11.2026, evening
 - Marko: "when you start to upload things to the drive, switch both phones to 5G to speed up", then "make a rule for uploading and downloading. Momentarily put it at 5G. When it's over, you need to bring it back to 4G ... It's burning my brain, and there's no need because there is no action on the internet." **Status:** done: Tools/phones5g (on / off / status / during CMD, a shared count so 4G comes only after the last transfer), on PATH; emupload copy uses it
+
+## 13.11.2026, request 69 (WI-FI / CABLE / BOTH check marks, line lists, dead-SIM fallback, signal strength)
+
+> I have now connected through the cable and dongle. The AX88179B USB LAN cable is going from TP-Link. ... I wanted to have an action button at the top to control the connection. There are three options, actually. If I have check marks, I do my options. So just put check marks at the top. What I want to use: - Wi-Fi: if I click that, Wi-Fi is enabled in the system. - Cable: if I click that, cable is enabled in the system. - Both: if I click both, aggregation works with both. If I click on Wi-Fi or Wired, I have a list of all wired and Wi-Fi connections currently available, and I can check mark which I want to use. ... Is it possible that my TP-Link connects to this Wi-Fi of my phone, and then through the cable, it brings internet to my computer? ... The SIM died. ... How to make a fallback? If it's connected, it doesn't have any data throughput, and I have Wi-Fi. It needs to understand that there is no data. It needs not to fight with it. It needs to ignore it ... in that sense, I want to see signal strength in my user interface for anything connected to my computer that's giving some kind of internet
+
+**Status:** research 13.11.2026: the TL-MR110-Outdoor has only "3G/4G Router" and "Wireless Router" (Ethernet WAN) modes, no WISP, so it cannot take the phone's Wi-Fi as its uplink; the Mac joins the phone's hotspot "Something" directly instead. Quick fix 13.11.2026: Wi-Fi put above AX88179B in the service order (no password needed), GitHub 1.6 s afterwards. App work in progress.
+
+## 13.11.2026, request 70 (traffic lights on the left)
+
+> fix the user interface of this application. On the left side, like any window in the Mac OS, I need to have a red button, a yellow button, and a green button. Same here, only on the left side. Now I have one yellow on the left and one green on the right, which is a disaster
+
+**Status:** in progress.
