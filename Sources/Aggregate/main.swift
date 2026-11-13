@@ -81,7 +81,7 @@ enum Lines {
     // 18.10.2026). `known`: the public IPs found before, kept when a lookup fails under load.
     static func discover(known: [String: String] = [:], anyLine: Bool = false) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
         let wifi = Net.wifiInterface()
-        let ticked = anyLine ? [] : Set(Aggregation.selected)
+        let ticked = anyLine ? [] : Set(Aggregation.joinable)
         var found: [Uplink] = []
         for i in Net.activeInterfaces() {
             guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
@@ -369,13 +369,13 @@ final class Server {
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
         // v32 (request 49): at once too when a device comes or goes (a phone plugged in, a cable), and when ⟳ is pressed.
         Thread.detachNewThread { [self] in
-            var last = Date(), ticks = Aggregation.selected, devices = deviceFingerprint()
+            var last = Date(), ticks = Aggregation.joinable, devices = deviceFingerprint()
             while true {
                 sleep(1)
                 if !aggTestCopy && FileManager.default.fileExists(atPath: Aggregation.rescanFile.path) {
                     try? FileManager.default.removeItem(at: Aggregation.rescanFile)
                     log("RESCAN asked from the stripe: every device and phone found again, every line checked")
-                    rescan(); ticks = Aggregation.selected; last = Date(); devices = deviceFingerprint()
+                    rescan(); ticks = Aggregation.joinable; last = Date(); devices = deviceFingerprint()
                     continue
                 }
                 let d = deviceFingerprint()
@@ -383,10 +383,10 @@ final class Server {
                     log("devices changed (\(devices.joined(separator: " ")) → \(d.joined(separator: " "))): lines found again")
                     joinPlugged(Set(d).subtracting(devices))
                     devices = d
-                    refresh(); checkLines(); ticks = Aggregation.selected; last = Date()
+                    refresh(); checkLines(); ticks = Aggregation.joinable; last = Date()
                     continue
                 }
-                let now = Aggregation.selected
+                let now = Aggregation.joinable
                 if now != ticks || Date().timeIntervalSince(last) >= 60 { ticks = now; last = Date(); refresh() }
             }
         }

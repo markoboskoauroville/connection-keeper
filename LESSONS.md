@@ -328,3 +328,10 @@ is no measure of load: the Pixel had more connections than mantra and a seventh 
 `pkill -f` must match the command line as it runs: the test copy started as `./ck-aggregate serve` survived a kill by
 its full path, kept port 8957, and one test ran on the old build. A window with `.canJoinAllSpaces` is on every desktop
 of every display: to Marko it "follows him around". The rules are in MANTRA_MANIFEST network-aggregation.md.
+
+## 13.11.2026 (v49): a line that is up is not a line that carries data
+
+- Link up and an address say nothing: the cable to a TP-Link with an exhausted SIM looked healthy while every connection stalled, because macOS kept it first. The only honest test is an HTTPS request bound to that interface (`curl --interface`). Two misses, then reorder and leave out; no toggling, no fighting; come back only after a minute of success so a flaky line does not flap.
+- Real traffic-light buttons: `NSWindow.standardWindowButton(_:for:)` added to a borderless panel's view; give them our own target and action. Hover.swift must not touch them.
+- adb works over the phone's own hotspot (gateway:5555) when Tailscale is down; one shell `dumpsys telephony.registry | grep mSignalStrength` is enough for RSRP/RSRQ/SINR; 2147483647 means unavailable.
+- First push of the workflow: GitHub's macOS runners can queue for many minutes; cancel superseded runs so the older version never overwrites Latest.

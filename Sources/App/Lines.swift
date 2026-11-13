@@ -24,6 +24,8 @@ final class LineRow {
     let g4 = NSButton(title: "4G", target: nil, action: nil), g5 = NSButton(title: "5G", target: nil, action: nil)
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
     let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
+    let meter = VUMeter()           // v49: the signal as a VU meter (Signal.swift)
+    let sig = label(textWidth("-111 dBm 4G+  ", monoFont), font: monoFont)
     let info = label(textWidth("8 lines · 888 conn · 88.8× best, up 88.8×  ", monoFont), font: monoFont)
     var lastBytes: (rx: UInt64, tx: UInt64)?
     var lastAt: Date?, lastRate: (Double, Double)?      // a phone row: when the server's counters were read, the rate
@@ -62,7 +64,7 @@ final class LineRow {
         // and the lead is narrower by their width so nothing else moves.
         for b in [g4, g5] { b.setContentHuggingPriority(.required, for: .horizontal) }
         lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - 6)).isActive = true
-        view = NSStackView(views: [dot, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), info])
+        view = NSStackView(views: [dot, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), meter, sig, linePipe(), info])
         view.orientation = .horizontal
         view.spacing = 3
         view.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -158,7 +160,6 @@ extension Stripe {
         let shown = others.filter { Aggregation.on ? joinedNow.contains($0.iface) : $0.iface == iface }
         for o in shown where lineRows[o.iface] == nil {
             let r = LineRow(leadWidth: lead, nameWidth: nameW)
-            r.view.edgeInsets.left += 12                    // v28: the names under the first row's name, past the minimize
             r.dot.isHidden = true                           // v28 (request 46): every line shown is connected; no dots
             r.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
             r.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
@@ -208,6 +209,7 @@ extension Stripe {
             r.info.stringValue = o.sameAs.map { "same line as \($0): not joined" }
                 ?? (Aggregation.on && line != nil ? String(format: "joined · %d conn · %.0f MB", line!.active, line!.mbDown + line!.mbUp)
                     : ok ? "not joined" : "no internet")
+            if deadIfaces.contains(o.iface) { r.info.stringValue = "NO DATA"; r.info.textColor = Ink.amber; r.name.textColor = Ink.amber }
             r.speed.toolTip = "Its own live speed (its default route); in parentheses its last test alone, down and up.\nClick: test this line now (Cloudflare, about 6 s each way)."
             if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: !ok, mark: lineTesting.contains(o.name) ? "..." : nil) }
         }

@@ -32,7 +32,8 @@ final class Hover: NSObject {
     }
 
     static func walk(_ v: NSView) {
-        if let b = v as? NSButton, !(b is TrafficMinimize) { add(b) }
+        if v is TrafficLights { return }
+        if let b = v as? NSButton { add(b) }
         for s in v.subviews { walk(s) }
     }
 

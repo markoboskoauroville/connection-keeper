@@ -780,3 +780,13 @@ Mbit/s) is no longer treated as a 10 Mbit/s line. The phones rest on 4G; after f
 Mbit/s or more) they go to 5G, and after five quiet minutes back to 4G. A connection already open stays on its line;
 one big file over every line needs several connections (ck-net, or Chrome's parallel downloading). The stripe stays
 on the desktop and display where it is; a click on its menu bar icon brings it to you.
+
+
+## v49 (13.11.2026): traffic lights, WI-FI / CABLE / BOTH, NO DATA, signal meters
+
+- **GitHub compiles it** (`.github/workflows/build.yml`, macos-15, `SIGN=- NO_INSTALL=1 ./build.sh`; push to main publishes release vN, Latest). build.sh needs `go` (setup-go in the workflow). Install on the Mac: download the release zip, ditto into /Applications, `codesign --force -s "Mantra Apps"`; quit the running stripe first.
+- `Sources/App/Lights.swift`: the real red/yellow/green buttons on the top row; red = closeStripe, yellow = minimizeStripe, green = zoomStripe (full width and back). Hover.swift skips the TrafficLights view.
+- `Sources/App/Choose.swift`: the top row of tick boxes WI-FI / CABLE / BOTH (UserDefaults `linkChoice`, `cableTicks`); `ServiceOrder.apply` reorders macOS's services (no password). BOTH calls the existing `switchMode(true)` with the ticked lines.
+- `Sources/App/Health.swift`: per-interface HTTPS probes (curl --interface), NO DATA after 2 failures, back after 60 s of success; `Aggregation.dead` (dead-lines.json) and `Aggregation.joinable` in Shared/Aggregate.swift keep dead lines out of ck-aggregate's join.
+- `Sources/App/Signal.swift`: SignalHub, VUMeter, HistoryGraph, SignalWindow; samples: Wi-Fi 1 s, phones 2 s (one adb shell), cable link speed 5 s. Location permission appears in PERMISSIONS only when the RSSI reads 0.
+- Open: nothing of v49 was seen on screen before the release; check the traffic lights' colour while the panel is not key, the checkbox look on the dark ground, and the meter slots.

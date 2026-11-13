@@ -30,6 +30,19 @@ enum Aggregation {
     }
     static var on: Bool { aggregateMode && !selected.isEmpty }
 
+    // v49 (request 69): the lines that are up but carry no data (the stripe's HTTPS probes), by name; the server leaves them
+    // out of the join until they carry data again. Never all of them: with every ticked line dead the ticks stay.
+    static let deadFile = Paths.support.appendingPathComponent("dead-lines.json")
+    static var dead: [String] {
+        get { (try? Data(contentsOf: deadFile)).flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? [] }
+        set { try? JSONEncoder().encode(newValue).write(to: deadFile, options: .atomic) }
+    }
+    static var joinable: [String] {
+        let s = selected, d = Set(dead)
+        let live = s.filter { !d.contains($0) }
+        return live.isEmpty ? s : live
+    }
+
     // THE MODE (request 34, Marko 18.10.2026: "After the last update, I don't have any connections ... make it simple to
     // switch mode in the application to aggregate or one connection. To simply and quickly overwrite our aggregation
     // services"). One connection: the helper's flag gone (utun99 down within 2 s), macOS's proxy off, the server stopped

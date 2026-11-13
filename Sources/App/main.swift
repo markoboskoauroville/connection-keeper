@@ -2,6 +2,7 @@
 // keeper's last word, with a drop-down to switch by hand and a gear for the list of connections.
 import AppKit
 import CoreWLAN
+import CoreLocation
 
 let appName = "Network Aggregate Connection Keeper (Mantra)"
 
@@ -147,7 +148,25 @@ final class Stripe: NSObject {
     let ok = NSButton(title: "OK", target: nil, action: nil)
     let gear = NSButton(title: "⚙", target: nil, action: nil)
     let rescan = NSButton(title: "⟳", target: nil, action: nil)   // v32, request 49: find every line again, now
-    let minimize = TrafficMinimize()            // v27, request 45: the macOS yellow minimize, on the left
+    let lights = TrafficLights()                // v49, request 70: the standard red / yellow / green, on the left (Lights.swift)
+    // v49 (request 69): WI-FI · CABLE · BOTH ticks on the top row (Choose.swift), the dead lines (Health.swift), the signal (Signal.swift)
+    lazy var wifiTick = makeTick(#selector(tickWifi), id: "tick-wifi")
+    lazy var cableTick = makeTick(#selector(tickCable), id: "tick-cable")
+    lazy var bothTick = makeTick(#selector(tickBoth), id: "tick-both")
+    lazy var wifiLabel = word("WI-FI", Ink.text, #selector(openWifiList), id: "choose-wifi", tip: "Tick: the Mac on its Wi-Fi (first in the service order, the cable second). Click the word: the Wi-Fi networks in range, tick the one to use.")
+    lazy var cableLabel = word("CABLE", Ink.text, #selector(openCableList), id: "choose-cable", tip: "Tick: the cable first. Click the word: the wired interfaces and phones, tick the ones to use.")
+    lazy var bothLabel = word("BOTH", Ink.text, #selector(tickBoth), id: "choose-both", tip: "Tick: aggregation over the ticked lines (the Wi-Fi in use and the ticked cables).")
+    lazy var wifiNoData = noDataLabel()
+    lazy var cableNoData = noDataLabel()
+    let ruleChecks = Rule()
+    var deadIfaces = Set<String>()
+    var probeState: [String: ProbeState] = [:]
+    var probing = false
+    var zoomPrev: (scale: CGFloat, x: CGFloat)?
+    var phoneSampling = false
+    var signalTick = 0
+    var wifiScan: [String] = []
+    var wifiScanAt = Date.distantPast
     let grip = Grip()                           // v27, request 45: two vertical lines on the right, dragged to resize
     let permissions = NSButton(title: "PERMISSIONS", target: nil, action: nil)   // v38: shown only while one is missing
     // v39 (request 56): ON OFF after the minimize circle, TOP before the LED (OnOff.swift)
@@ -312,8 +331,7 @@ final class Stripe: NSObject {
         // place only in the red alert. Closer items, smaller margins.
         // v27 (request 45: "On the left side, make a minimize button which looks exactly as minimize button from the
         // macOS ... align that button with the rest of the text"): the yellow circle, "−" on it while the mouse is over
-        minimize.onPress = { [weak self] in self?.minimizeStripe() }
-        minimize.toolTip = "Hide the stripe; Command-Tab to Connection Keeper (or its Dock icon) brings it back to this place"
+        wireLights()
         // v27 ("On the right side, put the two vertical lines, which I'm dragging and resizing"): the grip scales the stripe
         grip.onDrag = { [weak self] w in self?.resize(toWidth: w) }
         grip.startWidth = { [weak self] in self?.panel.frame.width ?? 0 }
@@ -336,9 +354,9 @@ final class Stripe: NSObject {
         permissions.font = .monospacedSystemFont(ofSize: 12, weight: .bold)
         permissions.contentTintColor = NSColor(calibratedRed: 0xE8/255, green: 0xA3/255, blue: 0x3D/255, alpha: 1)
         permissions.setContentHuggingPriority(.required, for: .horizontal)
-        permissions.toolTip = "Accessibility is off: joining a Wi-Fi through Control Centre cannot work. This opens its page in System Settings"
+        permissions.toolTip = "A permission is off (Accessibility: joining a Wi-Fi through Control Centre; Location: the Wi-Fi signal reading). This opens its page in System Settings"
         permissions.isHidden = Permissions.missing.isEmpty
-        let row = NSStackView(views: [minimize, onWord, offWord, pipe(), macWord, aggWord, bothWord, pipe(), gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testWord, testSpeedWord, pipe(), testHealthWord, pipe(), topWord, led, permissions])
+        let row = NSStackView(views: [onWord, offWord, pipe(), macWord, aggWord, bothWord, pipe(), gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testWord, testSpeedWord, pipe(), testHealthWord, pipe(), topWord, led, permissions])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -346,7 +364,6 @@ final class Stripe: NSObject {
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
         aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + 6 + macWord.fittingSize.width + aggWord.fittingSize.width + bothWord.fittingSize.width + 2 * pipe().fittingSize.width + 15 + gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
-        aggRow.view.edgeInsets.left += 12
         aggRow.dot.isHidden = true
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
@@ -355,15 +372,22 @@ final class Stripe: NSObject {
         dlBox.alignment = .leading
         dlBox.spacing = 0
         dlBox.isHidden = true
-        let column = NSStackView(views: [row, ruleLines, aggRow.view, ruleStatus, dlBox])
+        let checkRow = NSStackView(views: [lights, wifiTick, wifiLabel, wifiNoData, pipe(), cableTick, cableLabel, cableNoData, pipe(), bothTick, bothLabel])
+        checkRow.orientation = .horizontal
+        checkRow.spacing = 3
+        checkRow.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
+        checkRow.translatesAutoresizingMaskIntoConstraints = false
+        checkRow.heightAnchor.constraint(equalToConstant: 26).isActive = true
+        aggRow.meter.alphaValue = 0
+        let column = NSStackView(views: [checkRow, ruleChecks, row, ruleLines, aggRow.view, ruleStatus, dlBox])
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 0
         column.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 20)   // the right 20 points: the grip
         column.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(column)
-        for r in [ruleLines, ruleStatus] { r.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -16).isActive = true }
-        column.setCustomSpacing(3, after: row); column.setCustomSpacing(3, after: ruleLines)
+        for r in [ruleChecks, ruleLines, ruleStatus] { r.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -16).isActive = true }
+        column.setCustomSpacing(3, after: checkRow); column.setCustomSpacing(3, after: ruleChecks); column.setCustomSpacing(3, after: row); column.setCustomSpacing(3, after: ruleLines)
         column.setCustomSpacing(3, after: aggRow.view); column.setCustomSpacing(3, after: ruleStatus)
         Hover.watchPresses()
         // the grip at the right end of the column (the column, not the root: the root's own edge is the unscaled one)
@@ -373,7 +397,7 @@ final class Stripe: NSObject {
             column.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             column.topAnchor.constraint(equalTo: root.topAnchor),
             grip.trailingAnchor.constraint(equalTo: column.trailingAnchor, constant: -5),
-            grip.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            grip.centerYAnchor.constraint(equalTo: checkRow.centerYAnchor),
             grip.widthAnchor.constraint(equalToConstant: 10),
             grip.heightAnchor.constraint(equalToConstant: 18),
         ])
@@ -407,6 +431,7 @@ final class Stripe: NSObject {
         loadAgents()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.scanLines() }
         Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.readRadios() }
+        startSignals(); startHealth(); refreshWifiScan()
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.readRadios() }
         layoutLines()
         scanLines()
@@ -578,6 +603,7 @@ final class Stripe: NSObject {
         reading()
         showDownloads()
         showRoute()
+        showChoice()
         applyAlert()
         showLed()
         // v28: the dot is gone from the stripe; when it would have been red or amber the name says it in that colour
@@ -1159,10 +1185,12 @@ extension CGFloat {
 // v38: the permissions the stripe uses: Accessibility (joining a Wi-Fi through Control Centre's list, Join.swift).
 // Nothing is asked by itself, at --login or ever; only a click on PERMISSIONS asks (swift-apps.md).
 enum Permissions {
-    static let needed = ["Accessibility"]
+    static let needed = ["Accessibility", "Location"]
+    static let locationManager = CLLocationManager()
     static func allowed(_ p: String) -> Bool {
         switch p {
         case "Accessibility": return AXIsProcessTrusted()
+        case "Location": return !SignalHub.shared.wifiNeedsLocation || locationManager.authorizationStatus == .authorizedAlways   // v49: the Wi-Fi's signal reading
         default: return true
         }
     }
@@ -1171,44 +1199,12 @@ enum Permissions {
     static func openMissing() {
         guard let p = missing.first else { return }
         if p == "Accessibility" { _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary) }
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_" + p)!)
+        if p == "Location" { locationManager.requestWhenInUseAuthorization() }
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_" + (p == "Location" ? "LocationServices" : p))!)
     }
 }
 
 final class FlippedView: NSView { override var isFlipped: Bool { true } }
-
-// v27 (request 45): the minimize button of a macOS window, the yellow one: 12 points, its own yellow and rim, a dark "−"
-// on it while the mouse is over the button.
-final class TrafficMinimize: NSView {
-    var onPress: (() -> Void)?
-    private var over = false { didSet { needsDisplay = true } }
-    override var intrinsicContentSize: NSSize { NSSize(width: 12, height: 12) }
-    override func draw(_ r: NSRect) {
-        let c = NSBezierPath(ovalIn: bounds.insetBy(dx: 0.5, dy: 0.5))
-        NSColor(calibratedRed: 0.996, green: 0.737, blue: 0.180, alpha: 1).setFill(); c.fill()
-        NSColor(calibratedRed: 0.871, green: 0.631, blue: 0.137, alpha: 1).setStroke(); c.lineWidth = 0.5; c.stroke()
-        if over {
-            let m = NSBezierPath()
-            m.move(to: NSPoint(x: bounds.minX + 3, y: bounds.midY)); m.line(to: NSPoint(x: bounds.maxX - 3, y: bounds.midY))
-            m.lineWidth = 1.2
-            NSColor(calibratedRed: 0.6, green: 0.34, blue: 0.0, alpha: 1).setStroke(); m.stroke()
-        }
-    }
-    override func updateTrackingAreas() {
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self))
-    }
-    override func mouseEntered(with e: NSEvent) { over = true }
-    override func mouseExited(with e: NSEvent) { over = false }
-    override func mouseDown(with e: NSEvent) {}
-    override func mouseUp(with e: NSEvent) { if bounds.contains(convert(e.locationInWindow, from: nil)) { onPress?() } }
-    override var mouseDownCanMoveWindow: Bool { false }
-    override func acceptsFirstMouse(for e: NSEvent?) -> Bool { true }
-    override func isAccessibilityElement() -> Bool { true }
-    override func accessibilityRole() -> NSAccessibility.Role? { .button }
-    override func accessibilityLabel() -> String? { "minimize" }
-    override func accessibilityPerformPress() -> Bool { onPress?(); return true }
-}
 
 // v27 (request 45): two vertical lines at the right end; dragged left or right, the stripe gets smaller or bigger.
 final class Grip: NSView {
