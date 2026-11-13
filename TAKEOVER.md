@@ -790,3 +790,10 @@ on the desktop and display where it is; a click on its menu bar icon brings it t
 - `Sources/App/Health.swift`: per-interface HTTPS probes (curl --interface), NO DATA after 2 failures, back after 60 s of success; `Aggregation.dead` (dead-lines.json) and `Aggregation.joinable` in Shared/Aggregate.swift keep dead lines out of ck-aggregate's join.
 - `Sources/App/Signal.swift`: SignalHub, VUMeter, HistoryGraph, SignalWindow; samples: Wi-Fi 1 s, phones 2 s (one adb shell), cable link speed 5 s. Location permission appears in PERMISSIONS only when the RSSI reads 0.
 - Open: nothing of v49 was seen on screen before the release; check the traffic lights' colour while the panel is not key, the checkbox look on the dark ground, and the meter slots.
+
+## v50 (13.11.2026): fixes after seeing v49
+
+- Traffic lights are drawn (Lights.swift): 11 pt circles in #FF5F57 / #FEBC2E / #28C840 with darker rims, glyphs on hover over the group, always coloured (the system's buttons were grey in the non-key panel).
+- Cable meter is neutral (grey, link speed as number; `MeterScale.neutral`), never red.
+- A hotspot line has two meters: WI-FI (Mac to phone, RSSI + SNR; "WI-FI · permission" amber when RSSI reads 0) and 4G (RSRP + SINR, coloured by the worse of the two). LineRow has tag1/meter/sig and tag2/meter2/sig2.
+- The MAC / AGGREGATE / BOTH words are gone from the second row; the WI-FI / CABLE / BOTH ticks are the one control.

@@ -356,14 +356,14 @@ final class Stripe: NSObject {
         permissions.setContentHuggingPriority(.required, for: .horizontal)
         permissions.toolTip = "A permission is off (Accessibility: joining a Wi-Fi through Control Centre; Location: the Wi-Fi signal reading). This opens its page in System Settings"
         permissions.isHidden = Permissions.missing.isEmpty
-        let row = NSStackView(views: [onWord, offWord, pipe(), macWord, aggWord, bothWord, pipe(), gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testWord, testSpeedWord, pipe(), testHealthWord, pipe(), topWord, led, permissions])
+        let row = NSStackView(views: [onWord, offWord, pipe(), gear, rescan, expand, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testWord, testSpeedWord, pipe(), testHealthWord, pipe(), topWord, led, permissions])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 30).isActive = true
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
-        aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + 6 + macWord.fittingSize.width + aggWord.fittingSize.width + bothWord.fittingSize.width + 2 * pipe().fittingSize.width + 15 + gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
+        aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + pipe().fittingSize.width + 12 + gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameWidth: connectionWidth())
         aggRow.dot.isHidden = true
         aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
@@ -378,7 +378,7 @@ final class Stripe: NSObject {
         checkRow.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         checkRow.translatesAutoresizingMaskIntoConstraints = false
         checkRow.heightAnchor.constraint(equalToConstant: 26).isActive = true
-        aggRow.meter.alphaValue = 0
+        for v in [aggRow.meter, aggRow.meter2] { v.alphaValue = 0 }
         let column = NSStackView(views: [checkRow, ruleChecks, row, ruleLines, aggRow.view, ruleStatus, dlBox])
         column.orientation = .vertical
         column.alignment = .leading

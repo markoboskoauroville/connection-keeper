@@ -335,3 +335,6 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 - Real traffic-light buttons: `NSWindow.standardWindowButton(_:for:)` added to a borderless panel's view; give them our own target and action. Hover.swift must not touch them.
 - adb works over the phone's own hotspot (gateway:5555) when Tailscale is down; one shell `dumpsys telephony.registry | grep mSignalStrength` is enough for RSRP/RSRQ/SINR; 2147483647 means unavailable.
 - First push of the workflow: GitHub's macOS runners can queue for many minutes; cancel superseded runs so the older version never overwrites Latest.
+
+## 13.11.2026 (v50): the system's window buttons are grey in a non-key panel
+- A non-activating panel is never key, so NSWindow.standardWindowButton draws the inactive grey look. Draw the three circles ourselves in the exact colours. A link speed is not a quality: no red zone for a cable. For a phone the SINR decides the speed, so it sits beside RSRP and sets the colour.

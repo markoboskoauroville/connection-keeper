@@ -18,13 +18,14 @@ import CoreLocation
 
 struct MeterScale {
     let lo: Double, hi: Double, excellent: Double, good: Double, fair: Double, unit: String
+    var neutral = false                      // v50: a link speed is not a quality: grey, no red/amber/green
     static let wifi = MeterScale(lo: -95, hi: -30, excellent: -55, good: -67, fair: -75, unit: "dBm")
     static let rsrp = MeterScale(lo: -140, hi: -60, excellent: -80, good: -90, fair: -100, unit: "dBm")
-    static let link = MeterScale(lo: 0, hi: 1000, excellent: 900, good: 500, fair: 90, unit: "Mb/s")
-    func color(_ v: Double) -> NSColor { v >= good ? Ink.green : v >= fair ? Ink.amber : Ink.red }
-    func word(_ v: Double) -> String { v >= excellent ? "excellent" : v >= good ? "good" : v >= fair ? "fair" : "poor" }
+    static let link = MeterScale(lo: 0, hi: 1000, excellent: 900, good: 500, fair: 90, unit: "Mb/s", neutral: true)
+    func color(_ v: Double) -> NSColor { if neutral { return Ink.text }; return v >= good ? Ink.green : v >= fair ? Ink.amber : Ink.red }
+    func word(_ v: Double) -> String { if neutral { return "" }; return v >= excellent ? "excellent" : v >= good ? "good" : v >= fair ? "fair" : "poor" }
     func frac(_ v: Double) -> CGFloat { CGFloat(min(1, max(0, (v - lo) / (hi - lo)))) }
-    var zones: [(Double, Double, NSColor)] { [(lo, fair, Ink.red), (fair, good, Ink.amber), (good, hi, Ink.green)] }
+    var zones: [(Double, Double, NSColor)] { if neutral { return [(lo, hi, Ink.dim)] }; return [(lo, fair, Ink.red), (fair, good, Ink.amber), (good, hi, Ink.green)] }
 }
 
 func sinrWord(_ v: Double) -> String { v >= 20 ? "excellent" : v >= 13 ? "good" : v >= 0 ? "fair" : "poor" }
@@ -35,6 +36,7 @@ struct LineSignal {
     var peak: Double?
     var peakAt = Date()
     var text = "—"
+    var tint: NSColor?
     var details: [String] = []
     var history: [(at: Date, v: Double)] = []
 }
@@ -111,7 +113,15 @@ final class SignalHub {
         add("LTE RSRP ", "rsrp", "dBm", MeterScale.rsrp.word); add("LTE RSRQ ", "rsrq", "dB"); add("LTE RSSNR (SINR) ", "rssnr", "dB", sinrWord); add("LTE RSSI ", "rssi", "dBm")
         add("NR ssRSRP ", "nrRsrp", "dBm", MeterScale.rsrp.word); add("NR ssRSRQ ", "nrRsrq", "dB"); add("NR ssSINR ", "nrSinr", "dB", sinrWord)
         if !t.isEmpty { d.append("Network: " + t) }
-        put(key, scale: .rsrp, value: primary, text: primary.map { "\(Int($0)) dBm \(short)" } ?? "no signal", details: d)
+        let sinr = v["rssnr"] ?? v["nrSinr"]
+        put(key, scale: .rsrp, value: primary, text: primary.map { "\(Int($0)) dBm \(short) SINR \(sinr.map { String(Int($0)) } ?? "—")" } ?? "no signal", details: d)
+        // the colour is the worse of RSRP and SINR (SINR decides the speed): red poor, amber fair, green good
+        if let p = primary {
+            let rank = { (c: NSColor) -> Int in c == Ink.red ? 2 : c == Ink.amber ? 1 : 0 }
+            let sc: NSColor = sinr.map { $0 >= 13 ? Ink.green : $0 >= 0 ? Ink.amber : Ink.red } ?? Ink.green
+            let rc = MeterScale.rsrp.color(p)
+            lines[key]?.tint = rank(sc) > rank(rc) ? sc : rc
+        }
     }
 }
 
@@ -142,7 +152,7 @@ extension Stripe {
         let ch = c.wlanChannel().map { "channel \($0.channelNumber) \(band)" } ?? "channel ?"
         let d = ["Wi-Fi RSSI \(rssi) dBm  (\(MeterScale.wifi.word(Double(rssi))))", "noise \(noise) dBm", "SNR \(rssi - noise) dB",
                  String(format: "tx rate %.0f Mbit/s", c.transmitRate()), ch]
-        hub.put("wifi", scale: .wifi, value: Double(rssi), text: "\(rssi) dBm", details: d)
+        hub.put("wifi", scale: .wifi, value: Double(rssi), text: "\(rssi) dBm SNR \(rssi - noise)", details: d)
     }
 
     // Every 2 s, one adb shell a phone, off the main thread; the tag (4G / 5G) every 16 s.
@@ -203,29 +213,40 @@ extension Stripe {
         }
     }
 
-    func signalKey(_ o: OtherLine) -> String {
-        if Phones.isPhone(o.iface) { return "adb:" + String(o.iface.dropFirst(4)) }
-        if o.wifi { return SignalHub.shared.lines["hot"]?.value != nil ? "hot" : "wifi" }
-        return "link:" + o.iface
+    // The meters a line shows: a hotspot line has two, WI-FI (Mac to phone) and 4G (phone to tower).
+    func signalKeys(_ o: OtherLine) -> [(String, String)] {
+        if Phones.isPhone(o.iface) { return [("4G", "adb:" + String(o.iface.dropFirst(4)))] }
+        if o.wifi { return SignalHub.shared.lines["hot"]?.value != nil ? [("WI-FI", "wifi"), ("4G", "hot")] : [("WI-FI", "wifi")] }
+        return [("LINK", "link:" + o.iface)]
     }
 
     func updateMeters() {
+        let hub = SignalHub.shared
         for o in others {
             guard let r = lineRows[o.iface] else { continue }
-            let key = signalKey(o)
-            guard let l = SignalHub.shared.lines[key] else {
-                r.meter.value = nil; r.meter.peak = nil; r.meter.needsDisplay = true; r.sig.stringValue = "—"; r.sig.textColor = Ink.dim; continue
+            let keys = signalKeys(o)
+            let slots = [(r.tag1, r.meter, r.sig), (r.tag2, r.meter2, r.sig2)]
+            for (i, s) in slots.enumerated() {
+                let (tag, meter, sig) = s
+                guard i < keys.count else { tag.stringValue = ""; meter.alphaValue = 0; meter.onClick = nil; sig.stringValue = ""; continue }
+                let (name, key) = keys[i]
+                tag.stringValue = name; tag.textColor = Ink.dim; meter.alphaValue = 1
+                if key == "wifi" && hub.wifiNeedsLocation {
+                    tag.stringValue = "WI-FI ·"; meter.value = nil; meter.peak = nil; meter.needsDisplay = true
+                    sig.stringValue = "permission"; sig.textColor = Ink.amber
+                    meter.toolTip = "The Mac's Wi-Fi signal needs the Location permission: PERMISSIONS, top right."
+                    continue
+                }
+                guard let l = hub.lines[key] else { meter.value = nil; meter.peak = nil; meter.needsDisplay = true; sig.stringValue = "—"; sig.textColor = Ink.dim; continue }
+                meter.scale = l.scale; meter.value = l.value; meter.peak = l.peak; meter.needsDisplay = true
+                sig.stringValue = l.text
+                sig.textColor = l.tint ?? l.value.map { l.scale.color($0) } ?? Ink.dim
+                meter.toolTip = l.details.joined(separator: "\n") + "\nClick: a larger meter with a 5-minute history."
+                meter.onClick = { SignalWindow.show(key: key, title: o.name + " · " + name) }
             }
-            r.meter.scale = l.scale; r.meter.value = l.value; r.meter.peak = l.peak; r.meter.needsDisplay = true
-            r.sig.stringValue = l.text
-            r.sig.textColor = l.value.map { l.scale.color($0) } ?? Ink.dim
-            r.meter.toolTip = l.details.joined(separator: "\n") + "\nClick: a larger meter with a 5-minute history."
-            r.meter.onClick = { [weak self] in self?.openSignal(o) }
         }
         SignalWindow.updateAll()
     }
-
-    func openSignal(_ o: OtherLine) { SignalWindow.show(key: signalKey(o), title: o.name) }
 }
 
 // The meter: zones dim, filled to the value in the zone colours, a white peak-hold marker, a tick at "excellent".
@@ -254,7 +275,7 @@ final class VUMeter: NSView {
             }
             NSGraphicsContext.restoreGraphicsState()
         }
-        NSColor(calibratedWhite: 0.7, alpha: 0.6).setFill()
+        NSColor(calibratedWhite: 0.7, alpha: scale.neutral ? 0 : 0.6).setFill()
         NSRect(x: w * scale.frac(scale.excellent) - 0.5, y: 0, width: 1, height: h).fill()
         if let p = peak {
             NSColor.white.setFill()

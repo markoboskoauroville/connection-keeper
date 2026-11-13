@@ -24,8 +24,10 @@ final class LineRow {
     let g4 = NSButton(title: "4G", target: nil, action: nil), g5 = NSButton(title: "5G", target: nil, action: nil)
     let speed = label(textWidth(speedSample(), monoFont), font: monoFont)
     let ping = label(textWidth("ping 999 ms", monoFont), font: monoFont)
-    let meter = VUMeter()           // v49: the signal as a VU meter (Signal.swift)
-    let sig = label(textWidth("-111 dBm 4G+  ", monoFont), font: monoFont)
+    // v49/v50: two signal slots (Signal.swift), each a tag, a VU meter and the exact numbers; a hotspot line uses both
+    let meter = VUMeter(), meter2 = VUMeter()
+    let tag1 = label(textWidth("WI-FI · ", monoFont), font: .monospacedSystemFont(ofSize: 11, weight: .bold)), tag2 = label(textWidth("WI-FI · ", monoFont), font: .monospacedSystemFont(ofSize: 11, weight: .bold))
+    let sig = label(textWidth("-111 dBm 4G+ SINR -11 ", monoFont), font: monoFont), sig2 = label(textWidth("-111 dBm 4G+ SINR -11 ", monoFont), font: monoFont)
     let info = label(textWidth("8 lines · 888 conn · 88.8× best, up 88.8×  ", monoFont), font: monoFont)
     var lastBytes: (rx: UInt64, tx: UInt64)?
     var lastAt: Date?, lastRate: (Double, Double)?      // a phone row: when the server's counters were read, the rate
@@ -64,7 +66,7 @@ final class LineRow {
         // and the lead is narrower by their width so nothing else moves.
         for b in [g4, g5] { b.setContentHuggingPriority(.required, for: .horizontal) }
         lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - 6)).isActive = true
-        view = NSStackView(views: [dot, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), meter, sig, linePipe(), info])
+        view = NSStackView(views: [dot, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), tag1, meter, sig, tag2, meter2, sig2, linePipe(), info])
         view.orientation = .horizontal
         view.spacing = 3
         view.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
