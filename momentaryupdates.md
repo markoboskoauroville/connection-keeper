@@ -768,3 +768,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **14.11.2026 07:54 UTC VM cleanup (Marko: "stop all unnecessary process on vm like brave etc for full power", "keep frankfurt servers", "yes"):** stopped (not disabled) Brave, Firefox WhatsApp Web + wa-door.service (its 60 s watchdog), chromium-vm-claude-app.service, the Android container pixel7b + pixel7d.service + pixel7-jobs.service. Kept: ckbond, tailscaled, ssh, chromium-vm-xvnc, Chrome (chromium-vm-session restarts it), Queen, Claude Code (tmux). Memory used 7.6 GB → 3.4 GB, load 3.3 → 0.4. Restart: systemctl --user start wa-door; sudo systemctl start pixel7d pixel7-jobs chromium-vm-claude-app. MAC_SES6 told.
 
 **14.11.2026 08:45 (Marko: "bond should stay all the time"):** bond.json on permanently; both legs (AX88179B + Something), bypass none; the Mac's public address is 130.61.181.83; pages 0.32-0.48 s. With fewer than two good lines it steps aside by itself (v67+).
+
+**14.11.2026 (Marko: "my whole machine now running on frankfurt ip that is fine buil that test ti t close the project"):** ck-bondcheck built and PASS; project closed.

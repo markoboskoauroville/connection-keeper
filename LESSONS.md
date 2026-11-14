@@ -373,3 +373,7 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 - A line can leave the pool from three places (the stripe's NO DATA probe, the server's 60 s refresh, the 1 s health dial):
   each must log its reason, or the next layer (the bond) only sees "one line" and nobody can tell why. A health dial's patience
   must follow the line's RTT: 1.2 s is fine for a 30 ms cable and a coin toss for a 300 ms hotspot.
+- 14.11.2026: a reachability check of the relay from the Mac must leave over a real line (`curl --interface en17`): through
+  the Mac's own tunnel any TCP connect "answers" at once (1 ms) and proves nothing.
+- 14.11.2026: a phone hotspot is only as good as the Wi-Fi hop to the Mac: on a tree it had 70 Mbit/s of 4G but a 300 ms,
+  flapping hop; near the desk (−63 dBm) it carried half of every bonded stream.

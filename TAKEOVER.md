@@ -1,3 +1,11 @@
+**14.11.2026, CLOSED — bonding through Frankfurt is the normal state (v62–v70, request 84).** bond.json "on": true for good;
+the whole Mac leaves as 130.61.181.83 (FRA). Clean test: one 10 MB stream bonded 1.6–2.3 s vs direct 2.8–5.9 s (cable +
+Nothing hotspot "Something" near the desk); with the VM at load 6 (Pixel 1 + Chrome) bonded speed unchanged (47–53 Mbit/s),
+ckbond in vmcore.slice. **`ck-bondcheck`** (Tools/, on the PATH; `--speed`, `--json`): bond on, ≥ 2 legs, not stepping aside,
+IPv4 = relay, Cloudflare colo FRA, no IPv6 leak, relay 443 over the cable, VM CKBOND running → PASS (14.11.2026). The relay
+check goes out over en17/en0 (through the Mac's own tunnel 443 "answered" in 1 ms). Open: YouTube on the Mac may ask to sign
+in (Frankfurt address) — a direct list was offered, not asked for; UDP (QUIC, calls) not bonded yet (phase 2).
+
 **14.11.2026, v69–v70 (request 84): the hotspot line that got no bond leg.** Evidence: the stripe's log "08:07:53 NO DATA: en0 is
 up but the HTTPS probe through it fails" (dead-lines.json ["Something"], mtime 08:07), the aggregate's "08:08:02 lines: AX88179B"
 (en0 gone, no reason logged), bond on at 08:08:19 and 08:09:45 with only the cable: the bond takes the server's lines, so en0 was
