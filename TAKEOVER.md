@@ -1,3 +1,12 @@
+**14.11.2026, v62–v64 (request 83, the QC fixes, order mine).** Failover: health loop 1 s, both answer points dialled at once,
+1.2 s cable / 2 s phone, a failed real connection checks its line at once (`checkSoon(force:)`), idle lines every 2 s. Measured on a
+test copy (port 8957, fault switch): a pulled cable out in 1.1 s, a quiet line in 3.9 s (was ~6 s both), back in 1–2 s. Line choice:
+`load()` + rttMs/1000 (connect time, EWMA, clipped at 600 ms; `rttMs` in /status). ck-net end-game: `steal()` splits the end of a
+running piece by the two connections' speeds (≥ 2 MB left, share ≥ 1 MB, ≥ 20 % sooner), the holder stops exactly at the new end;
+seen twice in a 105 MB run (11.8 Mbit/s, file intact). v64: HTTP 429 rests a line 15 s. v63: **asks to update at start**
+(Sources/App/Updater.swift from kits/mac-updater; its install script signs each helper with its own id and kickstarts the
+aggregate server); proven v63 → v64 on 14.11.2026 06:23. Not built: 5, packet bonding through chromium-vm (about a day).
+
 **14.11.2026, v59–v61 (requests 78–82).** v59: the speed window edgeless (no title, no bar), frame.js measures the frame and the
 window takes its size + 12 pt (seen: 514 × 374), the speedometer opens and closes it, Esc closes, Cmd-drag moves; the grip closes the
 gaps (stack spacing and margins, `stripeGap`) before the letters shrink. v60: ALL: a click on a name joins (green) or leaves (white);
