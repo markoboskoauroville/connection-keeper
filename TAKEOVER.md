@@ -6,6 +6,16 @@ IPv4 = relay, Cloudflare colo FRA, no IPv6 leak, relay 443 over the cable, VM CK
 check goes out over en17/en0 (through the Mac's own tunnel 443 "answered" in 1 ms). Open: YouTube on the Mac may ask to sign
 in (Frankfurt address) — a direct list was offered, not asked for; UDP (QUIC, calls) not bonded yet (phase 2).
 
+**14.11.2026, v74–v75 (request 85, the rest).** UDP through the bond (a flow per association with its own relay
+socket, redundant quiet flows on two legs, NAT timeouts 30/180 s), the house's DNS asked at 1.1.1.1 through the relay,
+the direct list (bond-direct.txt, ⚙ "Direct list…", names learned from DNS for IP-only connections), PRIVACY STRICT
+(default off; ⚙ checkbox; tunnel-strict follows), the stripe's ⇄ BOND item (click = ck-bondcheck, bundled), ck-bondcheck
+DNS leak checks, /status watchdog, log rotation. CI v74 (run 43583808312): UDP 300/300 back with lineB silenced at 100,
+0 duplicates (median RTT 254 ms on the emulated lines); DNS example.com via the relay 286 ms; direct list by name and by
+DNS-learned address; bond off mid-fetch: intact, a new connection turned away in 0.0 ms; one stream 71.3 Mbit/s over
+80 + 80 + 16 (this run; earlier 80–106); relay hand-over and aggregate hand-over and session tests all 0 failures.
+Nothing installed live. Relay must be upgraded together with the Mac for UDP (a v68 relay ignores DGRAM frames).
+
 **14.11.2026, v73 (requests 86 + 87): a normal Mac app; open = Frankfurt, quit = the Mac as before.** Dock icon, ⌘-Tab,
 a titled window (system traffic lights, minimise to the Dock, moved by its title bar, width by its edges), a main menu
 (Settings… ⌘,, Check for Updates…, Open Window at Login, Quit, OFF; View; Window; Help); TOP off by default.

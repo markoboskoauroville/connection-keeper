@@ -792,3 +792,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status 14.11.2026 (v71–v72):** hitless transitions built first (relay hot upgrade with GOAWAY + generations, bond drain, 1 s fallback, ck-aggregate handover), proven in CI run 43580200100 (0 failures under load). Not installed live. UDP, DNS, direct list, kill switch, stripe item, rotation, and requests 86/87 not started.
 
 **Status 14.11.2026 (v73, requests 86 + 87):** normal Mac app + open = Frankfurt / quit = as before / crash watchdog built; CI run 43582635340: 0 failed of 1685 new connections across open/quit/crash, clean check PASS. Not installed live.
+
+**Status 14.11.2026 (v74–v75, request 85):** UDP through the bond, DNS without leaks (+ ck-bondcheck), direct list, PRIVACY STRICT (default off), the stripe's BOND item + help card, /status watchdog + log rotation, bond-off drain measured: all built; CI run 43583808312 green for v74. Nothing installed live.

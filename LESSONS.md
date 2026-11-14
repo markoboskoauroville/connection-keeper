@@ -389,3 +389,7 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   order, 1685 new connections across open/quit/crash had 0 failures and even 0 in-flight breaks on the CI runner.
 - A probe must accept what the far end really says: 1.1.1.1:80 answers a redirect without "ip=", which counted 794 false
   failures.
+- UDP over TCP legs: never wait, never resend; a quiet flow (calls, DNS) on two legs with a seq to drop the copy loses
+  nothing when one line dies (300/300 in CI with a line silenced mid-flow), and costs little because it is quiet.
+- The tunnel gives the server addresses, not names: any per-domain rule (the direct list) needs the names from the DNS
+  answers that pass through the server.

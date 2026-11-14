@@ -171,3 +171,31 @@ The app is a normal Mac app (Dock, ⌘-Tab, a titled window, a main menu). `Sour
   service order, DNS resolvers, our processes and the tunnel flag compared (PASS = identical).
 - CI (`Tools/ci/session_test.sh`, the real tunnel helper on GitHub's runner): open → quit and open → crash with new
   connections from three threads the whole time: 0 failed, the clean check PASS after each.
+
+## UDP, DNS, the direct list, STRICT (v74–v75, request 85)
+
+- **UDP:** a SOCKS5 UDP association (hev turns the Mac's UDP into these) is one **flow** on the relay, with one UDP
+  socket of its own there (a cone NAT: QUIC, STUN/ICE and games keep one outside address and port). Frames DGRAM (11):
+  unreliable, not ordered, never resent; `seq` only to drop copies. Payload: flags (bit 0 redundant) | atyp | address |
+  port | data. DGRAM_CLOSE (12) when the association ends. A quiet flow (under 64 kbit/s, packets under 400 bytes: a
+  call's audio, DNS, game ticks) is **redundant**: each datagram on the two quickest legs, the copy dropped by `seq`; a
+  busy flow (QUIC downloads, video) goes on the quickest leg with room (256 KB of datagrams waiting per leg at most,
+  beyond it a datagram is dropped as UDP may be). NAT timeouts on the relay: 30 s without an answer, 180 s idle once
+  answered; 256 flows per group. Datagrams to the house (private addresses) stay direct. A flow whose relay process
+  hands over moves to the new generation (its outside port changes once; QUIC migrates).
+- **DNS:** a question to the house's resolver (a private address, port 53, e.g. the router) is asked at 1.1.1.1 through
+  the relay and its answer handed back as if the router had answered; other resolvers' questions go through the relay
+  as any UDP. `ck-bondcheck` checks `whoami.cloudflare` (CH TXT @1.1.1.1 = the relay) and `o-o.myaddr.l.google.com`
+  (the system resolver's question must not come from the home line or its /24). Not covered: Tailscale's MagicDNS
+  (100.100.100.100) answers inside tailscaled; where tailscaled sends its own upstream questions is its business (the
+  check shows it).
+- **Direct list:** `bond-direct.txt`, one domain per line (covers subdomains; `#` comments), read again when it changes,
+  ⚙ Settings → "Direct list…". Names from SOCKS/HTTP; for the tunnel's IP-only connections the names learned from DNS
+  answers that pass through the server (30 min). A listed domain shows the HOME address. Apps cannot be listed.
+- **PRIVACY STRICT** (bond.json `"strict": true`, ⚙ Settings, default off): with no bond leg up, a new connection to
+  the internet is refused (SOCKS "not allowed", HTTP 403, datagrams dropped) instead of going over the home line; the
+  house and the direct list still go direct; the tunnel helper's `tunnel-strict` follows it, so it does not fail open.
+- **The stripe:** ⇄ FRA n · x↓ green / ⇄ ASIDE amber / ⇄ DOWN red / ⇄ off grey, " STRICT"; a click runs ck-bondcheck.
+- **/status `watchdog`:** acceptLoopMs, clients, maxClients, openFiles, uptimeS, draining, interim, pid, app (lease),
+  strict; the log says "WATCHDOG" when the accept loop stops turning for 5 s. The server's log rotates at 10 MB
+  (`.1`); the relay logs to journald (rotated by it).
