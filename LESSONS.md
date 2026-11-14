@@ -346,3 +346,6 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   stripe until a click outside), and "off" would have hit OFF (the app quits). Icon buttons get a unique accessibility label
   (LAN filter, Wi-Fi filter, Help); press by that, or click by screen coordinates from a window screenshot.
 - 14.11.2026: Aggregation.selected survives "one connection" mode; any UI that adds a tick must start fresh when aggregation is off.
+- 14.11.2026: proof.ovh.net/files/100Mb.dat is 100 MB (megabytes), not 100 megabits: a "12.5 MB" end-game test spent 105 MB of SIM
+  data. Check the size with `curl -sI` before any test download. The same server answers HTTP 429 to many parallel ranges from one
+  address; ck-net v64 rests that line 15 s.

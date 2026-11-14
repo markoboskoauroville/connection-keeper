@@ -603,7 +603,9 @@ func worker(_ j: Job, _ l: NetLine) {
             j.lock.lock(); j.breaks += 1; j.lock.unlock()
             j.event("\(l.name): piece at \(p.s / 1048576) MB broke after \(got / 1024) kB: \(why); it continues from byte \(p.s + p.have) on the next free line")
             if over { p.have = 0 }
-            let rest = [2.0, 4, 6, 10][min(3, st.streak - 1)]      // a line back from a cut rejoins within 10 s
+            // v64: HTTP 429 = the server refuses so many parallel requests from this address: that line rests 15 s
+            // (measured 14.11.2026 on proof.ovh.net: the Nothing got 429 four times in 7 s with the short rests)
+            let rest = r.code == 429 ? 15.0 : [2.0, 4, 6, 10][min(3, st.streak - 1)]      // a line back from a cut rejoins within 10 s
             st.restUntil = now() + rest
         }
     }

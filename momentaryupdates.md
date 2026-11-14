@@ -731,4 +731,4 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > improvements, building order. It's up to you. Just update it
 
-**Status:** in progress: order 4 (failover ~6 s → ~2 s), 3 (RTT term in the line choice), 1 (ck-net end-game), 2 (piece size and streams by line rate); 5 (packet bonding through chromium-vm) after these are proven.
+**Status:** built and tested 14.11.2026 (v62–v64). 4: health loop 1 s, both answer points at once, a failed real connection checks its line at once: a pulled cable out in 1.1 s, a quiet line in 3.9 s (was ~6 s both; test copy with the fault switch). 3: connect time smoothed per line, + rtt/1000 in the line choice; live 102 ms AX88179B, 85 ms Nothing. 1+2: ck-net end-game: a free connection takes the end of a running piece, split by the two speeds (pieces shrink to fit each line at the end); seen twice in a 105 MB test (11.8 Mbit/s, the file intact). v64: HTTP 429 rests a line 15 s. v63: asks to update at start (kits/mac-updater). 5 (bonding through chromium-vm): not built; a day's work, next.
