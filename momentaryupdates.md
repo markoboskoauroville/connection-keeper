@@ -712,3 +712,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > Also browser window icon or speed icon for this speed net should be also opening and closing that window. Doglink, and I don't need any status line, also not the title line. I just need this speed to be the size of the UI of Speed Net, and that's all. The button in the interface of Connection Keeper is closing it and opening it.
 
 **Status:** in progress. The speed window part is v59 (borderless, sized to the frame, the icon opens and closes it).
+
+## 14.11.2026, request 81 (nice arrows by the speeds)
+
+> Just to improve the user interface, next to upload speed, make a nice up arrow. Next to the download speed, make a nice download arrow.
+
+**Status:** in progress.
