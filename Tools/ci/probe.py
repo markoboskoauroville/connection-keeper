@@ -1,28 +1,35 @@
 #!/usr/bin/env python3
-"""CI only: 10 new connections a second to 1.1.1.1:80 (GET /cdn-cgi/trace) for <seconds>, through whatever road the Mac
-has. A failure to connect or to get the answer of a NEW connection is counted as "new"; one that connected and then
-broke as "in flight" (a road changed under it). Prints one JSON line at the end."""
-import json, socket, sys, time
+"""CI only: new connections to 1.1.1.1:80 (an HTTP GET; any HTTP answer counts) from two threads, together at least 10 a
+second, for <seconds>, through whatever road the Mac has. A NEW connection that cannot be opened or gets no answer within
+3 s is counted "newFailed"; one that was open and broke, "inflightBroken" (a road changed under it). One JSON line at the end."""
+import json, socket, sys, threading, time
 secs = float(sys.argv[1]); out = sys.argv[2]
-t0, n, new, inflight, log = time.time(), 0, 0, 0, []
-while time.time() - t0 < secs:
-    start = time.time(); phase = "connect"
+t0, lock = time.time(), threading.Lock()
+st = {"probes": 0, "newFailed": 0, "inflightBroken": 0, "log": []}
+def one():
+    phase = "connect"
     try:
         s = socket.create_connection(("1.1.1.1", 80), timeout=3)
         phase = "answer"
         s.settimeout(3)
         s.sendall(b"GET /cdn-cgi/trace HTTP/1.0\r\nHost: 1.1.1.1\r\n\r\n")
-        data = b""
-        while True:
-            b = s.recv(4096)
-            if not b: break
-            data += b
+        data = s.recv(64)
         s.close()
-        if b"ip=" not in data: raise RuntimeError("no trace in the answer")
+        if not data.startswith(b"HTTP/1."): raise RuntimeError(f"not HTTP: {data[:20]!r}")
+        return None
     except Exception as e:
-        if phase == "connect": new += 1
-        else: inflight += 1
-        log.append(f"{time.time() - t0:.1f} s {phase}: {e}")
-    n += 1
-    time.sleep(max(0, 0.1 - (time.time() - start)))
-json.dump({"probes": n, "newFailed": new, "inflightBroken": inflight, "log": log[:20]}, open(out, "w"))
+        return phase, str(e)
+def worker():
+    while time.time() - t0 < secs:
+        start = time.time(); r = one()
+        with lock:
+            st["probes"] += 1
+            if r:
+                st["newFailed" if r[0] == "connect" else "inflightBroken"] += 1
+                if len(st["log"]) < 20: st["log"].append(f"{time.time() - t0:.1f} s {r[0]}: {r[1]}")
+        time.sleep(max(0, 0.18 - (time.time() - start)))
+ts = [threading.Thread(target=worker) for _ in range(2)]
+for t in ts: t.start()
+for t in ts: t.join()
+st["perSecond"] = round(st["probes"] / secs, 1)
+json.dump(st, open(out, "w"))

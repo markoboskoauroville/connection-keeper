@@ -63,9 +63,9 @@ wait $PROBE
 python3 - "$T/probe.json" <<'PY' || fail=1
 import json, sys
 p = json.load(open(sys.argv[1]))
-print(f"probe: {p['probes']} new connections at 10/s, {p['newFailed']} failed to open, {p['inflightBroken']} broken in flight")
+print(f"probe: {p['probes']} new connections ({p['perSecond']}/s), {p['newFailed']} failed to open, {p['inflightBroken']} broken in flight (a road changed under an open one)")
 for l in p["log"]: print("   ", l)
-sys.exit(0 if p["newFailed"] == 0 and p["probes"] > 1000 else 1)
+sys.exit(0 if p["newFailed"] == 0 and p["perSecond"] >= 10 else 1)
 PY
 sudo ./tunnel.sh uninstall >/dev/null 2>&1
 [ $fail = 0 ] && echo "SESSION TEST PASS" || echo "SESSION TEST FAIL"
