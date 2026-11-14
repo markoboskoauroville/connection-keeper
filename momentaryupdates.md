@@ -718,3 +718,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > Just to improve the user interface, next to upload speed, make a nice up arrow. Next to the download speed, make a nice download arrow.
 
 **Status:** in progress.
+
+## 14.11.2026, request 82 (H: help as an infographic in the app's own browser)
+
+> Add one more icon next to the top and close to this test health, which is H. That's the help. It is kind of infographics explaining all the parts of the user interface, and it is using the same ASP test, same browser, to show itself. I can read about the app there, but infographics is the most important thing. So quickly, I can see what each icon does and how to use this app.
+
+**Status:** in progress.
