@@ -1,3 +1,27 @@
+**14.11.2026, v81 (requests 89 + 90): the Nothing only by its USB cable; NOTHING ONLY (cable); the window stays where he puts it.**
+Sources/Shared/CableOnly.swift. The Nothing is a line only as an adb device with a `usb:` transport (Phones.list); the wireless
+adb 100.67.149.40:5555 and any 127.0.0.1 entry are never lines. Phone hotspots (phone-hotspots.txt; "Something" built in, the
+Nothing's SoftAp name learned over adb) are never a line of ck-aggregate, skipped by the keeper's ladder (config still lists
+"Something" first, enabled), greyed in the Wi-Fi list. ⟳, ck-aggregate's rescan and every change of adb's list run
+`Phones.refreshAdb()` (start-server, reconnect offline, stale OFFLINE 127.0.0.1 Nothing entries disconnected); the stripe says
+`CableOnly.nothingStatus()`: "Nothing: on the cable (USB adb)" / "cable gives power only, no data: try another cable / port"
+(asked over wireless adb: dumpsys usb kernel_state=DISCONNECTED + USB powered) / "only wireless adb" / "allow USB debugging" /
+"not on the cable". NOTHING ONLY (request 90): ⚙ item or `ConnectionKeeperNothingOnly` distributed notification (object
+"on"/"off"); refused unless the USB link is verified; switches the aggregation on; ck-aggregate (`discoverNothingOnly`) turns
+the phone's Wi-Fi off over the USB serial only (`cmd wifi set-wifi-enabled disabled`), the Nothing is the only line and the
+only bond leg, one STANDBY line (AX88179B first, never a phone hotspot) used by the race and the bond only while the Nothing does
+not answer (`Server.usable`); UDP without the bond still leaves on the standby (adb carries TCP only). nothing-only-state:
+"nothing" / "standby AX88179B" / "none", the stripe says it (red while on the fallback). Window: v80 stayed minimized 3+ min
+in a test (AX minimize), so the Dock was not the cause; keepOnScreen() (run by fit() on every size change: status words, line
+rows) pushed a stripe he had put low, partly below the display, back up inside it. v81 leaves it where he put it (only the
+title bar must stay on a display) and never moves or resizes it while in the Dock; WINDOW log lines say Dock and automatic moves.
+CI run 43635556562 green, release v81 Latest. INSTALLED 21:15 (signed Mantra Apps per helper, v80 quit by its menu over AX, keeper
+kickstarted). NOTHING ONLY on live 21:17: Nothing Wi-Fi off over USB, the only bond leg, 130.61.181.83 FRA, 204s in 0.14-0.20 s;
+fallback test 21:18:28: AX88179B within 2 s, 0 failed, the Nothing back after 5 s. Off: ⚙ item, or the distributed notification
+ConnectionKeeperNothingOnly with object "off". Open: remembered lines from before the mode come back non-standby for ~10 s at a
+server start (AX may carry then); UDP associations are counted on AX88179B in /status though their datagrams ride the bond; the
+start-up quick speed test (all lines, ~150 MB) also runs over the Nothing's SIM.
+
 **14.11.2026, CLOSED — bonding through Frankfurt is the normal state (v62–v70, request 84).** bond.json "on": true for good;
 the whole Mac leaves as 130.61.181.83 (FRA). Clean test: one 10 MB stream bonded 1.6–2.3 s vs direct 2.8–5.9 s (cable +
 Nothing hotspot "Something" near the desk); with the VM at load 6 (Pixel 1 + Chrome) bonded speed unchanged (47–53 Mbit/s),

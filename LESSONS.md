@@ -2,6 +2,14 @@
 
 ## The decisions
 
+- **"It raises itself" was a move, not a restore (v81, 14.11.2026).** A minimized v80 stayed in the Dock for 3+ minutes and a
+  pyobjc test showed setContentSize/setFrameOrigin do not deminiaturize a window. The stripe's keepOnScreen(), called on every
+  size change, put a window he had placed low back inside the display. Respect his place: only the title bar must be reachable.
+- **USB powered is not USB data (14.11.2026).** The Nothing charged ("USB powered: true") while `dumpsys usb` said
+  kernel_state=DISCONNECTED and the Mac's system_profiler saw nothing: a loose contact. Ask the phone over wireless adb and
+  say it on the stripe; adb's wireless entry is a diagnosis channel, never a line.
+- **Never switch the phone's Wi-Fi off over wireless adb** (it may be the only link to it); NOTHING ONLY does it over the USB serial only.
+
 - **The SSID comes from `ipconfig getsummary`, not CoreWLAN.** Since macOS 14, CoreWLAN and
   `networksetup -getairportnetwork` hide the SSID from a process without Location permission ("You are not
   associated with an AirPort network" while connected to `mantra`, measured 13.10.2026). `ipconfig getsummary en0`
