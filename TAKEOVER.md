@@ -6,6 +6,18 @@ IPv4 = relay, Cloudflare colo FRA, no IPv6 leak, relay 443 over the cable, VM CK
 check goes out over en17/en0 (through the Mac's own tunnel 443 "answered" in 1 ms). Open: YouTube on the Mac may ask to sign
 in (Frankfurt address) — a direct list was offered, not asked for; UDP (QUIC, calls) not bonded yet (phase 2).
 
+**14.11.2026, v71–v72 (request 85, item "hitless" first; Marko: "I need my connection non-stop").** Built and proven on GitHub's
+runner only (run 43580200100), nothing installed live. Relay: `systemctl reload ckbond` = SIGHUP = the binary on disk takes over
+the SAME listening socket (fd 3), READY on fd 4, MAINPID to systemd (unit now Type=notify, NotifyAccess=all, ExecReload); the old
+process sends GOAWAY (frame 13) and drains (`-drain` 10 min). Mac: bond generations (GOAWAY → new client id and legs, old streams
+finish on old legs), bond off/changed drains instead of cutting, a new connection waits ≤ 1 s for OPEN_OK then goes direct;
+ck-aggregate SO_REUSEPORT + SIGTERM drain + `ck-aggregate handover` (interim server; the updater runs it instead of kickstart -k).
+CI: fetch 3 intact across a relay SIGHUP with 31 new streams during it, 0 failed; ck-aggregate old → interim → new under 20
+probes/s + a long download: 484 probes, 0 failed, download intact. Once only: the live v68 relay and the live v70 aggregate
+cannot hand over; their first upgrade to v71+ restarts the relay once / stops v70 and takes its port in a few ms (their open
+connections end). install.sh gains `--keep-token` (upgrade without the token on stdin) and keeps the VM's drop-ins.
+NOT started yet: request 86/87 (normal app, quit = clean return), UDP, DNS, direct list, kill switch, stripe item, log rotation.
+
 **14.11.2026, v69–v70 (request 84): the hotspot line that got no bond leg.** Evidence: the stripe's log "08:07:53 NO DATA: en0 is
 up but the HTTPS probe through it fails" (dead-lines.json ["Something"], mtime 08:07), the aggregate's "08:08:02 lines: AX88179B"
 (en0 gone, no reason logged), bond on at 08:08:19 and 08:09:45 with only the cable: the bond takes the server's lines, so en0 was

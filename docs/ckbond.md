@@ -137,3 +137,17 @@ still finish intact. The step fails on FAIL, before the release.
   are the ceiling. Every site sees the VM's address (Frankfurt), not the house's.
 - The relay is not yet installed (14.11.2026). Port 443: the VCN's Default Security List already allows it and the VM's
   iptables INPUT policy is ACCEPT (checked by the oci CLI, request 84); install.sh adds an ACCEPT rule anyway when a REJECT exists.
+
+## Upgrades and switches without a drop (v71, request 85)
+
+| Switch | What happens | Proof |
+|---|---|---|
+| Bond switched off or changed (bond.json) | The old client **drains**: no new streams; its open streams finish on their legs (at most 10 min), then its legs close. New connections take today's path at once. | `bond.bypass` says "draining" |
+| A new connection cannot be bonded | It waits at most **1 s** for OPEN_OK (or the OPEN_FAIL), then takes today's `race()` path; the client never sees a failure for it. | hooks in `main.swift` (`open(…, timeout: 1)`) |
+| Relay upgrade | `install.sh --keep-token <new binary>` moves the binary into place and runs `systemctl reload ckbond` → SIGHUP → the binary on disk starts as a child **with the same listening socket** (fd 3), says READY (fd 4) and `MAINPID=` to systemd (Type=notify, NotifyAccess=all); the old process stops accepting, sends **GOAWAY** (frame 13) on every leg and serves its streams until they end (`-drain`, 10 min). The Mac starts a new **generation**: a new client id, new legs to the new process, new streams there; the old generation's legs close when its last stream ends. | CI: fetch 3 intact across a SIGHUP, a small fetch every 0.1–0.5 s during it, 0 failed |
+| Mac aggregate upgrade | The updater runs `ck-aggregate handover` (new binary): an **interim server** listens beside the old one (SO_REUSEPORT); the old one gets SIGTERM, stops accepting within 0.2 s, takes what is queued, lets its connections finish (10 min max), exits; launchd starts the new server; the interim one sees its marker (`aggregate-serving/<pid>`) and drains the same way. Draining and interim servers change nothing on the Mac (no 4G/5G, radio probes, plug-in ticks, ⟳). | CI: `Tools/ci/handover_test.py`, 20 probes/s and a long download across old → interim → new, 0 failures |
+
+Once only: a relay before v71 (Type=simple, no SIGHUP hand-over) and a ck-aggregate before v71 (no SO_REUSEPORT) cannot
+hand over. The first install of v71 restarts the relay once (`install.sh` says "restarted … once"; the Mac goes direct
+for new connections within 1 s, bonded streams of that moment end), and `handover` stops a v70 server and takes its
+port the moment it is free (a few ms; that server's open connections end). Every later upgrade is hitless.

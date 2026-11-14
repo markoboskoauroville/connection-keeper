@@ -377,3 +377,10 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   the Mac's own tunnel any TCP connect "answers" at once (1 ms) and proves nothing.
 - 14.11.2026: a phone hotspot is only as good as the Wi-Fi hop to the Mac: on a tree it had 70 Mbit/s of 4G but a 300 ms,
   flapping hop; near the desk (−63 dBm) it carried half of every bonded stream.
+- Hitless upgrades need the socket to outlive the process: the relay passes its listening fd to its successor (nothing in
+  the accept queue is lost) and tells systemd the new MAINPID; the Mac server shares the port (SO_REUSEPORT) with an interim
+  copy, because launchd will not start a job's new process before the old one has exited.
+- A draining server must stop changing the world (4G/5G switching, radio probes, plug-in ticks): two servers at once is
+  fine only if one of them is passive.
+- 14.11.2026: toggling the live bond.json during measurements cut Marko's bonded connections each time (v66–v70 stopped
+  every stream on "off"). Measure on a test copy; since v71 "off" drains.

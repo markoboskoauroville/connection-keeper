@@ -788,3 +788,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > in the same way, when I'm closing the app, that should be seamlessly switched to normal connection, so there are no leftovers or nonsense. When it's open, it goes to Frankfurt. When it's closed, everything is as before
 
 **Status:** sent to the worker; replaces request 86's "Quit keeps the connection running".
+
+**Status 14.11.2026 (v71–v72):** hitless transitions built first (relay hot upgrade with GOAWAY + generations, bond drain, 1 s fallback, ck-aggregate handover), proven in CI run 43580200100 (0 failures under load). Not installed live. UDP, DNS, direct list, kill switch, stripe item, rotation, and requests 86/87 not started.
