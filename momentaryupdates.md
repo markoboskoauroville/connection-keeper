@@ -776,3 +776,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > please continue developing this UDP and the rest of our aggregate connection keeper so it works on a professional level
 
 **Status:** in progress (Opus worker): UDP through the bond (QUIC, calls, DNS), a direct list (YouTube and others skip Frankfurt), a privacy kill switch, DNS without leaks, the stripe showing the bond, ck-bondcheck extended.
+
+## 14.11.2026, request 86 (a normal app: Dock, minimize, move, settings in the menu bar)
+
+> also, please build Connection Keeper as a normal app, so I can start it from the dock. I can minimize it. I can move it. It has its settings in the menu bar, etc
+
+**Status:** queued with the bonding worker, after the hitless transitions (request 85).
