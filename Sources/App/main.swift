@@ -204,6 +204,11 @@ final class Stripe: NSObject {
     var pingWidth: NSLayoutConstraint!, dataWidth: NSLayoutConstraint!   // v26: every field as wide as its text now
     var scale = CGFloat(UserDefaults.standard.double(forKey: "stripeScale")).clamped(0.5, 3, or: 1)   // v26: resizable
     var resizingByHand = false
+    // v59 (request 79, Marko 14.11.2026: "Before actually changing the font size, you need to first remove the gap between
+    // the text"): the grip first closes the gaps (the stacks' spacing and side margins, 1 = as built, 0 = none), and only
+    // with no gap left does the scale (the letters) go smaller; wider: the gaps come back first, then the letters grow.
+    var gap = Swift.min(Swift.max(CGFloat(UserDefaults.standard.object(forKey: "stripeGap") as? Double ?? 1), 0), 1)
+    var gapBase: [ObjectIdentifier: (spacing: CGFloat, left: CGFloat, right: CGFloat)] = [:]
     var noOther = false                         // the keeper says NO OTHER CONNECTION: the status is red
     var red = false                             // the failover alert is on: every word is red
 
@@ -717,6 +722,7 @@ final class Stripe: NSObject {
         checked.alphaValue = quiet ? 0 : 1
         if failover.isHidden == red { failover.isHidden = !red; failoverPipe.isHidden = !red }
         tighten()
+        applyGap(gap, in: column)
         column.layoutSubtreeIfNeeded()
         let natural = column.fittingSize
         // v26 (request 44: "make this user interface resizable"): the stripe is drawn at `scale`; dragging an edge
@@ -762,14 +768,46 @@ final class Stripe: NSObject {
         root.needsDisplay = true
     }
 
-    // A drag of the grip: the new width sets the scale, the height follows it; the left edge stays.
+    func applyGap(_ g: CGFloat, in view: NSView) {
+        if let st = view as? NSStackView {
+            let id = ObjectIdentifier(st)
+            if gapBase[id] == nil { gapBase[id] = (st.spacing, st.edgeInsets.left, st.edgeInsets.right) }
+            let b = gapBase[id]!
+            if abs(st.spacing - b.spacing * g) > 0.05 { st.spacing = b.spacing * g }
+            let l = b.left * g, r = b.right * g
+            if abs(st.edgeInsets.left - l) > 0.05 || abs(st.edgeInsets.right - r) > 0.05 {
+                st.edgeInsets = NSEdgeInsets(top: st.edgeInsets.top, left: l, bottom: st.edgeInsets.bottom, right: r)
+            }
+        }
+        for v in view.subviews { applyGap(g, in: v) }
+    }
+
+    func naturalSize(gap g: CGFloat, _ column: NSView) -> NSSize {
+        applyGap(g, in: column)
+        column.layoutSubtreeIfNeeded()
+        return column.fittingSize
+    }
+
+    // A drag of the grip (v59): narrower closes the gaps first, then the letters shrink; wider opens the gaps first, then
+    // the letters grow. The height follows; the left edge stays.
     func resize(toWidth width: CGFloat) {
         guard !resizingByHand, let root = panel.contentView, let column = root.subviews.first else { return }
-        let natural = column.fittingSize
-        guard natural.width > 0 else { return }
-        let s = (width / natural.width).clamped(0.5, 3, or: 1)
-        scale = s
+        let open = naturalSize(gap: 1, column), shut = naturalSize(gap: 0, column)
+        guard open.width > 0, shut.width > 0 else { return }
+        var g: CGFloat = 1, s: CGFloat = 1
+        if width >= open.width { g = 1; s = width / open.width }
+        else if width <= shut.width { g = 0; s = width / shut.width }
+        else {
+            // the gaps' share of the width is linear in g: one step there, one check
+            g = (width - shut.width) / (open.width - shut.width)
+            let w = naturalSize(gap: g, column).width
+            if w > width + 0.5, open.width - shut.width > 0 { g = max(0, g - (w - width) / (open.width - shut.width)) }
+        }
+        s = s.clamped(0.5, 3, or: 1)
+        gap = g; scale = s
+        UserDefaults.standard.set(Double(g), forKey: "stripeGap")
         UserDefaults.standard.set(Double(s), forKey: "stripeScale")
+        let natural = naturalSize(gap: g, column)
         let top = panel.frame.maxY, x = panel.frame.minX
         resizingByHand = true
         panel.setContentSize(NSSize(width: ceil(natural.width * s), height: ceil(natural.height * s)))

@@ -9,16 +9,37 @@
 import AppKit
 import WebKit
 
-final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+// v59 (request 78, Marko 14.11.2026: "a browser without any edges, only showing the middle frame ... I don't want to have
+// any margin, just useful information on screen"): no title bar, no bottom bar; frame.js measures the frame (GO, the
+// speeds, the line, Telemach) and posts its size; the window takes exactly that size plus a 12 pt edge and the page is
+// scrolled so the frame sits in it. Esc closes, Cmd-drag moves, Cmd-R reloads, a second press on the speedometer closes.
+final class EdgelessWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+    override func cancelOperation(_ sender: Any?) { close() }
+    override func keyDown(with e: NSEvent) {
+        if e.keyCode == 53 { close(); return }
+        if e.modifierFlags.contains(.command), e.charactersIgnoringModifiers == "r" { SpeedBrowser.shared?.web.reload(); return }
+        super.keyDown(with: e)
+    }
+    override func sendEvent(_ e: NSEvent) {
+        if e.type == .leftMouseDown, e.modifierFlags.contains(.command) { performDrag(with: e); return }
+        if e.type == .keyDown, e.keyCode == 53 { close(); return }
+        if e.type == .keyDown, e.modifierFlags.contains(.command), e.charactersIgnoringModifiers == "r" { SpeedBrowser.shared?.web.reload(); return }
+        super.sendEvent(e)
+    }
+}
+
+final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     static var shared: SpeedBrowser?
     static let home = URL(string: "https://www.speedtest.net/")!
+    static let edge: CGFloat = 12
 
-    let window: NSWindow
+    let window: EdgelessWindow
     let web: WKWebView
-    let status = NSTextField(labelWithString: "")
 
     static func open() {
-        if let b = shared { b.window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
+        if let b = shared { b.window.close(); return }          // the speedometer again: closed
         shared = SpeedBrowser()
     }
 
@@ -30,79 +51,52 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
             config.userContentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         web = WKWebView(frame: .zero, configuration: config)
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 600), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+        window = EdgelessWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 520), styleMask: [.borderless], backing: .buffered, defer: false)
         super.init()
+        config.userContentController.add(self, name: "ckFrame")
         window.title = "speedtest.net"
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.minSize = NSSize(width: 520, height: 420)
         window.level = .floating                       // above ordinary windows, under the stripe (layer 25)
-
+        window.backgroundColor = .black
+        window.hasShadow = true
+        window.isOpaque = false
+        window.contentView = web
+        web.wantsLayer = true
+        web.layer?.cornerRadius = 10
+        web.layer?.masksToBounds = true
         web.navigationDelegate = self
         web.uiDelegate = self
-        web.allowsBackForwardNavigationGestures = true
-        web.translatesAutoresizingMaskIntoConstraints = false
-
-        // one thin bar under the page: back, reload, home, and how many ad lists are on
-        func button(_ symbol: String, _ tip: String, _ action: Selector) -> NSButton {
-            let b = NSButton(image: NSImage(systemSymbolName: symbol, accessibilityDescription: tip) ?? NSImage(), target: self, action: action)
-            b.isBordered = false
-            b.toolTip = tip
-            b.setAccessibilityLabel(tip)
-            return b
-        }
-        status.font = .systemFont(ofSize: 11)
-        status.textColor = .secondaryLabelColor
-        status.stringValue = "Ad blocking: loading the lists…"
-        let bar = NSStackView(views: [button("chevron.left", "Back", #selector(back)), button("arrow.clockwise", "Reload", #selector(reload)),
-                                      button("house", "speedtest.net", #selector(goHome)),
-                                      button("eye", "The whole page, or only the test frame", #selector(toggleFull)), status])
-        bar.orientation = .horizontal
-        bar.spacing = 10
-        bar.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
-        bar.translatesAutoresizingMaskIntoConstraints = false
-
-        let content = NSView()
-        content.addSubview(web)
-        content.addSubview(bar)
-        window.contentView = content
-        NSLayoutConstraint.activate([
-            web.topAnchor.constraint(equalTo: content.topAnchor),
-            web.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            web.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            bar.topAnchor.constraint(equalTo: web.bottomAnchor),
-            bar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            bar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            bar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            bar.heightAnchor.constraint(equalToConstant: 26),
-        ])
+        web.underPageBackgroundColor = .black
 
         // on the screen of the stripe, centred
         if let s = (NSApp.windows.first { $0 is NSPanel && $0.isVisible })?.screen ?? NSScreen.main {
             let f = s.visibleFrame
-            let w = min(820, f.width - 40), h = min(600, f.height - 40)
-            window.setFrame(NSRect(x: f.midX - w / 2, y: f.midY - h / 2, width: w, height: h), display: false)
+            window.setFrameOrigin(NSPoint(x: f.midX - 380, y: f.midY - 260))
         }
+        window.alphaValue = 0                          // shown once the frame has been measured: no flash of the page
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         appendLog("\(logStamp()) SPEEDTEST browser opened")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in self?.window.alphaValue = 1 }   // never left invisible
 
         // the page loads only after the blocking rules are in, so no ad is ever fetched
         AdBlock.install(into: config.userContentController) { [weak self] on, rules in
-            guard let self = self else { return }
-            self.status.stringValue = on.isEmpty ? "Ad blocking: no list could be loaded" : "Ad blocking on: \(on.joined(separator: ", ")) (\(rules) rules)"
-            self.web.load(URLRequest(url: SpeedBrowser.home))
+            appendLog("\(logStamp()) ADBLOCK on: \(on.joined(separator: ", ")) (\(rules) rules)")
+            self?.web.load(URLRequest(url: SpeedBrowser.home))
         }
     }
 
-    @objc func back() { if web.canGoBack { web.goBack() } }
-    @objc func reload() { web.reload() }
-    var full = false
-    @objc func toggleFull() {
-        full.toggle()
-        web.evaluateJavaScript("window.ckFull = \(full); window.ckTidy && window.ckTidy()")
+    // frame.js: {w, h} of the frame in CSS pixels; the window keeps its top-left corner
+    func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let d = message.body as? [String: Any], let w = (d["w"] as? NSNumber)?.doubleValue, let h = (d["h"] as? NSNumber)?.doubleValue, w > 40, h > 40 else { return }
+        let size = NSSize(width: ceil(w) + 2 * SpeedBrowser.edge, height: ceil(h) + 2 * SpeedBrowser.edge)
+        let f = window.frame
+        if abs(f.width - size.width) > 2 || abs(f.height - size.height) > 2 {
+            window.setFrame(NSRect(x: f.minX, y: f.maxY - size.height, width: size.width, height: size.height), display: true)
+        }
+        window.alphaValue = 1
     }
-    @objc func goHome() { web.load(URLRequest(url: SpeedBrowser.home)) }
 
     // a link meant for a new window opens in this one
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
@@ -110,13 +104,10 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
         return nil
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        window.title = webView.title?.isEmpty == false ? webView.title! : "speedtest.net"
-    }
-
     func windowWillClose(_ notification: Notification) {
         web.stopLoading()
         web.loadHTMLString("", baseURL: nil)           // the test stops when the window closes; no data spent after
+        web.configuration.userContentController.removeScriptMessageHandler(forName: "ckFrame")
         SpeedBrowser.shared = nil
     }
 }

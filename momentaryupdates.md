@@ -689,3 +689,15 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > There are no ads at all, but there are extra interface elements. Can you remove them? I need only: Go, Download, Upload speeds, This pink line, Telemach, This part only. Can we have only that frame and remove Sign In and all the other nonsense?
 
 **Status:** built 14.11.2026 (v58): Resources/speedtest/frame.js, injected at document start: everything outside the column .pure-u-custom-speedtest hidden (header with Sign In, menu, Download, footer), in the column the cards from #content-card-stack down hidden, in the frame the RESULTS · SETTINGS tabs and Connections row hidden; a MutationObserver keeps it so while the page changes. The privacy box stays answerable. Window 820 × 600; an eye on the bottom bar shows the whole page. Checked before the build in headless Firefox: only GO and the Telemach / server part. The frame during and after a test not seen yet (no test run on the SIM).
+
+## 14.11.2026, request 78 (the browser without edges, only the middle frame)
+
+> Please make a browser without any edges, only showing the middle frame. That's all. Look at the screenshot right now I don't want to have any margin, just useful information on screen.
+
+**Status:** built 14.11.2026 (v59): borderless window (no title bar, no bottom bar, rounded corners); frame.js measures the frame (every visible thing in the speed test column put together), shifts the page with a transform so the frame starts at a 12 pt edge, and posts its size; the window takes exactly that size. Share, Result ID and the boxes under the result hidden. Esc closes, Cmd-drag moves, Cmd-R reloads, the speedometer again closes. Checked in headless Firefox on the start page (404 × 315) and a result page (504 × 294).
+
+## 14.11.2026, request 79 (the grip closes the gaps before the letters shrink)
+
+> Also fix the resizing algorithm for this app. I have a gripper on the right side. Before actually changing the font size, you need to first remove the gap between the text. The text is compressing, and then the window is resizing.
+
+**Status:** built 14.11.2026 (v59): `gap` (0…1, saved as stripeGap) scales every stack's spacing and side margins; a drag narrower first lowers the gap to 0 at the same letter size, only then the scale goes down; wider: the gap back to 1 first, then the scale up.
