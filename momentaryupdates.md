@@ -711,16 +711,16 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > It's working, and what works better with the parameters of the aggregate connection? I don't know which are there, but you need to find some kind of speed, bare loading, and whatever is there. Read some books on how to get the aggregate connection and what the parameters are, which is like a QC quality check of the software.
 > Also browser window icon or speed icon for this speed net should be also opening and closing that window. Doglink, and I don't need any status line, also not the title line. I just need this speed to be the size of the UI of Speed Net, and that's all. The button in the interface of Connection Keeper is closing it and opening it.
 
-**Status:** in progress. The speed window part is v59 (borderless, sized to the frame, the icon opens and closes it).
+**Status:** built 14.11.2026 (v60, Tabs.swift): in ALL a click on a line's name ticks it into the aggregation (green) or out (white); the first tick switches aggregation on with the Mac's own line ticked too; a line with SAME UPLINK or no internet says why it cannot join. Two filter icons beside ALL (LAN: cables and phones over USB; Wi-Fi), grey off, green on, again = everything, one at a time. The speed window is v59. Aggregation QC: see TAKEOVER (research 14.11.2026). The speed window part is v59 (borderless, sized to the frame, the icon opens and closes it).
 
 ## 14.11.2026, request 81 (nice arrows by the speeds)
 
 > Just to improve the user interface, next to upload speed, make a nice up arrow. Next to the download speed, make a nice download arrow.
 
-**Status:** in progress.
+**Status:** built 14.11.2026 (v60): SF Symbol arrows (↓ green, ↑ red) before each speed number, on the first row and every line row.
 
 ## 14.11.2026, request 82 (H: help as an infographic in the app's own browser)
 
 > Add one more icon next to the top and close to this test health, which is H. That's the help. It is kind of infographics explaining all the parts of the user interface, and it is using the same ASP test, same browser, to show itself. I can read about the app there, but infographics is the most important thing. So quickly, I can see what each icon does and how to use this app.
 
-**Status:** in progress.
+**Status:** built 14.11.2026 (v60): H (question-mark icon) after HEALTH; Resources/help/index.html, a numbered drawing of the stripe with a card per part, the colours, four steps to faster internet; shown in the same edgeless WebKit window, H again or Esc closes.

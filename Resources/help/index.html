@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connection Keeper · Help</title>
+<style>
+:root{--bg:#141414;--panel:#232323;--line:#3a3a3a;--text:#e9e9e9;--dim:#9a9a9a;--green:#3ec46d;--red:#ef5a5a;--amber:#e8a33d;--yellow:#f2d23c;--blue:#4aa3ff}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}
+main{max-width:940px;margin:0 auto;padding:22px 20px 40px}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:26px 0 10px;color:var(--dim);letter-spacing:.06em;text-transform:uppercase}
+.sub{color:var(--dim);margin:0 0 18px}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-weight:700}
+.stripe{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 10px;position:relative}
+.row{display:flex;align-items:center;gap:10px;min-height:34px;flex-wrap:wrap}
+.row+.row{border-top:1px solid var(--line)}
+.n{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;border-radius:9px;background:var(--blue);color:#000;font:700 11px -apple-system,sans-serif;margin-left:3px;vertical-align:super}
+.g{color:var(--green)}.r{color:var(--red)}.y{color:var(--yellow)}.d{color:var(--dim)}.w{color:#fff}.a{color:var(--amber)}
+.ic{display:inline-block;width:16px;height:16px;vertical-align:-3px}
+.legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px;margin-top:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.card b{display:block;margin-bottom:2px}.card p{margin:0;color:var(--dim)}
+.steps{counter-reset:s;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.step:before{counter-increment:s;content:counter(s);display:inline-flex;width:22px;height:22px;border-radius:11px;background:var(--green);color:#000;font-weight:800;align-items:center;justify-content:center;margin-right:8px}
+.colors{display:flex;gap:14px;flex-wrap:wrap}.chip{display:flex;align-items:center;gap:6px}.dot{width:12px;height:12px;border-radius:6px}
+.grip{position:absolute;right:6px;top:8px;color:var(--dim)}
+kbd{background:#333;border:1px solid #555;border-radius:4px;padding:0 5px;font:12px ui-monospace,monospace}
+</style></head><body><main>
+<h1>Network Aggregate Connection Keeper</h1>
+<p class="sub">It keeps the Mac online and can join several lines (cable, Wi-Fi, phones over USB) into one faster connection. Every part of the stripe, numbered:</p>
+
+<div class="stripe">
+  <span class="grip mono">||<span class="n">14</span></span>
+  <div class="row"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span class="n">1</span>
+    <span class="mono">☐ WI-FI</span> <span class="mono g">☑ CABLE</span> <span class="mono">☐ BOTH</span><span class="n">2</span>
+    <span class="g">☁</span><span class="n">3</span> <span class="a">⋔</span><span class="n">4</span></div>
+  <div class="row"><span class="mono g">ON</span> <span class="mono d">OFF</span><span class="n">5</span> ⚙<span class="n">6</span> ⟳<span class="n">7</span>
+    <span class="mono g">AX88179B (USB)</span><span class="n">8</span>
+    <span class="mono g">↓ 821 kbit/s</span> <span class="mono r">↑ 75 kbit/s</span><span class="n">9</span>
+    <span class="mono y">ping 37 ms</span><span class="n">10</span> <span class="mono">99.4 GB</span><span class="n">11</span>
+    <span style="margin-left:auto">⏲<span class="n">12</span> 〜<span class="n">13</span> <b>?</b><span class="n">H</span> <span class="mono d">TOP</span><span class="n">T</span></span></div>
+  <div class="row" style="justify-content:center"><span class="d">🔌</span><span class="d">📶</span><span class="n">F</span> <span class="mono g">ALL</span> <span class="mono d">IN USE</span><span class="n">A</span></div>
+  <div class="row"><span class="mono g">AX88179B (USB)</span> <span class="d">│ LAN ▮▯▯ 100 Mb/s │</span> <span class="mono g">IN USE</span><span class="n">L</span></div>
+  <div class="row"><span class="mono w">Nothing A142 (USB)</span><span class="n">J</span> <span class="d">│ 4G ▮▮▯ −106 · −1 │</span> <span class="mono">READY</span></div>
+  <div class="row"><span class="mono g">⇅ SPEED</span> <span class="mono">↓ 12.1 ↑ 6.5 Mbit/s all lines together</span><span class="n">S</span></div>
+</div>
+
+<div class="legend">
+ <div class="card"><b><span class="n">1</span> Close · minimise</b><p>Red hides the stripe (the menu bar icon brings it back); yellow makes it small.</p></div>
+ <div class="card"><b><span class="n">2</span> WI-FI · CABLE · BOTH</b><p>Which lines the Mac uses: only Wi-Fi, only cables and phones, or BOTH joined together (aggregation). A click on the word lists the networks or cables to tick.</p></div>
+ <div class="card"><b><span class="n">3</span> Cloud</b><p>Claude Code's connection to its server: green when it answers, red when calls drop.</p></div>
+ <div class="card"><b><span class="n">4</span> Tailscale</b><p>The guard that restarts Tailscale when it is stuck, so the Mac stays reachable from anywhere.</p></div>
+ <div class="card"><b><span class="n">5</span> ON · OFF</b><p>OFF stops everything the app put between the Mac and the internet, then quits. ON is the app running.</p></div>
+ <div class="card"><b><span class="n">6</span> ⚙ Settings</b><p>Units, probes, the Claude watch, and the other switches.</p></div>
+ <div class="card"><b><span class="n">7</span> ⟳ Rescan</b><p>Find every cable and phone again, e.g. just after plugging in a phone.</p></div>
+ <div class="card"><b><span class="n">8</span> The connection</b><p>The line the internet goes through now. A click switches one connection ⇄ aggregate.</p></div>
+ <div class="card"><b><span class="n">9</span> ↓ ↑ Live speed</b><p><span class="g">Green ↓ download</span>, <span class="r">red ↑ upload</span>, measured every second.</p></div>
+ <div class="card"><b><span class="n">10</span> Ping</b><p>The round trip to the internet; a click pings again.</p></div>
+ <div class="card"><b><span class="n">11</span> Data</b><p>The SIM data left (read from Telemach by SMS).</p></div>
+ <div class="card"><b><span class="n">12</span> ⏲ Speed test</b><p>Opens speedtest.net in the app's own window, no ads. Press GO. The icon again (or <kbd>Esc</kbd>) closes it.</p></div>
+ <div class="card"><b><span class="n">13</span> Health</b><p>Every line at once: ping, jitter, loss, HTTPS times. Almost no data.</p></div>
+ <div class="card"><b><span class="n">H</span> Help</b><p>This page. H again or <kbd>Esc</kbd> closes it.</p></div>
+ <div class="card"><b><span class="n">T</span> TOP</b><p>Green: the stripe stays above every window.</p></div>
+ <div class="card"><b><span class="n">A</span> ALL · IN USE</b><p>ALL: every connection the Mac can see. IN USE: only the lines carrying traffic now.</p></div>
+ <div class="card"><b><span class="n">F</span> Filters (in ALL)</b><p>🔌 LAN: only wired lines (cables and phones over USB). 📶 Wi-Fi: only Wi-Fi networks. Green = on; press again for everything.</p></div>
+ <div class="card"><b><span class="n">J</span> Click a name to join</b><p><span class="w">White</span> = not in use. Click → <span class="g">green</span> = it joins the aggregated connection. Click again → it leaves.</p></div>
+ <div class="card"><b><span class="n">L</span> Meters and state</b><p>The signal (cable speed, Wi-Fi or 4G/5G strength) and one word: IN USE, READY, NO DATA, AIRPLANE, VIA WI-FI, SAME UPLINK, NO NET.</p></div>
+ <div class="card"><b><span class="n">S</span> Status line</b><p>All lines together and the downloads running; ✕ hides a line.</p></div>
+ <div class="card"><b><span class="n">14</span> Grip</b><p>Drag the right edge: first the gaps close, then the letters shrink. Wider: gaps first, then bigger letters.</p></div>
+</div>
+
+<h2>Colours</h2>
+<div class="colors">
+ <span class="chip"><span class="dot" style="background:var(--green)"></span>in use, working</span>
+ <span class="chip"><span class="dot" style="background:#fff"></span>ready, not in use</span>
+ <span class="chip"><span class="dot" style="background:var(--amber)"></span>busy or a warning (NO DATA)</span>
+ <span class="chip"><span class="dot" style="background:var(--red)"></span>upload / failure</span>
+ <span class="chip"><span class="dot" style="background:var(--dim)"></span>off, or cannot be used</span>
+</div>
+
+<h2>Faster internet in four steps</h2>
+<div class="steps">
+ <div class="step">Plug in the phones by USB (data on, not on Wi-Fi), press ⟳.</div>
+ <div class="step">Open <b>ALL</b>, press 🔌 to see the wired lines.</div>
+ <div class="step">Click each name until it is <span class="g">green</span>.</div>
+ <div class="step">Press ⏲ and GO to check the speed.</div>
+</div>
+
+<h2>Good to know</h2>
+<div class="card"><p>One download or one video call uses one line at a time; many downloads, a browser with many tabs, or the app's own downloader use all the lines together. A phone joins only with its own mobile data (not in airplane mode, not through Wi-Fi). Big downloads switch the phones to 5G by themselves and back to 4G afterwards.</p></div>
+</main>
+<script>document.addEventListener("keydown",e=>{if(e.key==="Escape")window.close()})</script>
+</body></html>

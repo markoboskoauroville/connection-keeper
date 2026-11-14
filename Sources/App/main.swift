@@ -86,7 +86,7 @@ func speedSample() -> String {
     let u = SpeedUnit.current
     let digits = (u == .autoBits || u == .autoBytes) ? 4 : 9
     let n = String(repeating: "8", count: digits) + " " + String(repeating: "M", count: u.unitWidth)
-    return "\(n)  \(n)"       // v51: one number per direction (the test result is in the tooltip)
+    return "88\(n)  88\(n)"   // v60: room for the arrows; v51: one number per direction (the test result is in the tooltip)
 }
 
 // v12 (Marko 18.10.2026: "you're using too much of my real estate ... remove internet ... just in parentheses. Put the
@@ -161,6 +161,12 @@ final class Stripe: NSObject {
     lazy var tabAll = word("ALL", Ink.grey, #selector(pickTabAll), id: "tab-all", tip: "Every connection the Mac can see: Wi-Fi networks in range, cables, phones, each with its state and signal")
     lazy var tabUse = word("IN USE", Ink.green, #selector(pickTabUse), id: "tab-inuse", tip: "Only the lines carrying traffic now, with their signal and live speed")
     var tab = UserDefaults.standard.string(forKey: "linesTab") ?? "inuse"
+    // v60 (request 80): the filters of ALL, "" / "lan" / "wifi"; the LAN and Wi-Fi icons beside ALL, grey off, green on
+    var allFilter = UserDefaults.standard.string(forKey: "allFilter") ?? ""
+    lazy var lanFilter = word("LAN", Ink.grey, #selector(pickLanFilter), id: "filter-lan", tip: "In ALL: only the wired connections (cables, phones over USB). Again: every connection")
+    lazy var wifiFilter = word("WI-FI", Ink.grey, #selector(pickWifiFilter), id: "filter-wifi", tip: "In ALL: only the Wi-Fi networks. Again: every connection")
+    // v60 (request 82): H, the help: an infographic of the stripe in the app's own browser
+    lazy var helpWord = word("H", Ink.text, #selector(helpPressed), id: "help", tip: "Help: what every part of the stripe does, as a picture (opens and closes)")
     var allRows: [String: LineRow] = [:]
     lazy var wifiNoData = noDataLabel()
     lazy var cableNoData = noDataLabel()
@@ -344,7 +350,7 @@ final class Stripe: NSObject {
         // v27 (request 45: "On the left side, make a minimize button which looks exactly as minimize button from the
         // macOS ... align that button with the rest of the text"): the yellow circle, "−" on it while the mouse is over
         wireLights()
-        for (w, sym) in [(testSpeedWord, "speedometer"), (testHealthWord, "waveform.path.ecg"), (cloudWord, "cloud.fill"), (tsWord, "point.3.connected.trianglepath.dotted")] {
+        for (w, sym) in [(testSpeedWord, "speedometer"), (testHealthWord, "waveform.path.ecg"), (helpWord, "questionmark.circle"), (lanFilter, "cable.connector.horizontal"), (wifiFilter, "wifi"), (cloudWord, "cloud.fill"), (tsWord, "point.3.connected.trianglepath.dotted")] {
             w.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil); w.title = w.image == nil ? "TS" : ""; w.imagePosition = .imageOnly
         }
         // v27 ("On the right side, put the two vertical lines, which I'm dragging and resizing"): the grip scales the stripe
@@ -371,7 +377,7 @@ final class Stripe: NSObject {
         permissions.setContentHuggingPriority(.required, for: .horizontal)
         permissions.toolTip = "A permission is off (Accessibility: joining a Wi-Fi through Control Centre; Location: the Wi-Fi signal reading). This opens its page in System Settings"
         permissions.isHidden = Permissions.missing.isEmpty
-        let row = NSStackView(views: [onWord, offWord, pipe(), gear, rescan, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testSpeedWord, testHealthWord, topWord, led, permissions])
+        let row = NSStackView(views: [onWord, offWord, pipe(), gear, rescan, connButton, pipe(), speed, pipe(), ping, pipe(), data, checkedPipe, checked, failoverPipe, failover, ok, testSpeedWord, testHealthWord, helpWord, topWord, led, permissions])
         row.orientation = .horizontal
         row.spacing = 3
         row.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -396,7 +402,7 @@ final class Stripe: NSObject {
         aggRow.sigBox.alphaValue = 0
         let spacerL = NSView(), spacerR = NSView()
         for sp in [spacerL, spacerR] { sp.translatesAutoresizingMaskIntoConstraints = false; sp.setContentHuggingPriority(.defaultLow, for: .horizontal) }
-        let tabRow = NSStackView(views: [spacerL, tabAll, tabUse, spacerR])
+        let tabRow = NSStackView(views: [spacerL, lanFilter, wifiFilter, tabAll, tabUse, spacerR])
         spacerL.widthAnchor.constraint(equalTo: spacerR.widthAnchor).isActive = true      // only after both are in tabRow (v55: before it crashed at launch)
         tabRow.orientation = .horizontal; tabRow.spacing = 18
         tabRow.translatesAutoresizingMaskIntoConstraints = false
@@ -539,9 +545,7 @@ final class Stripe: NSObject {
         let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
         let d = down.map(rate) ?? dash
         let u = up.map(rate) ?? dash
-        let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: red ? Ink.red : Ink.green])
-        t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: Ink.red]))
-        speed.attributedStringValue = t
+        speed.attributedStringValue = speedWithArrows(d, u, red ? Ink.red : Ink.green, Ink.red)   // v60: arrows back (request 81)
         showMenuBarSpeed(down, up)
     }
 

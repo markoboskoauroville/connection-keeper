@@ -142,3 +142,51 @@ enum AdBlock {
         }
     }
 }
+
+// H, THE HELP (v60, request 82, Marko 14.11.2026: "infographics explaining all the parts of the user interface ... using
+// the same ... browser to show itself ... quickly, I can see what each icon does and how to use this app"): the page is
+// Resources/help/index.html inside the app, shown in the same edgeless WebKit window; H again or Esc closes it.
+final class HelpBrowser: NSObject, NSWindowDelegate {
+    static var shared: HelpBrowser?
+    let window: EdgelessWindow
+    let web: WKWebView
+
+    static func toggle() {
+        if let h = shared { h.window.close(); return }
+        shared = HelpBrowser()
+    }
+
+    override init() {
+        web = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+        window = EdgelessWindow(contentRect: NSRect(x: 0, y: 0, width: 980, height: 720), styleMask: [.borderless], backing: .buffered, defer: false)
+        super.init()
+        window.title = "Connection Keeper: help"
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.level = .floating
+        window.backgroundColor = .black
+        window.hasShadow = true
+        window.contentView = web
+        web.wantsLayer = true
+        web.layer?.cornerRadius = 10
+        web.layer?.masksToBounds = true
+        web.underPageBackgroundColor = .black
+        if let s = (NSApp.windows.first { $0 is NSPanel && $0.isVisible })?.screen ?? NSScreen.main {
+            let f = s.visibleFrame
+            let w = min(980, f.width - 40), h = min(720, f.height - 40)
+            window.setFrame(NSRect(x: f.midX - w / 2, y: f.midY - h / 2, width: w, height: h), display: false)
+        }
+        if let dir = Bundle.main.resourceURL?.appendingPathComponent("help") {
+            web.loadFileURL(dir.appendingPathComponent("index.html"), allowingReadAccessTo: dir)
+        }
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        appendLog("\(logStamp()) HELP opened")
+    }
+
+    func windowWillClose(_ notification: Notification) { HelpBrowser.shared = nil }
+}
+
+extension Stripe {
+    @objc func helpPressed() { HelpBrowser.toggle() }
+}

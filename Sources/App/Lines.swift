@@ -87,10 +87,31 @@ final class LineRow {
         let dash = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
         let d = down.map(rate) ?? dash
         let u = up.map(rate) ?? dash
-        let t = NSMutableAttributedString(string: d, attributes: [.font: monoFont, .foregroundColor: dim ? Ink.grey : Ink.green])
-        t.append(NSAttributedString(string: "  " + u, attributes: [.font: monoFont, .foregroundColor: dim ? Ink.grey : Ink.red]))
-        speed.attributedStringValue = t
+        speed.attributedStringValue = speedWithArrows(d, u, dim ? Ink.grey : Ink.green, dim ? Ink.grey : Ink.red)
     }
+}
+
+// v60 (request 81, Marko 14.11.2026: "next to upload speed, make a nice up arrow. Next to the download speed, make a nice
+// download arrow"): an SF Symbol arrow in the number's own colour before each number, on the text's centre line.
+func speedArrow(_ down: Bool, _ color: NSColor) -> NSAttributedString {
+    let cfg = NSImage.SymbolConfiguration(pointSize: 10, weight: .heavy).applying(NSImage.SymbolConfiguration(paletteColors: [color]))
+    guard let img = NSImage(systemSymbolName: down ? "arrow.down" : "arrow.up", accessibilityDescription: down ? "download" : "upload")?
+        .withSymbolConfiguration(cfg) else { return NSAttributedString(string: down ? "↓" : "↑", attributes: [.font: monoFont, .foregroundColor: color]) }
+    let att = NSTextAttachment()
+    att.image = img
+    att.bounds = NSRect(x: 0, y: (monoFont.capHeight - img.size.height) / 2, width: img.size.width, height: img.size.height)
+    let a = NSMutableAttributedString(attachment: att)
+    a.append(NSAttributedString(string: "\u{2009}", attributes: [.font: monoFont]))
+    return a
+}
+
+func speedWithArrows(_ d: String, _ u: String, _ dc: NSColor, _ uc: NSColor) -> NSAttributedString {
+    let t = NSMutableAttributedString(attributedString: speedArrow(true, dc))
+    t.append(NSAttributedString(string: d.trimmingCharacters(in: .whitespaces), attributes: [.font: monoFont, .foregroundColor: dc]))
+    t.append(NSAttributedString(string: "  ", attributes: [.font: monoFont]))
+    t.append(speedArrow(false, uc))
+    t.append(NSAttributedString(string: u.trimmingCharacters(in: .whitespaces), attributes: [.font: monoFont, .foregroundColor: uc]))
+    return t
 }
 
 func linePipe() -> NSTextField {
