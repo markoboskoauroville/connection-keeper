@@ -677,3 +677,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status:** built 13.11.2026 (v55, MenuBar.swift MenuBarPlace): login item through SMAppService.mainApp at every start; the status item has the autosave name ConnectionKeeperItem and its preferred position (display width minus iStat network item's left edge) is written to our own defaults before the item is made, checked 3 s after start and after a display change, remade when more than 8 pt from iStat. iStat's preferences are never written.
 
 **v56 (13.11.2026):** menu bar placement measured: the preferred-position key cannot put the item beside iStat (see MenuBar.swift); the recreate loop is gone, one log line; a Cmd-drag by hand places it and macOS keeps it.
+
+## 14.11.2026, request 76 (the speedometer opens speedtest.net in the app's own browser, ads blocked)
+
+> for connection keeper The icon on the right side is one, two, three, four, an icon that looks like a speed meter. It needs to do a different action. Remove whatever is doing now. And it needs to open up. In its own browser, so the browser must be encoded in this application. You find the lightweight mini web browser, an open-source Chromium on GitHub. https://www.speedtest.net/ This is the site it needs to open, and it must have already built-in the plugin to block commercials. ublock And it will open up in this window. Please update my application.
+
+**Status:** in progress.
