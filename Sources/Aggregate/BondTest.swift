@@ -181,6 +181,17 @@ func bondSelftest(_ args: [String]) -> Never {
             guard body.count > 7, let idx = Int(String(decoding: body[7...], as: UTF8.self).split(separator: "|").first ?? "") else { return }
             ul.lock(); if got[idx] == nil { got[idx] = bnow() }; ul.unlock()
         }) else { print("UDP RTT: no flow"); exit(1) }
+        Thread.detachNewThread {
+            let t0 = bnow()
+            while true {
+                sleep(1)
+                client.cv.lock()
+                let d = client.legs.map { l in String(format: "%@ heard %.1fs ago udpq %d ctlq %d sent %llu acked %llu", l.key, bnow() - l.lastHeard, l.udpq.count, l.ctlq.count, l.sent, l.acked) }.joined(separator: " | ")
+                client.cv.unlock()
+                ul.lock(); let n = got.count; ul.unlock()
+                print(String(format: "  t+%.0fs back %d: %@", bnow() - t0, n, d))
+            }
+        }
         for i in 0..<100 {
             let msg = Array("\(i)|".utf8) + [UInt8](repeating: 46, count: 60)
             ul.lock(); sentAt[i] = bnow(); ul.unlock()
