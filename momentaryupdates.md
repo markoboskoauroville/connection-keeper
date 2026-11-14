@@ -804,3 +804,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status 14.11.2026 (v79–v80):** one leg = through Frankfurt (privacy), speed-only setting off by default; request 88 FRANKFURT / CROATIA buttons built, CI way test 0 failures, address switches in under 1 s. Not installed live.
 
 **14.11.2026 12:51 INSTALLED LIVE (Marko: "now it is a quiet time. Please install it"):** relay v80 on chromium-vm (install.sh, one restart from v68: ~2 s, the Mac leg back at once; Type=notify, vmcore.slice, nice -15 kept); Mac v80 (signed Mantra Apps, `ck-aggregate handover`: 0 open connections, old pid drained) with a live probe 60/60 OK. ck-bondcheck PASS: one line AX88179B, public 130.61.181.83 colo FRA, DNS via the relay, no IPv6 leak, CKBOND running. The window is open but not on screen (not brought front, Marko works). Lessons: scp to the public address of the relay ran through the relay itself and broke once; zsh mangles "$V:ckbond" (the :c modifier) — write the address out; Tailscale SSH asks for a browser check, use the hostname.
+
+## 14.11.2026, request 89 (Nothing only by USB cable via adb; ⟳ rescans adb; the window raises itself)
+
+> Continue working on connection keeper and in general I don't know what's going on. My connection keeper when I put it down in my window, by itself it's just raising up user interface. Second I connected my nothing phone over cable and the cable connection was not recognized. when I share it with hotspot. So how to make this when I click refresh that nothing is also recognized by the cable. So basically I want now to do one thing. Update my app to recognize ADB devices. and right now I want this kind of connection only cable to my noting phone, nothing else noting phone is only connection and only through the cable, please make this happen
+
+**Status:** saved; v81 in progress.
