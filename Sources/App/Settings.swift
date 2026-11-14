@@ -21,6 +21,8 @@ final class SettingsWindow: NSObject {
     let dataAuto = NSButton(checkboxWithTitle: "Check the data balance by itself every", target: nil, action: nil)
     let dataHours = NSTextField(string: "")
     let unitPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    let strictBox = NSButton(checkboxWithTitle: "PRIVACY: STRICT (no bond leg up = new connections refused, never over the home line)", target: nil, action: nil)   // v75
+    let directButton = NSButton(title: "Direct list… (domains that skip Frankfurt and show the home address)", target: nil, action: nil)
     let claudeProbe = NSButton(checkboxWithTitle: "Watch Claude Code's connection to Anthropic (a probe every 2 minutes, about 4 MB a day of SIM data)", target: nil, action: nil)
     var stackView: NSStackView!
 
@@ -53,6 +55,8 @@ final class SettingsWindow: NSObject {
         claudeProbe.action = #selector(claudeProbeChanged)
         dry.target = self
         dry.action = #selector(dryChanged)
+        strictBox.target = self; strictBox.action = #selector(strictChanged)
+        directButton.target = self; directButton.action = #selector(openDirect); directButton.bezelStyle = .rounded
         onTop.target = self
         onTop.action = #selector(onTopChanged)
 
@@ -92,7 +96,7 @@ final class SettingsWindow: NSObject {
         alertLine.maximumNumberOfLines = 0
         alertLine.preferredMaxLayoutWidth = 560
 
-        let stack = NSStackView(views: [alertLine, title, rows, speedRow, NSStackView(views: [addPopup, addLanPopup]), intervalRow, unitRow, dataRow, dataAutoRow, claudeProbe, onTop, dry, version])
+        let stack = NSStackView(views: [alertLine, title, rows, speedRow, NSStackView(views: [addPopup, addLanPopup]), intervalRow, unitRow, dataRow, dataAutoRow, claudeProbe, onTop, strictBox, directButton, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -165,6 +169,8 @@ final class SettingsWindow: NSObject {
         interval.stringValue = String(format: "%g", Double(cfg.intervalSeconds) / 60)
         dry.state = cfg.dryRun ? .on : .off
         onTop.state = OnTop.on ? .on : .off
+        strictBox.state = (BondConfigFile.load()?.strict ?? false) ? .on : .off
+        strictBox.isEnabled = BondConfigFile.load() != nil
         claudeProbe.state = ClaudeDrops.probeOn ? .on : .off
         if let i = SpeedUnit.allCases.firstIndex(of: SpeedUnit.current) { unitPopup.selectItem(at: i) }
         DispatchQueue.main.async { self.sizeToContent() }
@@ -262,6 +268,23 @@ final class SettingsWindow: NSObject {
     }
 
     @objc func claudeProbeChanged() { ClaudeDrops.probeOn = claudeProbe.state == .on; appendLog("\(logStamp()) CLAUDE probe \(claudeProbe.state == .on ? "on" : "off") (Settings)") }
+    // v75: bond.json "strict" (the server reads it within 5 s), written keeping the file's 0600 mode and its token
+    @objc func strictChanged() {
+        guard var c = BondConfigFile.load() else { return }
+        c.strict = strictBox.state == .on
+        let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        if let d = try? enc.encode(c), let h = FileHandle(forWritingAtPath: BondConfigFile.url.path) {
+            h.truncateFile(atOffset: 0); h.write(d); h.closeFile()
+        }
+        appendLog("\(logStamp()) PRIVACY \(c.strict == true ? "STRICT" : "normal") (Settings)")
+    }
+    @objc func openDirect() {
+        let f = Paths.support.appendingPathComponent("bond-direct.txt")
+        if !FileManager.default.fileExists(atPath: f.path) {
+            try? "# Domains that skip the relay (Frankfurt) and go out over the Mac's own lines, one per line.\n# They see the HOME address. A domain covers its subdomains. Example:\n# youtube.com\n".write(to: f, atomically: true, encoding: .utf8)
+        }
+        NSWorkspace.shared.open(f)
+    }
     @objc func onTopChanged() { OnTop.on = onTop.state == .on }
 
     @objc func dryChanged() { cfg.dryRun = dry.state == .on; commit() }

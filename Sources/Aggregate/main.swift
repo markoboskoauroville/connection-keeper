@@ -289,6 +289,7 @@ func prepare(_ fd: Int32) {
 final class Server {
     let lock = NSLock()
     var clients = 0
+    var loopBeat = Date()                                // v75: the accept loop's last turn (the watchdog)
     var lines: [Uplink] = []
     var ignored: [(Uplink, Uplink)] = []
     let started = Date()
@@ -421,7 +422,19 @@ final class Server {
         Thread.detachNewThread { [self] in while true { sleep(1); checkLines() } }   // v62: 1 s (was 3 s): failover ~2-3 s
         startBalance()                                   // v47: live rate, probes on 4G ↔ 5G (Balance.swift)
         Bond.watch(self)                                 // v65 (request 84): the bond, when bond.json says "on"
-        if !aggTestCopy && !aggQuiet { Session.watch { log($0) } }   // v73 (request 87): the app gone without quitting = a clean close
+        if !aggTestCopy && !aggQuiet { Session.watch { log($0) } }
+        // v75 (request 85 item 6): the watchdog (an accept loop that stopped turning is said in the log and in /status)
+        // and the log's rotation (above 10 MB it becomes .1, the old .1 goes; launchd's stderr is opened again).
+        Thread.detachNewThread { [self] in
+            var said = false, n = 0
+            while true {
+                sleep(5); n += 1
+                let age = Date().timeIntervalSince(loopBeat)
+                if age > 5 && !said { log("WATCHDOG the accept loop has not turned for \(Int(age)) s"); said = true }
+                if age <= 5 && said { log("WATCHDOG the accept loop turns again"); said = false }
+                if n % 12 == 0 { rotateLog() }
+            }
+        }   // v73 (request 87): the app gone without quitting = a clean close
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
         // v32 (request 49): at once too when a device comes or goes (a phone plugged in, a cable), and when ⟳ is pressed.
         Thread.detachNewThread { [self] in
@@ -451,6 +464,7 @@ final class Server {
         while true {
             // v71: wait in poll, so a drain (SIGTERM, or the successor of an interim server) is seen within 0.2 s
             var pfd = pollfd(fd: s, events: Int16(POLLIN), revents: 0)
+            loopBeat = Date()
             if poll(&pfd, 1, 200) != 1 {
                 if aggDraining { Handover.drainAndExit(self, listener: s) }
                 continue
@@ -821,15 +835,32 @@ extension Server {
         close(c); close(out)
     }
 
+    func rotateLog() {
+        var buf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+        guard fcntl(2, F_GETPATH, &buf) != -1 else { return }
+        let path = String(cString: buf)
+        guard path.hasSuffix(".log"), let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int, size > 10_000_000 else { return }
+        try? FileManager.default.removeItem(atPath: path + ".1")
+        try? FileManager.default.moveItem(atPath: path, toPath: path + ".1")
+        _ = freopen(path, "a", stderr)
+        log("LOG rotated: the last \(size / 1_000_000) MB are in \((path as NSString).lastPathComponent).1")
+    }
+
     func status() -> String {
-        let bond = Bond.status()                         // v65: before the lock (the bond's paths take it)
+        let bond = Bond.status()
+        let lease = Session.readLease()
+        let watchdog: [String: Any] = ["acceptLoopMs": Int(Date().timeIntervalSince(loopBeat) * 1000), "clients": clients, "maxClients": maxClients,
+                                       "openFiles": openFiles, "uptimeS": Int(Date().timeIntervalSince(started)), "draining": aggDraining,
+                                       "interim": aggInterim, "pid": Int(getpid()),
+                                       "app": lease.map { Session.appAlive($0) ? "open (pid \($0.pid))" : ($0.updatingUntil != nil ? "updating" : "gone") } ?? "no lease",
+                                       "strict": Bond.strictOn]                         // v65: before the lock (the bond's paths take it)
         lock.lock(); defer { lock.unlock() }
         let ls: [[String: Any]] = lines.map { u in
             ["name": u.name, "device": u.iface, "publicIP": u.publicIP ?? "", "gateway": u.gateway ?? "", "mbps": u.mbps, "rate": u.meter.rate, "capacity": u.capacity, "probed": u.meter.probed ?? 0, "radio": u.meter.radio ?? "",
              "alive": u.alive, "rttMs": rttValue(u), "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6]
         }
         let ig: [[String: String]] = ignored.map { ["name": $0.0.name, "device": $0.0.iface, "sameLineAs": $0.1.name] }
-        let d: [String: Any] = ["version": CKVersion, "port": Int(aggPort), "since": ISO8601DateFormatter().string(from: started), "lines": ls, "ignored": ig, "bond": bond]
+        let d: [String: Any] = ["version": CKVersion, "port": Int(aggPort), "since": ISO8601DateFormatter().string(from: started), "lines": ls, "ignored": ig, "bond": bond, "watchdog": watchdog]
         return String(decoding: try! JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted, .sortedKeys]), as: UTF8.self) + "\n"
     }
 }

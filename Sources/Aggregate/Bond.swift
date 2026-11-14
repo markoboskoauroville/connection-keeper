@@ -107,21 +107,7 @@ final class BondCipher {
 
 // MARK: bond.json
 
-struct BondConfig: Codable {
-    var on: Bool
-    var server: String
-    var port: UInt16
-    var token: String
-    var legsPerLine: Int
-    var strict: Bool?          // v74: PRIVACY STRICT: no leg up = new connections refused, never direct (default off)
-}
-
-enum BondConfigFile {
-    static var url: URL { aggEnv["CK_BOND_CONFIG"].map { URL(fileURLWithPath: $0) } ?? Paths.support.appendingPathComponent("bond.json") }
-    static func load() -> BondConfig? {
-        guard let d = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(BondConfig.self, from: d)
-    }
+extension BondConfigFile {
     // `ck-aggregate bond-init`: a new random token, bond off, mode 0600 from the first byte. An existing file is kept.
     static func initFile() -> String {
         let path = url.path

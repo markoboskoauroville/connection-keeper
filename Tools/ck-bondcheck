@@ -9,7 +9,8 @@ Marko, 14.11.2026: "my whole machine now running on frankfurt ip that is fine, b
     ck-bondcheck --clean-save   before opening the app: keep proxies, routes, service order, DNS, our processes
     ck-bondcheck --clean        after quitting it: the same as before? (PASS = identical; request 87)
 
-Checks: bond switched on (bond.json); the aggregate's bond has two or more live legs and is not stepping aside; the
+Checks: bond switched on (bond.json); DNS without leaks (whoami.cloudflare via 1.1.1.1 = the relay; the system
+resolver's question to Google not from the home line); the aggregate's bond has two or more live legs and is not stepping aside; the
 public IPv4 seen from outside is the relay's address; Cloudflare places the Mac in Frankfurt (colo FRA); no IPv6 path
 around the bond (an IPv6 address would leak the home line); the relay's port 443 answers; on the VM the CKBOND service
 runs (through vmctl, when it is installed). Never prints the token.
@@ -91,8 +92,11 @@ def main(argv):
     except Exception as e:
         check("bond switched on", False, f"no bond.json ({e})")
 
+    homes = set()
     try:
-        b = json.loads(get(STATUS, 4)).get("bond") or {}
+        full = json.loads(get(STATUS, 4))
+        homes = {l.get("publicIP") for l in full.get("lines", []) if l.get("publicIP")}
+        b = full.get("bond") or {}
         legs = [l for l in b.get("legs", []) if l.get("alive")]
         names = ", ".join(f"{l['line']} {l.get('rttMs', '?')} ms" for l in legs) or "none"
         check("two or more live legs", len(legs) >= 2, names)
@@ -111,6 +115,18 @@ def main(argv):
         check("Cloudflare sees Frankfurt", t.get("colo") == "FRA", f"{t.get('ip')} colo {t.get('colo')} {t.get('loc')}")
     except Exception as e:
         check("Cloudflare sees Frankfurt", False, str(e))
+
+    # v75 (request 85 item 2): DNS without leaks. Cloudflare says who asked it (should be the relay); Google says which
+    # resolver asked it for the system's own question (should not be the home line, nor its /24 as a client subnet).
+    code, out = run(["dig", "+short", "+time=3", "+tries=1", "CH", "TXT", "whoami.cloudflare", "@1.1.1.1"], 10)
+    who = out.strip().strip('"')
+    check("DNS to 1.1.1.1 leaves as the relay", server is not None and who == server, who or "no answer")
+    code, out = run(["dig", "+short", "+time=3", "+tries=1", "TXT", "o-o.myaddr.l.google.com"], 10)
+    seen = [w.strip('"') for w in out.split() if w.strip('"')[:1].isdigit()]
+    home24 = {".".join(h.split(".")[:3]) for h in homes}
+    leak = [x for x in seen if x.split("/")[0] in homes or ".".join(x.split("/")[0].split(".")[:3]) in home24]
+    check("system DNS does not show the home line", bool(seen) and not leak,
+          ("leak: " + ", ".join(leak)) if leak else (("resolver " + ", ".join(seen)) if seen else "no answer"))
 
     code, out = run(["curl", "-s", "-m", "6", "-6", "https://api64.ipify.org"], 10)
     check("no IPv6 leak", code != 0 or not out or out == server, "no IPv6 route" if code != 0 or not out else f"IPv6 out as {out}")

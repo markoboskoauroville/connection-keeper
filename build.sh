@@ -32,6 +32,8 @@ mkdir -p "$APP/Contents/Resources/phone"
 cp Tools/ck-wires "$APP/Contents/Resources/ck-wires" && chmod +x "$APP/Contents/Resources/ck-wires"
 # ck-claude (v46, request 65): Claude Code's connection drops, followed while the app runs
 cp Tools/ck-claude "$APP/Contents/Resources/ck-claude" && chmod +x "$APP/Contents/Resources/ck-claude"
+# ck-bondcheck (v75): the stripe's BOND item runs it on a click
+cp Tools/ck-bondcheck "$APP/Contents/Resources/ck-bondcheck" && chmod +x "$APP/Contents/Resources/ck-bondcheck"
 # the speed test browser's ad blocking (v57, request 76): uBlock Origin's default lists turned into WebKit rules.
 # Fetched only on GitHub's runner (ADBLOCK_FETCH=1, the workflow); elsewhere only the hand-written seed.json is used.
 mkdir -p "$APP/Contents/Resources/help" && cp Resources/help/* "$APP/Contents/Resources/help/"
