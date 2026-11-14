@@ -701,3 +701,14 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > Also fix the resizing algorithm for this app. I have a gripper on the right side. Before actually changing the font size, you need to first remove the gap between the text. The text is compressing, and then the window is resizing.
 
 **Status:** built 14.11.2026 (v59): `gap` (0…1, saved as stripeGap) scales every stack's spacing and side margins; a drag narrower first lowers the gap to 0 at the same letter size, only then the scale goes down; wider: the gap back to 1 first, then the scale up.
+
+## 14.11.2026, request 80 (IN USE / ALL: click a name to join it, white/green, LAN and Wi-Fi filters; QC of the aggregation)
+
+> Please go to the window "In Use" and on. I need a little bit of update. In "In Use" under All, now a new connection has appeared. Which is nothing over USB. When I click on nothing over USB, it is now white. When I click on the name, it should become green and become part of the aggregated connections. Also, when I'm in All, you need to make filters. One is LAN. Next to All is a line that's grayed out. If I select it, only LAN connections are shown, and LAN connections by LAN connection. I mean everything wired, so nothing over USB will also be shown.
+>
+> Then there's another icon, the Wi-Fi icon, which is grayed out. If I press the Wi-Fi icon, it becomes green and shows me only Wi-Fi. In this case, it will show only Mantra. And again, repeating that is the name of the connection. It is green or red. That's the toggle. When it's red, it's not in use. When it's green, it's in use. Instead of red and green, better make it white and green. White means it's not in use. I click. Green means it's in use. Now I have two connections there. Test all the new features, and please test the speed and see if something can be improved. Is the aggregation algorithm the best in class, or are there some other GitHub repositories showing better algorithms? Please compare with some other competition.
+>
+> It's working, and what works better with the parameters of the aggregate connection? I don't know which are there, but you need to find some kind of speed, bare loading, and whatever is there. Read some books on how to get the aggregate connection and what the parameters are, which is like a QC quality check of the software.
+> Also browser window icon or speed icon for this speed net should be also opening and closing that window. Doglink, and I don't need any status line, also not the title line. I just need this speed to be the size of the UI of Speed Net, and that's all. The button in the interface of Connection Keeper is closing it and opening it.
+
+**Status:** in progress. The speed window part is v59 (borderless, sized to the frame, the icon opens and closes it).
