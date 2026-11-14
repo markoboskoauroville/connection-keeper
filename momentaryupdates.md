@@ -770,3 +770,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **14.11.2026 08:45 (Marko: "bond should stay all the time"):** bond.json on permanently; both legs (AX88179B + Something), bypass none; the Mac's public address is 130.61.181.83; pages 0.32-0.48 s. With fewer than two good lines it steps aside by itself (v67+).
 
 **14.11.2026 (Marko: "my whole machine now running on frankfurt ip that is fine buil that test ti t close the project"):** ck-bondcheck built and PASS; project closed.
+
+## 14.11.2026, request 85 (UDP bonding and the rest, to a professional level)
+
+> please continue developing this UDP and the rest of our aggregate connection keeper so it works on a professional level
+
+**Status:** in progress (Opus worker): UDP through the bond (QUIC, calls, DNS), a direct list (YouTube and others skip Frankfurt), a privacy kill switch, DNS without leaks, the stripe showing the bond, ck-bondcheck extended.
