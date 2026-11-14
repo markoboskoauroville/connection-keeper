@@ -1,3 +1,8 @@
+**14.11.2026, v58 (request 77): only the test frame on speedtest.net** (Resources/speedtest/frame.js, a WKUserScript at document
+start with a MutationObserver: outside .pure-u-custom-speedtest hidden, #content-card-stack and below hidden, RESULTS · SETTINGS and
+Connections rows hidden; the privacy box kept). Window 820 × 600, an eye on the bottom bar shows the whole page. Seen on the Mac: GO,
+Telemach, the server, Change Server, nothing else. The frame during and after a test is not seen yet (no test run on the SIM).
+
 **14.11.2026, v57 (request 76): the speedometer icon opens speedtest.net in the app's own browser window** (SpeedBrowser.swift,
 WKWebView, the Mac's WebKit; Chromium/CEF weighed and left: ~250 MB per release over a SIM line). Ads: uBlock Origin's default
 lists converted to WebKit content rules on GitHub's runner (Tools/make_adblock.py → Resources/adblock/network.json + cosmetic.json,
