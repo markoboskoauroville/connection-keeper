@@ -148,7 +148,7 @@ extension Server {
                 if won { u.connections += 1; u.seen[c] = Date(); u.lastGood = Date() } else { u.active -= 1 }
                 lock.unlock()
                 if let fd, !won { close(fd) }
-                if fd == nil { checkSoon(u) }
+                if fd == nil { checkSoon(u, force: true) }
                 r.done.signal()
             }
         }
@@ -179,7 +179,7 @@ extension Server {
         for u in ls { checkSoon(u) }
     }
 
-    func checkSoon(_ u: Uplink) {
+    func checkSoon(_ u: Uplink, force: Bool = false) {
         lock.lock()
         if u.probing { lock.unlock(); return }
         // v62 (request 83, QC fix 4): the loop runs every second. A line that carried a real connection within 1.5 s needs
@@ -187,7 +187,7 @@ extension Server {
         // again after 1 s, so a dead line is out after ~2-3 s instead of ~6.
         let now = Date()
         let fresh = now.timeIntervalSince(u.lastGood) < 1.5 && u.alive
-        let due = u.misses > 0 || !u.alive || now.timeIntervalSince(u.lastProbe) >= 3
+        let due = force || u.misses > 0 || !u.alive || now.timeIntervalSince(u.lastProbe) >= 2   // v62: a failed real connection checks at once
         u.probing = !fresh && due
         if u.probing { u.lastProbe = now }
         lock.unlock()
