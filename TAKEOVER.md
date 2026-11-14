@@ -6,6 +6,14 @@ IPv4 = relay, Cloudflare colo FRA, no IPv6 leak, relay 443 over the cable, VM CK
 check goes out over en17/en0 (through the Mac's own tunnel 443 "answered" in 1 ms). Open: YouTube on the Mac may ask to sign
 in (Frankfurt address) — a direct list was offered, not asked for; UDP (QUIC, calls) not bonded yet (phase 2).
 
+**14.11.2026, v76–v78 (the throughput question; test tooling only, nothing in the data path changed).** `bench.yml`
+(workflow_dispatch) builds several tags and runs the same selftest interleaved on ONE runner. Run 43585816772, 3 rounds,
+fetch 1 medians: v70 50.0, v72 71.9, v73 86.4, v74 101.8, v75 77.2, HEAD 82.1 Mbit/s; inside one version up to 2x apart
+(v74 64.0–104.8). No regression: the drift was noise (later HEAD runs 85.8 and 127.0). UDP (run 43588319380, fresh legs,
+100 datagrams): p10 66 ms against the legs' lowest ping 62.6 ms (the UDP path adds nothing); medians 110–116 ms because
+the runner oversleeps: the probe's 50 ms sleeps took 100–120 ms, so the emulated 40 ms lines run at 62–80+ ms with jitter.
+The earlier 250 ms was lineB silenced at datagram 100: two-thirds rode lineC (130–166 ms minimum on the runner).
+
 **14.11.2026, v74–v75 (request 85, the rest).** UDP through the bond (a flow per association with its own relay
 socket, redundant quiet flows on two legs, NAT timeouts 30/180 s), the house's DNS asked at 1.1.1.1 through the relay,
 the direct list (bond-direct.txt, ⚙ "Direct list…", names learned from DNS for IP-only connections), PRIVACY STRICT

@@ -393,3 +393,9 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   nothing when one line dies (300/300 in CI with a line silenced mid-flow), and costs little because it is quiet.
 - The tunnel gives the server addresses, not names: any per-domain rule (the direct list) needs the names from the DNS
   answers that pass through the server.
+- One CI run is not a measurement: the same build read 64 and 105 Mbit/s on one runner. Compare medians of interleaved
+  rounds of several builds on ONE runner (bench.yml) before calling anything a regression.
+- GitHub's macOS runners oversleep (a 50 ms sleep took 100–120 ms): emulated delays and pacing are only approximate
+  there; read latency against the legs' own measured RTT, not against the configured one.
+- A test flag at the end of the command line must be read as a flag, not as "the value after it" (the UDP probe ran the
+  whole selftest instead and looked like dying legs).
