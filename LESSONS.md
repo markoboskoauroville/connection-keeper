@@ -370,3 +370,6 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 - An optimistic OPEN means the stream's first DATA can arrive first on a faster leg: the far end must make the stream on any
   first frame and hold the gap (v67 CI failed with 0 bytes, v68 fixed).
 - One line through the relay is a hop with no gain: bond only with two or more lines up.
+- A line can leave the pool from three places (the stripe's NO DATA probe, the server's 60 s refresh, the 1 s health dial):
+  each must log its reason, or the next layer (the bond) only sees "one line" and nobody can tell why. A health dial's patience
+  must follow the line's RTT: 1.2 s is fine for a 30 ms cable and a coin toss for a 300 ms hotspot.

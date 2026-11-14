@@ -1,3 +1,12 @@
+**14.11.2026, v69–v70 (request 84): the hotspot line that got no bond leg.** Evidence: the stripe's log "08:07:53 NO DATA: en0 is
+up but the HTTPS probe through it fails" (dead-lines.json ["Something"], mtime 08:07), the aggregate's "08:08:02 lines: AX88179B"
+(en0 gone, no reason logged), bond on at 08:08:19 and 08:09:45 with only the cable: the bond takes the server's lines, so en0 was
+never a path (no manage/connect log). Its health probe also flapped (08:07:02–08:07:54 does not answer / is back ×3) on the fixed
+1.2 s dial against a ~300 ms line. v69: "BOND paths: … ; left out: …" on every change, `bond.bypass` names the left-out lines and
+why. v70: the probe waits clamp(4 × rttMs, 1.2–3.5 s) (phones the same, whole seconds); a line leaving the list logs why
+("left the lines: NO DATA … / no IPv4 / no router / same uplink / not ticked / not found again"). CI v70 run 43570111619: 100.7 Mbit/s
+one stream, 65.3 after a silenced line, intact.
+
 **14.11.2026, v67–v68 (request 84, after the first live run):** live with two legs (AX88179B 31 ms, Nothing 48 ms) bond added
 only one relay hop to small requests (google 0.17–0.29 s vs 0.14 direct), but one 10 MB stream lost to direct (40 vs 51 Mbit/s,
 87 % on the phone): v66's best-100-ms rate believed the phone's adb bursts. The Mac's rateMbps "stuck at 10" was only its own
