@@ -6,9 +6,9 @@ Off by default: only bond.json `"on": true` starts it (read every 5 s); no leg u
 only (`ck-aggregate bond-selftest`, run 43565043618, v66): one stream 105.6 Mbit/s over emulated lines of 80 + 80 + 16 Mbit/s
 (132 % of the best line; shares 52.6 / 40.2 / 7.2 %), SHA-256 intact; with lineA silenced at 24 MB the second fetch finished intact
 (62.2 Mbit/s including the 3 s detection; the relay resent 86 frames). v65's first run passed but read 36.7 Mbit/s (rate estimator
-spiral, fixed in v66). NOT done: the relay is not installed, port 443 not open (VCN security list + VM iptables), no bond.json on the
+spiral, fixed in v66). NOT done: the relay is not installed (443 is already allowed by the VCN list and the VM's iptables), no bond.json on the
 Mac, never run over the real lines; UDP not bonded (phase 2). Next: download the release asset on the VM, `install.sh` with the token
-on stdin (docs/ckbond.md), open 443, `ck-aggregate bond-init`, set "on", watch `/status` "bond" and a single-connection test.
+on stdin (docs/ckbond.md), `ck-aggregate bond-init`, set "on", watch `/status` "bond" and a single-connection test.
 
 **14.11.2026, v62–v64 (request 83, the QC fixes, order mine).** Failover: health loop 1 s, both answer points dialled at once,
 1.2 s cable / 2 s phone, a failed real connection checks its line at once (`checkSoon(force:)`), idle lines every 2 s. Measured on a
