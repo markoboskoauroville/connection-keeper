@@ -794,3 +794,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status 14.11.2026 (v73, requests 86 + 87):** normal Mac app + open = Frankfurt / quit = as before / crash watchdog built; CI run 43582635340: 0 failed of 1685 new connections across open/quit/crash, clean check PASS. Not installed live.
 
 **Status 14.11.2026 (v74–v75, request 85):** UDP through the bond, DNS without leaks (+ ck-bondcheck), direct list, PRIVACY STRICT (default off), the stripe's BOND item + help card, /status watchdog + log rotation, bond-off drain measured: all built; CI run 43583808312 green for v74. Nothing installed live.
+
+## 14.11.2026, request 88 (two buttons: FRANKFURT and CROATIA; given in session MAC_SES12, done here)
+
+> regarding the connection, give me the option of Frankfurt or Croatia in my user interface. I will understand that. Give me two action buttons: Frankfurt and Croatia
+
+**Status:** sent to the bonding worker together with "one line is enough for Frankfurt".
