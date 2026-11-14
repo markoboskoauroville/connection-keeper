@@ -726,3 +726,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status:** built 14.11.2026 (v60): H (question-mark icon) after HEALTH; Resources/help/index.html, a numbered drawing of the stripe with a card per part, the colours, four steps to faster internet; shown in the same edgeless WebKit window, H again or Esc closes.
 
 **Tested 14.11.2026 (v61):** filters, join by click, arrows, help, speed window open/close: all seen working on the Mac. See TAKEOVER for the aggregation QC.
+
+## 14.11.2026, request 83 (build the aggregation improvements, order mine)
+
+> improvements, building order. It's up to you. Just update it
+
+**Status:** in progress: order 4 (failover ~6 s → ~2 s), 3 (RTT term in the line choice), 1 (ck-net end-game), 2 (piece size and streams by line rate); 5 (packet bonding through chromium-vm) after these are proven.
