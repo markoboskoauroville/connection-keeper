@@ -201,7 +201,10 @@ final class Keeper {
             if p.isOnline { log("it was a blip (retry \(i))"); online(p); return }
         }
 
-        let enabled = cfg.connections.filter { $0.enabled }
+        // v81 (request 89): a phone's hotspot (the Nothing's "Something") is never joined: the Nothing only by its cable
+        let skipped = cfg.connections.filter { $0.enabled && $0.kind == "wifi" && CableOnly.isPhoneHotspot($0.name) }
+        if !skipped.isEmpty { log("ladder: \(skipped.map { "\"\($0.name)\"" }.joined(separator: ", ")) skipped: a phone hotspot (the Nothing only by its USB cable)") }
+        let enabled = cfg.connections.filter { $0.enabled && !($0.kind == "wifi" && CableOnly.isPhoneHotspot($0.name)) }
         let wifi = wifiIface
         let here = wifi.flatMap { Net.currentSSID($0) }
 

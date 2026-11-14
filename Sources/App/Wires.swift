@@ -52,6 +52,13 @@ extension Stripe {
             menu.addItem(i)
         }
         menu.addItem(.separator())
+        // v81 (request 90): the Nothing on its USB cable as the only line, its cell modem; TP-Link only as standby
+        let n = NSMenuItem(title: "NOTHING ONLY (cable)   the Nothing by USB on its cell modem; TP-Link only if it fails", action: #selector(toggleNothingOnly), keyEquivalent: "")
+        n.target = self
+        n.state = NothingOnly.on ? .on : .off
+        n.toolTip = nothingSaid.isEmpty ? "Switched on only when the Nothing is on the USB cable (adb)" : nothingSaid
+        menu.addItem(n)
+        menu.addItem(.separator())
         let s = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         s.target = self
         menu.addItem(s)
@@ -116,6 +123,57 @@ extension Stripe {
                 }
                 self.layoutLines()
             }
+        }
+    }
+}
+
+// NOTHING ONLY (cable) (v81, request 90; Sources/Shared/CableOnly.swift). On only after the USB link is verified; the
+// aggregation is switched on with it (the server makes the Nothing the line, AX88179B standby); off = the ticks again.
+extension Stripe {
+    @objc func toggleNothingOnly() { setNothingOnly(!NothingOnly.on) }
+
+    func setNothingOnly(_ on: Bool) {
+        if !on {
+            guard NothingOnly.on else { return }
+            NothingOnly.set(false)
+            appendLog("\(logStamp()) NOTHING ONLY off: the ticked lines again")
+            show("NOTHING ONLY off: the ticked lines again", Ink.green, for: 15)
+            nothingOnlyShown = nil
+            DispatchQueue.global().async { Aggregation.requestRescan() }
+            return
+        }
+        show("NOTHING ONLY: checking the USB cable…", Ink.amber, for: 30)
+        DispatchQueue.global().async {
+            for l in Phones.refreshAdb() { appendLog("\(logStamp()) NOTHING ONLY adb: \(l)") }
+            let n = CableOnly.nothingStatus()
+            DispatchQueue.main.async {
+                self.nothingSaid = n.words; self.nothingAt = Date()
+                guard n.ok else {
+                    appendLog("\(logStamp()) NOTHING ONLY refused: \(n.words) (\(n.detail))")
+                    self.show("NOTHING ONLY not switched on: \(n.words)", Ink.red, for: 45, tip: n.detail)
+                    return
+                }
+                NothingOnly.set(true)
+                appendLog("\(logStamp()) NOTHING ONLY on (\(n.detail)): the Nothing's Wi-Fi off over USB, its cell modem; AX88179B standby")
+                self.show("NOTHING ONLY: joining the Nothing on the cable…", Ink.amber, for: 30)
+                if Aggregation.on { DispatchQueue.global().async { Aggregation.requestRescan() } } else { self.switchMode(true) }
+            }
+        }
+    }
+
+    // Every 2 s: who carries in NOTHING ONLY (ck-aggregate's nothing-only-state), said when it changes.
+    func showNothingOnly() {
+        let st = NothingOnly.state
+        guard st != nothingOnlyShown else { return }
+        nothingOnlyShown = st
+        guard let st else { return }
+        if st == "nothing" {
+            show("NOTHING ONLY ✓ the Nothing carries (cable, cell modem)", Ink.green, for: 20)
+        } else if st.hasPrefix("standby ") {
+            appendLog("\(logStamp()) NOTHING ONLY fallback on the stripe: \(st.dropFirst(8))")
+            show("NOTHING ONLY: the Nothing does not answer: \(st.dropFirst(8)) carries (fallback)", Ink.red, for: 3600)
+        } else {
+            show("NOTHING ONLY: no line at all", Ink.red, for: 3600)
         }
     }
 }

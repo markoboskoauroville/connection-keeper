@@ -52,6 +52,7 @@ final class Uplink {
     }
     static var reasons: [String: String] = [:]           // v53: the phones kept out of the pool, and why
     var cellular = false                                 // a phone whose internet is its mobile data, not a Wi-Fi
+    var standby = false                                  // v81 NOTHING ONLY: used only while no other line answers
     func sameLine(_ o: Uplink) -> Bool {
         // Two 4G lines of the same operator can leave through the same public address (carrier NAT): at 09:06 on
         // 31.10.2026 the Nothing (LTE, Telemach) read the TP-Link's 86.33.92.213 and was dropped as "the same line" for
@@ -90,11 +91,19 @@ enum Lines {
     static func discover(known: [String: String] = [:], anyLine: Bool = false) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
         // v71: CI's hand-over test: one fake line (lo0), so connections to a local test server go through the server
         if let fake = aggEnv["CK_AGG_FAKE_LINE"] { return ([Uplink(iface: fake, name: "test line \(fake)", gateway: nil, gatewayMAC: nil, publicIP: nil)], []) }
+        if !anyLine && NothingOnly.on { return discoverNothingOnly(known: known) }
         let wifi = Net.wifiInterface()
         let ticked = anyLine ? [] : Set(Aggregation.joinable)
         var found: [Uplink] = [], refused: [(Uplink, Uplink)] = []
         for i in Net.activeInterfaces() {
             guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
+            // v81 (request 89): a phone's hotspot is never a line; the Nothing joins only by its USB cable (adb)
+            if i == wifi, let ssid = Net.currentSSID(i), CableOnly.isPhoneHotspot(ssid) {
+                if Uplink.reasons[i] != "PHONE HOTSPOT" { log("\(ssid) (\(i)) is not joined: PHONE HOTSPOT (the Nothing is a line only by its USB cable)"); Uplink.reasons[i] = "PHONE HOTSPOT" }
+                refused.append((Uplink(iface: i, name: ssid, gateway: nil, gatewayMAC: nil, publicIP: nil), Uplink(iface: "reason", name: "PHONE HOTSPOT", gateway: nil, gatewayMAC: nil, publicIP: nil)))
+                continue
+            }
+            if Uplink.reasons[i] == "PHONE HOTSPOT" { Uplink.reasons[i] = nil }
             found.append(Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i]))
         }
         // v17 (request 36): every phone on a USB cable with its server answering is a line of its own.
@@ -147,14 +156,61 @@ enum Lines {
         return (lines, ignored)
     }
 
+    // NOTHING ONLY (v81, request 90; CableOnly.swift): the Nothing on its USB cable is the line, on its cell modem (its
+    // Wi-Fi switched off over the USB serial); the Mac's other lines (AX88179B first) only as standby.
+    static var nothingOnlySaid = ""
+    static func discoverNothingOnly(known: [String: String]) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
+        var lines: [Uplink] = [], ignored: [(Uplink, Uplink)] = []
+        for p in Phones.list() where NothingOnly.isNothing(p.name) {          // USB transport only (Phones.list)
+            if let note = Phones.ensure(p) { log("NOTHING ONLY \(p.name): \(note)") }
+            guard Phones.answers(p) else { log("NOTHING ONLY \(p.name): ck-phone does not answer"); continue }
+            if let adb = Phones.adb, !shell(adb, ["-s", p.serial, "shell", "cmd", "wifi", "status"], timeout: 6).out.contains("Wifi is disabled") {
+                shell(adb, ["-s", p.serial, "shell", "cmd", "wifi", "set-wifi-enabled", "disabled"], timeout: 8)
+                log("NOTHING ONLY \(p.name): its Wi-Fi switched off over USB (\(p.serial)), so it goes out on its cell modem")
+                for _ in 0..<12 where !Phones.onMobileData(p) { usleep(500_000) }
+            }
+            let up = Phones.uplink(p)
+            if let word = up.word {
+                if Uplink.reasons[p.device] != word { log("NOTHING ONLY \(p.name) is not joined: \(word)"); Uplink.reasons[p.device] = word }
+                ignored.append((Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: nil), Uplink(iface: "reason", name: word, gateway: nil, gatewayMAC: nil, publicIP: nil)))
+                continue
+            }
+            Uplink.reasons[p.device] = nil
+            let u = Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: Phones.publicIP(p) ?? known[p.device])
+            u.phone = p; u.cellular = true; lines.append(u)
+        }
+        // the standby: every other line of the Mac (the cable first), never a phone hotspot; it carries only while the
+        // Nothing does not answer (Server.usable), so the Mac is never left without internet
+        let wifi = Net.wifiInterface()
+        var spare: [(String, String)] = []
+        for i in Net.activeInterfaces() where i != Aggregation.tunnelDevice && !i.hasPrefix("utun") {
+            guard let gw = gateway(i) else { continue }
+            if i == wifi, CableOnly.isPhoneHotspot(Net.currentSSID(i)) { continue }
+            spare.append((i, gw))
+        }
+        spare.sort { ($0.0 == wifi ? 1 : 0) < ($1.0 == wifi ? 1 : 0) }
+        if let first = spare.first {                                            // one standby: AX88179B when it is there
+            let (i, gw) = first
+            let u = Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i])
+            u.standby = true; lines.append(u)
+        }
+        let mainNames: String = lines.filter { !$0.standby }.map { $0.name }.joined(separator: " + ")
+        let spareNames: String = lines.filter { $0.standby }.map { $0.name }.joined(separator: ", ")
+        let said = "NOTHING ONLY lines: " + (mainNames.isEmpty ? "no Nothing on the cable" : mainNames) + "; standby: " + (spareNames.isEmpty ? "none" : spareNames)
+        if said != nothingOnlySaid { nothingOnlySaid = said; log(said) }
+        let w = savedSpeeds()
+        for u in lines { if let m = w[u.publicIP ?? u.iface] { u.mbps = max(m, 0.5) } }
+        return (lines, ignored)
+    }
+
     // THE LINES REMEMBERED (v41, request 57, Marko 31.10.2026: "Can this time be improved?"): a restart left the server
     // with no line for ~7 s while it asked every device for its router and public address, and every connection of the
     // Mac waited. The lines are written down whenever they change; at start those whose device still has an address
     // carry traffic at once, and the full search replaces them a few seconds later (a gone one fails over in the race).
-    struct Saved: Codable { let iface, name: String; let gateway, gatewayMAC, publicIP: String?; let serial: String?; let port: UInt16?; let cellular: Bool }
+    struct Saved: Codable { let iface, name: String; let gateway, gatewayMAC, publicIP: String?; let serial: String?; let port: UInt16?; let cellular: Bool; var standby: Bool? = nil }
     static func remember(_ ls: [Uplink]) {
         let all = ls.map { Saved(iface: $0.iface, name: $0.name, gateway: $0.gateway, gatewayMAC: $0.gatewayMAC, publicIP: $0.publicIP,
-                                 serial: $0.phone?.serial, port: $0.phone?.port, cellular: $0.cellular) }
+                                 serial: $0.phone?.serial, port: $0.phone?.port, cellular: $0.cellular, standby: $0.standby) }
         try? JSONEncoder().encode(all).write(to: Aggregation.remembered)
     }
     static func remembered() -> [Uplink] {
@@ -165,6 +221,7 @@ enum Lines {
             let u = Uplink(iface: s.iface, name: s.name, gateway: s.gateway, gatewayMAC: s.gatewayMAC, publicIP: s.publicIP)
             if let serial = s.serial, let port = s.port { u.phone = Phone(serial: serial, name: s.name, port: port) }
             u.cellular = s.cellular
+            u.standby = (s.standby ?? false) && NothingOnly.on
             if let m = w[u.publicIP ?? u.iface] { u.mbps = max(m, 0.5) }
             return u
         }
@@ -305,7 +362,7 @@ final class Server {
         // ever (2895 on the cable after four hours) and lost the busy marks the balance reads.
         let fresh = d.lines.map { u -> Uplink in
             guard let old = lines.first(where: { $0.iface == u.iface && $0.publicIP == u.publicIP }) else { return u }
-            old.mbps = u.mbps; old.phone = u.phone
+            old.mbps = u.mbps; old.phone = u.phone; old.standby = u.standby     // v81: NOTHING ONLY on/off follows at once
             return old
         }
         let before = lines.map { "\($0.name)/\($0.iface)" }, after = fresh.map { "\($0.name)/\($0.iface)" }
@@ -483,8 +540,14 @@ final class Server {
         }
     }
 
+    // v81 NOTHING ONLY: the lines that may carry: the standby only while no other line answers.
+    func usable(_ ls: [Uplink]) -> [Uplink] {
+        ls.contains { !$0.standby && $0.alive } ? ls.filter { !$0.standby } : ls
+    }
+
     // ⟳ (v32): the lines found again and every one of them checked now, not after its 3 s; the answer for the stripe.
     func rescan() {
+        for l in Phones.refreshAdb() { log("RESCAN adb: \(l)") }       // v81 (request 89)
         refresh()
         lock.lock(); for u in lines { u.lastGood = .distantPast }; lock.unlock()
         checkLines()

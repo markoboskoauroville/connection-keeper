@@ -32,6 +32,8 @@ extension Uplink {
     var capacity: Double { max(mbps, meter.peak, meter.probed ?? 0, 0.5) }
 }
 
+var nothingOnlyState = ""
+
 extension Server {
     // Lower is better. Dead lines last.
     // v62 (request 83, QC fix 3): + the line's connect time (60 ms → 0.06, 5 ms → 0.005): with the lines idle a new
@@ -58,6 +60,17 @@ extension Server {
                 let ls = lines
                 let total = ls.reduce(0) { $0 + $1.meter.rate }
                 lock.unlock()
+                // v81 NOTHING ONLY: who carries, said once on every change (log + the stripe's file)
+                if NothingOnly.on {
+                    let main = ls.filter { !$0.standby && $0.alive }, spare = ls.filter { $0.standby }
+                    let st = !main.isEmpty ? "nothing" : spare.isEmpty ? "none" : "standby " + spare.map(\.name).joined(separator: ", ")
+                    if st != nothingOnlyState {
+                        nothingOnlyState = st
+                        NothingOnly.writeState(st)
+                        log(st == "nothing" ? "NOTHING ONLY: the Nothing carries (\(main.map(\.name).joined(separator: " + ")))"
+                            : st == "none" ? "NOTHING ONLY: no line at all" : "NOTHING ONLY: the Nothing does not answer: \(st.dropFirst(8)) carries until it is back")
+                    }
+                } else { nothingOnlyState = "" }
                 if !aggQuiet {                                   // v71: a draining or interim server changes nothing
                     boostTick(boost, total: total, phones: ls.compactMap { $0.cellular ? $0.phone : nil })
                     if tick % 10 == 0 { for u in ls { checkRadio(u) } }

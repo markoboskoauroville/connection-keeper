@@ -799,7 +799,7 @@ extension Server {
         let host = c.server, port = c.port, k = max(1, min(c.legsPerLine, 2))
         return { [weak self] in
             guard let self else { return [] }
-            self.lock.lock(); let ls = self.lines.filter { $0.alive }; self.lock.unlock()
+            self.lock.lock(); let ls = self.usable(self.lines).filter { $0.alive }; self.lock.unlock()   // v81: NOTHING ONLY = the Nothing's legs
             return ls.flatMap { u in
                 (0..<k).map { i in
                     BondPath(key: "\(u.iface)#\(i)", line: u.name, dial: {

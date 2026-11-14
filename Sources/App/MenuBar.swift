@@ -137,6 +137,7 @@ extension Stripe {
             return
         }
         MenuBarPrefs.stripeHidden = false
+        if panel.isMiniaturized { panel.deminiaturize(nil) }         // v81: his click brings it out of the Dock
         if let f = minimizedFrame { minimizedFrame = nil; panel.setFrame(f, display: true) }
         if let s = screen, panel.screen != s {
             let v = s.visibleFrame

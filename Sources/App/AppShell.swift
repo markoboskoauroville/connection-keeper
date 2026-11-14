@@ -74,6 +74,18 @@ final class AppShell: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return false
     }
 
+    // v81 (request 89): down in the Dock it stays down; only his click (the Dock icon, the window's Dock tile, the menu bar
+    // icon, ⌘-Tab + reopen) brings it back, and then the size it waited for is applied.
+    func windowDidMiniaturize(_ notification: Notification) {
+        appendLog("\(logStamp()) WINDOW down in the Dock")
+    }
+    func windowDidDeminiaturize(_ notification: Notification) {
+        let how = NSApp.currentEvent.map { "event type \($0.type.rawValue)" } ?? "no event"
+        appendLog("\(logStamp()) WINDOW back from the Dock (\(how))")
+        stripe.fitWaiting = false
+        stripe.fit()
+    }
+
     // An edge drag changes the width; the height follows the content (the stripe's own fit).
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
         NSSize(width: max(frameSize.width, 320), height: sender.frame.height)

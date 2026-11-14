@@ -128,6 +128,7 @@ extension Stripe {
         if scanning { return }
         scanning = true
         let main = iface
+        let seen = adbSeen, seenAt = nothingAt
         DispatchQueue.global().async {
             let st = Aggregation.status()
             let wifi = Net.wifiInterface()
@@ -137,8 +138,17 @@ extension Stripe {
             for i in Net.activeInterfaces() {
                 let gw = shell("/usr/sbin/ipconfig", ["getoption", i, "router"], timeout: 5).out.trimmingCharacters(in: .whitespacesAndNewlines)
                 if gw.isEmpty { continue }
+                // v81 (request 89): a phone's hotspot is never a line (the Nothing only by its USB cable)
+                let hot = i == wifi && CableOnly.isPhoneHotspot(Net.currentSSID(i))
                 found.append(OtherLine(iface: i, name: Net.displayName(i), wifi: i == wifi, ms: Net.onlineVia(i),
-                                       sameAs: st?.ignored.first { $0.device == i }?.sameLineAs))
+                                       sameAs: hot ? "PHONE HOTSPOT: not used" : st?.ignored.first { $0.device == i }?.sameLineAs))
+            }
+            // v81 (request 89): adb looked at; a change (a phone plugged in or out) or every 30 s: the Nothing's cable said
+            let adbNow = CableOnly.entries().map { "\($0.serial)=\($0.state)\($0.usb ? "u" : "")" }.sorted().joined(separator: " ")
+            var nothing: (ok: Bool, words: String, detail: String)?
+            if adbNow != seen || Date().timeIntervalSince(seenAt) > 30 {
+                if adbNow != seen && !seen.isEmpty { Phones.refreshAdb().forEach { appendLog("\(logStamp()) ADB \($0)") } }
+                nothing = CableOnly.nothingStatus()
             }
             // v17 (request 36): a phone on a USB cable, its line over adb (its server started here if need be)
             for p in Phones.list() {
@@ -147,6 +157,7 @@ extension Stripe {
             }
             DispatchQueue.main.async {
                 self.scanning = false
+                if let n = nothing { self.adbSeen = adbNow; self.nothingAt = Date(); self.sayNothing(n, force: false) }
                 self.others = found
                 self.agg = st
                 self.watchServer(st)
@@ -544,5 +555,18 @@ extension Stripe {
                 self.show(ok ? "\(five ? "5G" : "4G"): the phone shows \(st?.shown ?? "?")" : "the phone did not take the change (adb)", ok ? Ink.green : Ink.red, for: 8)
             }
         }
+    }
+}
+
+// v81 (request 89): the Nothing's cable in words on the status line, when it changes (and on ⟳), and in the log.
+extension Stripe {
+    func sayNothing(_ n: (ok: Bool, words: String, detail: String), force: Bool) {
+        let changed = n.words != nothingSaid
+        if changed { appendLog("\(logStamp()) NOTHING \(n.words) (\(n.detail))") }
+        nothingSaid = n.words
+        guard changed || force else { return }
+        // the first look after start says only a problem; "not on the cable" while it never was is said on ⟳ only
+        if !force && !n.ok && n.words == "Nothing: not on the cable" { return }
+        show(n.words, n.ok ? Ink.green : Ink.amber, for: n.ok ? 15 : 45, tip: n.detail)
     }
 }

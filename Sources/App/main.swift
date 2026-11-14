@@ -209,6 +209,11 @@ final class Stripe: NSObject {
     var wiresBusy = false
     var sharing: Set<String> = []        // v34: the lines whose Wi-Fi share is switching
     var minimizedFrame: NSRect?
+    var nothingSaid = ""                 // v81 (request 89): the last words about the Nothing's cable
+    var nothingAt = Date.distantPast
+    var adbSeen = ""                     // v81: `adb devices` last seen by the scan (a plug-in = a change)
+    var fitWaiting = false
+    var nothingOnlyShown: String?         // v81 (request 90): the NOTHING ONLY state last said on the stripe               // v81: a size change kept until the window is back from the Dock
     var failoverWidth: NSLayoutConstraint!
     var checkedPipe: NSTextField!
     var failoverPipe: NSTextField!
@@ -499,6 +504,10 @@ final class Stripe: NSObject {
         NotificationCenter.default.addObserver(forName: DataBalanceNote.checkNow, object: nil, queue: .main) { [weak self] _ in self?.checkDataByHand() }
         // v32: ⟳ pressed from outside too (a terminal, a script): the distributed notification "ConnectionKeeperRescan"
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperRescan"), object: nil, queue: .main) { [weak self] _ in self?.rescanNow() }
+        // v81 (request 90): NOTHING ONLY from a terminal too: object "on" or "off" (the same checks as ⚙)
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperNothingOnly"), object: nil, queue: .main) { [weak self] n in
+            self?.setNothingOnly((n.object as? String) == "on")
+        }
     }
 
     // THE DATA BALANCE (v8): the last answer, "28.6 GB left · 11:57" (GB with one decimal, the time from Telemach's SMS);
@@ -634,7 +643,7 @@ final class Stripe: NSObject {
         if OnTop.on {
             panel.level = .floating
             panel.collectionBehavior = [.managed, .fullScreenAuxiliary]
-            if !MenuBarPrefs.stripeHidden { panel.orderFrontRegardless() }
+            if !MenuBarPrefs.stripeHidden && !panel.isMiniaturized && panel.isVisible { panel.orderFrontRegardless() }   // v81: never out of the Dock or out of hiding by itself
         } else {
             panel.level = .normal
             panel.collectionBehavior = [.managed]
@@ -647,7 +656,7 @@ final class Stripe: NSObject {
         showRoute()
         showChoice()
         if tick % 5 == 0 { showCloud(); showTailscale() }
-        if tick % 2 == 0 { showBond() }
+        if tick % 2 == 0 { showBond(); showNothingOnly() }
         applyAlert()
         showLed()
         // v28: the dot is gone from the stripe; when it would have been red or amber the name says it in that colour
@@ -719,7 +728,7 @@ final class Stripe: NSObject {
     }
 
     func restoreStripe() {
-        guard let f = minimizedFrame else { return }
+        guard let f = minimizedFrame, !panel.isMiniaturized else { return }
         minimizedFrame = nil
         panel.setFrame(f, display: true)
         keepOnScreen()
@@ -749,6 +758,10 @@ final class Stripe: NSObject {
         if root.bounds.size != natural { rescale(root, natural) }
         let now = panel.contentRect(forFrameRect: panel.frame).size      // v73: the window has a title bar
         if abs(size.width - now.width) < 1 && abs(size.height - now.height) < 1 { return }
+        // v81 (request 89: "when I put it down in my window, by itself it's just raising up"): a frame change of a window
+        // in the Dock brings it back out (AppKit deminiaturizes it). fit() runs every second and on every status word, so
+        // the window came back up by itself. Down in the Dock it keeps its frame; the size is applied when he brings it back.
+        if panel.isMiniaturized { fitWaiting = true; return }
         let x = panel.frame.minX, top = panel.frame.maxY
         resizingByHand = true
         panel.setContentSize(size)
@@ -828,6 +841,7 @@ final class Stripe: NSObject {
         UserDefaults.standard.set(Double(s), forKey: "stripeScale")
         let natural = naturalSize(gap: g, column)
         let top = panel.frame.maxY, x = panel.frame.minX
+        if panel.isMiniaturized { fitWaiting = true; return }   // v81
         resizingByHand = true
         panel.setContentSize(NSSize(width: ceil(natural.width * s), height: ceil(natural.height * s)))
         rescale(root, natural)
@@ -841,12 +855,26 @@ final class Stripe: NSObject {
     // menu bar strip included: he puts it at the very top of the Mac's display); only a stripe on no display at all goes
     // to the main one. Before, a top edge 1 point into the menu bar strip sent it to the BenQ (four times on 18.10.2026).
     func keepOnScreen() {
+        if panel.isMiniaturized { return }                      // v81: never moved while in the Dock
         let f = panel.frame
+        // v81 (request 89: "when I put it down in my window, by itself it's just raising up"): a window he put low, its
+        // lower part below the display's edge, is HIS place: it is not pushed back up. Only the title bar must stay
+        // reachable: its strip (the top 28 points) on a display with at least 80 points of it showing, and the top not
+        // above that display. Before, every size change (each status word, each line row: fit() → keepOnScreen) lifted
+        // a stripe he had put down back inside the display.
+        let bar = NSRect(x: f.minX, y: f.maxY - 28, width: f.width, height: 28)
+        if let s = NSScreen.screens.first(where: { $0.frame.intersection(bar).width >= 80 && $0.frame.intersection(bar).height >= 20 }) {
+            if f.maxY > s.frame.maxY { panel.setFrameOrigin(NSPoint(x: f.minX, y: s.frame.maxY - f.height)) }
+            return
+        }
         if let s = NSScreen.screens.max(by: { $0.frame.intersection(f).width * $0.frame.intersection(f).height < $1.frame.intersection(f).width * $1.frame.intersection(f).height }),
            !s.frame.intersection(f).isNull {
             let r = s.frame
             let x = min(max(f.minX, r.minX), r.maxX - f.width), y = min(max(f.minY, r.minY), r.maxY - f.height)
-            if x != f.minX || y != f.minY { panel.setFrameOrigin(NSPoint(x: x, y: y)) }
+            if x != f.minX || y != f.minY {
+                panel.setFrameOrigin(NSPoint(x: x, y: y))
+                appendLog("\(logStamp()) WINDOW title bar was off the display: moved back inside (\(Int(f.minX)),\(Int(f.minY)) → \(Int(x)),\(Int(y)))")
+            }
             return
         }
         guard let screen = NSScreen.main ?? NSScreen.screens.first else { return }
@@ -1066,6 +1094,7 @@ final class Stripe: NSObject {
     @objc func pick(_ item: NSMenuItem) {
         guard let name = item.representedObject as? String else { return }
         if Config.load().dryRun { show("dry run: would join \(name)", Ink.amber, for: 20); return }
+        if CableOnly.isPhoneHotspot(name) { show("\(name) is a phone hotspot: not used (the Nothing only by its USB cable)", Ink.amber, for: 15); return }
         let iface = Net.wifiInterface() ?? "en0"
         Net.prefer(iface)                                   // v12: Wi-Fi above a cable, so the internet follows the pick
         if Net.currentSSID(iface) == name {
@@ -1186,6 +1215,9 @@ final class Stripe: NSObject {
         scanLines()
         let aggregating = Aggregation.aggregateMode
         DispatchQueue.global().async {
+            // v81 (request 89): adb looked at again first (start-server, reconnect offline, stale entries dropped), so a
+            // Nothing just plugged in is found by this same rescan; afterwards the stripe says what its cable gives.
+            for l in Phones.refreshAdb() { appendLog("\(logStamp()) RESCAN adb: \(l)") }
             var answer: [String]?
             if aggregating {
                 Aggregation.requestRescan()
@@ -1216,6 +1248,17 @@ final class Stripe: NSObject {
                 self.fit()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 20.5) {
                     if Date() >= self.pingHeld { self.checked.toolTip = nil; self.refresh() }
+                }
+                let lines = self.checked.stringValue, tip = self.checked.toolTip
+                DispatchQueue.global().async {
+                    let n = CableOnly.nothingStatus()
+                    DispatchQueue.main.async {
+                        if n.words != self.nothingSaid { appendLog("\(logStamp()) NOTHING \(n.words) (\(n.detail))") }
+                        self.nothingSaid = n.words; self.nothingAt = Date()
+                        appendLog("\(logStamp()) RESCAN \(n.words)")
+                        self.show("\(lines)  ·  \(n.words)", n.ok ? Ink.green : Ink.amber, for: 45,
+                                  tip: [tip, n.detail].compactMap { $0 }.joined(separator: "\n"))
+                    }
                 }
             }
         }
