@@ -100,7 +100,7 @@ struct BondFetch { var ok = false, bytes = 0, length = -1, sha = "", secs = 0.0,
 func bondFetch(_ b: BondClient, host: String, port: UInt16, path: String, progress: ((Int) -> Void)? = nil) -> BondFetch {
     var r = BondFetch()
     let t0 = bnow()
-    guard let s = b.open(host, port, optimistic: true) else { r.why = "the stream did not open"; return r }   // the request follows OPEN at once
+    guard let s = b.open(host, port, timeout: 3) else { r.why = "the stream did not open"; return r }   // as the server does: OPEN_OK first
     var sv: [Int32] = [0, 0]
     guard socketpair(AF_UNIX, SOCK_STREAM, 0, &sv) == 0 else { b.reset(s); r.why = "socketpair failed"; return r }
     var big: Int32 = 1 << 20, one: Int32 = 1
@@ -206,6 +206,37 @@ func bondSelftest(_ args: [String]) -> Never {
     if killedAt < 0 { failures.append("fetch 2: lineA was never silenced") }
     if !f2.ok { failures.append("fetch 2: \(f2.why)") }
     if f2.sha != want { failures.append("fetch 2: SHA-256 differs") }
+    // 3. v71: the relay is upgraded (SIGHUP: the binary on disk takes over the same socket) in the middle of a fetch, while
+    // a new small fetch starts every 100 ms: the big one must finish intact on the old process, no small one may fail
+    if let rp = arg("--relay-pid").flatMap({ Int32($0) }), let small = arg("--small") {
+        let pl = NSLock()
+        var probes = 0, probeFails: [String] = [], probing = true, hupAt = -1.0
+        let t3 = bnow()
+        Thread.detachNewThread {
+            while true {
+                pl.lock(); let go = probing; pl.unlock()
+                if !go { break }
+                let r = bondFetch(client, host: host, port: port, path: small)
+                pl.lock(); probes += 1; if !r.ok { probeFails.append(String(format: "%.1f s: %@", bnow() - t3, r.why)) }; pl.unlock()
+                usleep(100_000)
+            }
+        }
+        let f3 = bondFetch(client, host: host, port: port, path: path, progress: { got in
+            if hupAt < 0 && got >= 16 << 20 { hupAt = bnow() - t3; kill(rp, SIGHUP); print(String(format: "  relay told to hand over (SIGHUP) at %d bytes (%.2f s)", got, hupAt)) }
+        })
+        sleep(3)                                            // the probes go on after the switch, on the new process
+        pl.lock(); probing = false; let n = probes, bad = probeFails; pl.unlock()
+        sleep(1)
+        let gen = (client.status()["generation"] as? Int) ?? 0
+        print(String(format: "fetch 3 (relay upgraded mid-way): %d bytes in %.2f s; sha %@ (%@); small fetches during it: %d, failed %d; generation now %d",
+                     f3.bytes, f3.secs, f3.sha, f3.sha == want ? "matches" : "DIFFERENT", n, bad.count, gen))
+        for b in bad.prefix(5) { print("  failed probe: \(b)") }
+        if hupAt < 0 { failures.append("fetch 3: the relay was never told to hand over") }
+        if !f3.ok || f3.sha != want { failures.append("fetch 3: \(f3.ok ? "SHA-256 differs" : f3.why)") }
+        if !bad.isEmpty { failures.append("fetch 3: \(bad.count) of \(n) small fetches failed during the hand-over") }
+        if n < 20 { failures.append("fetch 3: only \(n) small fetches ran") }
+        if gen < 1 { failures.append("fetch 3: no new generation after the hand-over (no GOAWAY seen)") }
+    }
     let st = client.status()
     if let d = try? JSONSerialization.data(withJSONObject: st, options: [.sortedKeys]) { print("status: " + String(decoding: d, as: UTF8.self)) }
     if failures.isEmpty {

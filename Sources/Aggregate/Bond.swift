@@ -17,7 +17,7 @@ import CryptoKit
 
 enum BondProto {
     static let open: UInt8 = 1, openOK: UInt8 = 2, openFail: UInt8 = 3, data: UInt8 = 4, fin: UInt8 = 5
-    static let rst: UInt8 = 6, ack: UInt8 = 7, ping: UInt8 = 8, pong: UInt8 = 9, welcome: UInt8 = 10
+    static let rst: UInt8 = 6, ack: UInt8 = 7, ping: UInt8 = 8, pong: UInt8 = 9, welcome: UInt8 = 10, goaway: UInt8 = 13
     static let header = 11, maxPayload = 16384, tag = 16
     static let minRecord = 11 + 16, maxRecord = 11 + 16384 + 16
     static let window = 4 << 20, streamAckEvery = 256 << 10, legAckEvery: UInt64 = 32 << 10, minCap = 65536.0
@@ -155,6 +155,7 @@ final class BLeg {
     var sampleAt = bnow(), sampleAcked: UInt64 = 0
     var busyAll = true, peerRate = 0.0                   // v67: backlogged since the last sample; the relay's estimate (its PONGs)
     var lastHeard = bnow(), lastPing = 0.0, pingID: UInt32 = 0, dead = false
+    var gen = 0                                          // v71: the relay process (generation) this leg belongs to
     init(key: String, line: String, fd: Int32, tx: BondCipher, rx: BondCipher) {
         self.key = key; self.line = line; self.fd = fd; self.tx = tx; self.rx = rx
     }
@@ -170,6 +171,7 @@ final class BStream {
     var finSent = false, finRecv = false, done = false, delivering = true
     var up = 0, down = 0
     var born = bnow(), sentTotal = 0                    // v67: the watchdog of an optimistic OPEN; the priority of a young stream
+    var gen = 0                                          // v71: its relay process; it stays on that generation's legs
     init(_ id: UInt32) { self.id = id }
 }
 
@@ -185,6 +187,10 @@ final class BondClient {
     var noLegsSince: Double?
     var bytesUp = 0, bytesDown = 0, opened = 0
     var bypassSaid: String?
+    // v71 (request 85, hitless): a GOAWAY (the relay hands over to a new process) starts a new generation: a new client id,
+    // new legs, new streams there; the old generation's legs carry its streams to their end, then close. `accepting` false:
+    // this client drains (bond switched off or changed): no new stream, the open ones finish, then it stops.
+    var gen = 0, accepting = true
     // v69: the lines the aggregation leaves out, and why (NO DATA from the stripe's probe, not answering): asked once a
     // second in manage(), named in `bypass` and in the path log, so a line that never gets a leg is never a mystery
     var excluded: () -> [String] = { [] }
@@ -200,6 +206,19 @@ final class BondClient {
         Thread.detachNewThread { [self] in while isRunning { usleep(50_000); tick() } }
     }
     var isRunning: Bool { cv.lock(); defer { cv.unlock() }; return running }
+    func drain() {
+        cv.lock(); accepting = false; let n = streams.values.filter { !$0.done }.count; cv.unlock()
+        log("BOND draining: \(n) open stream\(n == 1 ? "" : "s") finish on their legs, new connections take today's path")
+        Thread.detachNewThread { [self] in
+            let end = bnow() + 600
+            while bnow() < end {
+                cv.lock(); let left = streams.values.filter { !$0.done }.count; cv.unlock()
+                if left == 0 { break }
+                sleep(1)
+            }
+            stop()
+        }
+    }
     func stop() {
         cv.lock()
         running = false
@@ -219,33 +238,35 @@ final class BondClient {
         excludedNow = out
         if said != pathsSaid { pathsSaid = said; log("BOND paths: \(said)") }
         let keys = Set(want.map(\.key))
-        for l in legs where !keys.contains(l.key) { kill(l, "its line is gone") }
-        let now = bnow()
+        for l in legs where l.gen == gen && !keys.contains(l.key) { kill(l, "its line is gone") }
+        let now = bnow(), g = gen, cid = clientID
         var go: [BondPath] = []
-        for p in want where !legs.contains(where: { $0.key == p.key }) && !dialing.contains(p.key) && (retryAt[p.key] ?? 0) <= now {
+        for p in want where !legs.contains(where: { $0.key == p.key && $0.gen == g }) && !dialing.contains(p.key) && (retryAt[p.key] ?? 0) <= now {
             dialing.insert(p.key); go.append(p)
         }
         cv.unlock()
-        for p in go { Thread.detachNewThread { [self] in connect(p) } }
+        for p in go { Thread.detachNewThread { [self] in connect(p, gen: g, cid: cid) } }
     }
 
-    func connect(_ p: BondPath) {
-        let leg = handshake(p)
+    func connect(_ p: BondPath, gen g: Int, cid: [UInt8]) {
+        let leg = handshake(p, cid: cid)
         cv.lock()
         dialing.remove(p.key)
-        guard let leg, running else {
+        guard let leg, running, g == gen else {
             let n = (fails[p.key] ?? 0) + 1
             fails[p.key] = n
             retryAt[p.key] = bnow() + min(30, 1.5 * Double(1 << min(n, 5)))     // 3, 6, 12, 24, 30 s
             cv.unlock()
             if let leg { shutdown(leg.fd, SHUT_RDWR); close(leg.fd) }
+            if leg != nil { return }                        // made for a generation that has gone meanwhile: not a failure
             if n == 1 || n % 20 == 0 { log("BOND leg \(p.key) (\(p.line)): no answer from \(host):\(port) (\(n) tries)") }
             return
         }
+        leg.gen = g
         legs.append(leg); fails[p.key] = nil; retryAt[p.key] = nil
-        let count = legs.count
+        let count = legs.filter { $0.gen == g }.count
         cv.broadcast(); cv.unlock()
-        log("BOND leg \(p.key) (\(p.line)) up, \(count) leg\(count == 1 ? "" : "s")")
+        log("BOND leg \(p.key) (\(p.line)) up, \(count) leg\(count == 1 ? "" : "s")\(g > 0 ? " (generation \(g))" : "")")
         let g = DispatchGroup()
         g.enter(); Thread.detachNewThread { [self] in writer(leg); g.leave() }
         g.enter(); Thread.detachNewThread { [self] in reader(leg); g.leave() }
@@ -253,12 +274,11 @@ final class BondClient {
     }
 
     // The handshake: the server's nonce; ours, the client id and the HMAC; the server's first record (WELCOME).
-    func handshake(_ p: BondPath) -> BLeg? {
+    func handshake(_ p: BondPath, cid: [UInt8]) -> BLeg? {
         guard let fd = p.dial() else { return nil }
         deadline(fd, 8)
         guard let sn = readExact(fd, 32) else { close(fd); return nil }
         let cn = BondCrypto.random(32)
-        cv.lock(); let cid = clientID; cv.unlock()
         let mac = BondCrypto.mac(token, [Array("ckbond1".utf8), sn, cn, cid])
         guard sendAll(fd, cn + cid + mac) else { close(fd); return nil }
         let k = BondCrypto.keys(token, sn, cn)
@@ -330,9 +350,9 @@ final class BondClient {
     // (under cv) The live leg where n bytes arrive first: RTT/2 + queued/rate, among those under their in-flight cap.
     // `urgent` (v67): a young stream (its first 64 KB: a TLS handshake, a request) may use up to twice the cap, so it never
     // waits behind the bulk of the others (measured 14.11.2026: 0.6-1.4 s for google.com with one leg carrying the Mac).
-    func pick(_ n: Int, urgent: Bool = false) -> BLeg? {
+    func pick(_ n: Int, urgent: Bool = false, gen g: Int) -> BLeg? {
         var best: BLeg?, bt = Double.infinity
-        for l in legs where !l.dead {
+        for l in legs where !l.dead && l.gen == g {
             let infl = Double(l.sent - l.acked)
             let limit = max(BondProto.minCap, l.rate * (2 * l.rttMin + 0.05))
             if infl > 0 && infl + Double(n) > limit && !(urgent && infl + Double(n) <= 2 * limit) { l.capped = true; continue }
@@ -344,7 +364,7 @@ final class BondClient {
 
     func place(_ st: BSent, _ s: BStream) -> Bool {
         while running && !s.done {
-            if let l = pick(st.enc.count, urgent: s.sentTotal <= 65536) {
+            if let l = pick(st.enc.count, urgent: s.sentTotal <= 65536, gen: s.gen) {
                 l.dataq.append(st.enc); l.sent += UInt64(st.enc.count); st.leg = l; st.legEnd = l.sent
                 cv.broadcast()
                 return true
@@ -358,10 +378,16 @@ final class BondClient {
         guard let l, !l.dead else { return }
         l.ctlq.append(f.encode()); cv.broadcast()
     }
-    func bestLeg() -> BLeg? { legs.filter { !$0.dead }.min { $0.rttMin < $1.rttMin } }
+    func bestLeg(_ g: Int) -> BLeg? { legs.filter { !$0.dead && $0.gen == g }.min { $0.rttMin < $1.rttMin } }
+    // (under cv) The generation new streams go to: the newest with a live leg (the old relay process still serves while
+    // the new one's legs are being made), nil when no leg is up.
+    func servingGen() -> Int? {
+        if legs.contains(where: { !$0.dead && $0.gen == gen }) { return gen }
+        return legs.filter { !$0.dead }.map(\.gen).max()
+    }
     func legAckSend(_ l: BLeg) { ctl(l, BFrame(BondProto.ack, 0, 0, be64(l.recv))); l.recvAcked = l.recv }
     func streamAckSend(_ s: BStream) {
-        guard let l = bestLeg() else { return }
+        guard let l = bestLeg(s.gen) else { return }
         ctl(l, BFrame(BondProto.ack, s.id, s.delivered)); s.ackSent = s.delivered; s.ackBytes = 0; s.ackForce = false
     }
 
@@ -410,6 +436,11 @@ final class BondClient {
         case BondProto.rst:
             if let s = streams[f.stream], !s.done { finish(s, rst: false) }
         case BondProto.welcome: break
+        case BondProto.goaway:
+            guard l.gen == gen else { return }
+            gen += 1; clientID = BondCrypto.random(16); retryAt = [:]
+            log("BOND the relay hands over to a new process: generation \(gen) gets new legs, the open streams finish on generation \(gen - 1)")
+            Thread.detachNewThread { [self] in manage() }
         default:
             guard BondProto.sequenced(f.type) else { return }
             l.recv += UInt64(f.size)
@@ -437,7 +468,7 @@ final class BondClient {
         guard !s.done else { return }
         s.done = true
         if s.fd >= 0 { shutdown(s.fd, SHUT_RDWR) }
-        if rst { for l in legs { ctl(l, BFrame(BondProto.rst, s.id)) } }
+        if rst { for l in legs where l.gen == s.gen { ctl(l, BFrame(BondProto.rst, s.id)) } }
         cv.broadcast()
     }
     func reset(_ s: BStream) { cv.lock(); finish(s, rst: true); cv.unlock() }
@@ -469,13 +500,18 @@ final class BondClient {
             if s.delivered != s.ackSent || s.ackForce { streamAckSend(s) }
             if s.done && !s.delivering { streams[id] = nil }
         }
+        // the legs of an older generation close when none of its streams is left
+        let newUp = legs.contains { !$0.dead && $0.gen == gen }    // and only once the new generation has a leg
+        for g in Set(legs.map(\.gen)) where newUp && g < gen && !streams.values.contains(where: { $0.gen == g && !$0.done }) {
+            for l in legs where l.gen == g { kill(l, "its relay process has no stream left (generation \(g) done)") }
+        }
         // No leg for 50 s (the server forgets a group after 60): the streams end and the next legs start a new group.
         if legs.isEmpty {
             if noLegsSince == nil { noLegsSince = now }
             if let t = noLegsSince, now - t > 50 {
                 if !streams.isEmpty { log("BOND no leg for 50 s: \(streams.count) streams ended") }
                 for s in streams.values { finish(s, rst: false) }
-                clientID = BondCrypto.random(16); noLegsSince = now
+                clientID = BondCrypto.random(16); gen += 1; noLegsSince = now
             }
         } else { noLegsSince = nil }
         let why = bypass()
@@ -488,7 +524,9 @@ final class BondClient {
 
     // (under cv) Why new connections do not take the bond now, or nil when they do.
     func bypass() -> String? {
-        let lines = Set(legs.filter { !$0.dead }.map(\.line))
+        let g = servingGen()
+        let lines = Set(legs.filter { !$0.dead && $0.gen == g }.map(\.line))
+        if !accepting { return "draining (bond switched off or changed): the open streams finish, new connections go direct" }
         let why = excludedNow.isEmpty ? "" : "; left out: " + excludedNow.joined(separator: ", ")
         if lines.isEmpty { return "no leg to the relay is up: new connections go direct" + why }
         if lines.count < BondClient.minLines { return "only one line (\(lines.first!)) has a leg: one line gains nothing from the relay, new connections go direct" + why }
@@ -503,8 +541,8 @@ final class BondClient {
     // relay round trip; an OPEN_FAIL then closes the client's socket, and no OPEN_OK in 10 s resets the stream.
     func open(_ host: String, _ port: UInt16, timeout: Double = 10, optimistic: Bool = false) -> BStream? {
         cv.lock()
-        guard running, legs.contains(where: { !$0.dead }), streams.count < BondProto.maxStreams else { cv.unlock(); return nil }
-        let s = BStream(nextID); nextID += 1; streams[s.id] = s
+        guard running, accepting, let g = servingGen(), streams.count < BondProto.maxStreams else { cv.unlock(); return nil }
+        let s = BStream(nextID); nextID += 1; streams[s.id] = s; s.gen = g
         cv.unlock()
         Thread.detachNewThread { [self] in deliver(s) }
         let target = host.contains(":") ? "[\(host)]:\(port)" : "\(host):\(port)"
@@ -584,7 +622,7 @@ final class BondClient {
              "rateUpMbps": Double(Int(l.rate * 8 / 100_000)) / 10, "rateDownMbps": Double(Int(l.peerRate * 8 / 100_000)) / 10, "inflightKB": Int(l.sent - l.acked) / 1024,
              "mbSent": Double(Int(Double(l.sent) / 1e4)) / 100, "mbReceived": Double(Int(Double(l.recv) / 1e4)) / 100]
         }
-        return ["on": running, "bypass": bypass() ?? NSNull(), "server": "\(host):\(port)", "legs": ls, "streams": streams.count, "opened": opened,
+        return ["on": running, "bypass": bypass() ?? NSNull(), "server": "\(host):\(port)", "legs": ls, "generation": gen, "accepting": accepting, "streams": streams.count, "opened": opened,
                 "mbUp": Double(Int(Double(bytesUp) / 1e4)) / 100, "mbDown": Double(Int(Double(bytesDown) / 1e4)) / 100]
     }
 }
@@ -631,7 +669,7 @@ enum Bond {
                 let sig = want.map { "\($0.server)|\($0.port)|\($0.legsPerLine)|\(SHA256.hash(data: Array($0.token.utf8)).description)" }
                 if sig != last {
                     lock.lock(); let old = client; client = nil; lock.unlock()
-                    old?.stop()
+                    old?.drain()                     // v71: its open streams finish; new connections go direct meanwhile
                     if let c = want, let token, token.count >= 16 {
                         let nc = BondClient(host: c.server, port: c.port, token: token, paths: server.bondPaths(c))
                         nc.excluded = { [weak server] in server?.bondExcluded() ?? [] }

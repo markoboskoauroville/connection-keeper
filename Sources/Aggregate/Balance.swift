@@ -58,8 +58,10 @@ extension Server {
                 let ls = lines
                 let total = ls.reduce(0) { $0 + $1.meter.rate }
                 lock.unlock()
-                boostTick(boost, total: total, phones: ls.compactMap { $0.cellular ? $0.phone : nil })
-                if tick % 10 == 0 { for u in ls { checkRadio(u) } }
+                if !aggQuiet {                                   // v71: a draining or interim server changes nothing
+                    boostTick(boost, total: total, phones: ls.compactMap { $0.cellular ? $0.phone : nil })
+                    if tick % 10 == 0 { for u in ls { checkRadio(u) } }
+                }
                 if tick % 30 == 0 { logBalance(ls) }
             }
         }

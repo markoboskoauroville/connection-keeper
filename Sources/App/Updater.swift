@@ -98,7 +98,11 @@ enum Updater {
         rm -rf "$T.old"; mv "$T" "$T.old" || { open "$T"; exit 1; }
         if ditto "$N" "$T"; then rm -rf "$T.old"; else rm -rf "$T"; mv "$T.old" "$T"; fi
         open "$T"
-        launchctl kickstart -k "gui/$(id -u)/com.mantra.connectionkeeper.aggregate" 2>/dev/null   # the server on the new code (~0.4 s)
+        # v71: the server on the new code without one refused connection: an interim server shares the port, the old one
+        # drains, launchd starts the new one, the interim one drains (ck-aggregate handover; was kickstart -k, a ~0.4 s gap)
+        if launchctl print "gui/$(id -u)/com.mantra.connectionkeeper.aggregate" >/dev/null 2>&1; then
+          nohup "$T/Contents/MacOS/ck-aggregate" handover </dev/null >/dev/null 2>>"$HOME/Library/Logs/connection-keeper-aggregate.log" &
+        fi
         """
         do { try sh.write(to: script, atomically: true, encoding: .utf8) } catch { tell("Update failed: \(error)"); return }
         let p = Process()

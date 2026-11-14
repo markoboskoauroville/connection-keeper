@@ -24,6 +24,7 @@ const (
 	fPing     byte = 8 // payload: the sender's clock, echoed in PONG
 	fPong     byte = 9
 	fWelcome  byte = 10 // the server's first record on a leg: the handshake worked
+	fGoaway   byte = 13 // v71: this relay process hands over: open new legs (a new group) for new streams; old ones finish here
 
 	hdrLen     = 11
 	maxPayload = 16384

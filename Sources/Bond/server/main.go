@@ -13,6 +13,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -21,6 +22,8 @@ import (
 	"sync"
 	"time"
 )
+
+const relayVersion = "v71"
 
 const (
 	maxGroups      = 64
@@ -43,12 +46,14 @@ type server struct {
 	groups     map[[16]byte]*group
 	fails      map[string]*failRec
 	legs       int
+	draining   bool
 }
 
 func main() {
 	listen := flag.String("listen", ":443", "address to listen on")
 	tokenFile := flag.String("token-file", "/etc/ckbond/token", "file holding the shared token (hex, 64 characters)")
 	allowLocal := flag.Bool("allow-local", false, "let streams reach loopback and private addresses (the loopback test only)")
+	drainFor := flag.Duration("drain", 10*time.Minute, "after a hand-over, how long the old process serves its streams at most")
 	flag.Parse()
 	log.SetFlags(log.LstdFlags)
 	raw, err := os.ReadFile(*tokenFile)
@@ -60,14 +65,24 @@ func main() {
 		log.Fatalf("BOND the token file %s must hold at least 32 hex characters", *tokenFile)
 	}
 	s := &server{token: token, allowLocal: *allowLocal, groups: map[[16]byte]*group{}, fails: map[string]*failRec{}}
-	ln, err := net.Listen("tcp", *listen)
+	ln, inherited, err := listener(*listen)
 	if err != nil {
 		log.Fatalf("BOND cannot listen on %s: %v", *listen, err)
 	}
-	log.Printf("BOND ckbond v1 on %s (local destinations %s)", *listen, map[bool]string{true: "allowed", false: "refused"}[*allowLocal])
+	how := "new socket"
+	if inherited {
+		how = "the socket handed over by the old process"
+	}
+	log.Printf("BOND ckbond v1 (%s) pid %d on %s, %s (local destinations %s)", relayVersion, os.Getpid(), *listen, how, map[bool]string{true: "allowed", false: "refused"}[*allowLocal])
+	readyForParent()
+	sdNotify(fmt.Sprintf("MAINPID=%d\nREADY=1", os.Getpid()))
+	go s.signals(ln, *drainFor)
 	for {
 		c, err := ln.Accept()
 		if err != nil {
+			if s.isDraining() {
+				select {} // the successor accepts now; signals() ends this process when its streams are done
+			}
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}

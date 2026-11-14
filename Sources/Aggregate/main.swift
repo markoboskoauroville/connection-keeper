@@ -15,6 +15,7 @@
 //   ck-aggregate test [s]        each line alone, then all through the server, down and up, s seconds each (default 6)
 //   ck-aggregate test-line <n>   one line alone, down and up (a click on its row's speed)
 //   ck-aggregate on | off        macOS's SOCKS proxy on every network service → the server, or back off
+//   ck-aggregate handover        v71: an upgrade without a refused connection (Handover.swift; the updater runs it)
 //   ck-aggregate bond-init       v65: bond.json with a new token (bond off); prints only where it is
 //   ck-aggregate bond-selftest   v65: the loopback proof of ckbond (CI): 3 emulated lines, one killed mid-fetch
 import Foundation
@@ -87,6 +88,8 @@ enum Lines {
     // single lost ping on a full 4G line dropped Something for a minute in the middle of the first joined test,
     // 18.10.2026). `known`: the public IPs found before, kept when a lookup fails under load.
     static func discover(known: [String: String] = [:], anyLine: Bool = false) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
+        // v71: CI's hand-over test: one fake line (lo0), so connections to a local test server go through the server
+        if let fake = aggEnv["CK_AGG_FAKE_LINE"] { return ([Uplink(iface: fake, name: "test line \(fake)", gateway: nil, gatewayMAC: nil, publicIP: nil)], []) }
         let wifi = Net.wifiInterface()
         let ticked = anyLine ? [] : Set(Aggregation.joinable)
         var found: [Uplink] = [], refused: [(Uplink, Uplink)] = []
@@ -375,13 +378,26 @@ final class Server {
     }
 
     func run() {
+        // v71 (request 85, hitless): SO_REUSEPORT, so a new server can listen beside the old one during an upgrade
+        // (`ck-aggregate handover`); the old one then stops accepting and lets its connections finish (SIGTERM).
         let s = socket(AF_INET, SOCK_STREAM, 0)
         var one: Int32 = 1
         setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(s, SOL_SOCKET, SO_REUSEPORT, &one, socklen_t(MemoryLayout<Int32>.size))
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET); addr.sin_port = aggPort.bigEndian; addr.sin_addr.s_addr = inet_addr("127.0.0.1")
-        let b = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
-        guard b == 0, listen(s, 256) == 0 else { log("port \(aggPort) is taken: \(String(cString: strerror(errno)))"); exit(1) }
+        func tryBind() -> Bool { withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } } == 0 }
+        var b = tryBind()
+        if !b && aggInterim, let old = handoverOld {
+            // the old server listens without SO_REUSEPORT (v70 and before): it is told to go, and the port taken the
+            // moment it is free (a gap of a few ms, once, for this one upgrade)
+            log("HANDOVER the old server (pid \(old)) does not share its port: it is stopped and the port taken at once")
+            kill(old, SIGTERM)
+            let end = Date().addingTimeInterval(5)
+            while !b && Date() < end { usleep(2_000); b = tryBind() }
+        }
+        guard b, listen(s, 1024) == 0 else { log("port \(aggPort) is taken: \(String(cString: strerror(errno)))"); exit(1) }
+        Handover.listening(self)
         // macOS's SOCKS proxy setting points at this number, so it never moves: the one owner in the Mac's port
         // registry (MANTRA_PORTS v2, 27.10.2026), and `mantra-ports check` names a stranger on it
         if !aggTestCopy { Ports.record("aggregate", aggPort, udp: false, health: "/status") }
@@ -411,7 +427,7 @@ final class Server {
             var last = Date(), ticks = Aggregation.joinable, devices = deviceFingerprint()
             while true {
                 sleep(1)
-                if !aggTestCopy && FileManager.default.fileExists(atPath: Aggregation.rescanFile.path) {
+                if !aggTestCopy && !aggQuiet && FileManager.default.fileExists(atPath: Aggregation.rescanFile.path) {
                     try? FileManager.default.removeItem(at: Aggregation.rescanFile)
                     log("RESCAN asked from the stripe: every device and phone found again, every line checked")
                     rescan(); ticks = Aggregation.joinable; last = Date(); devices = deviceFingerprint()
@@ -432,6 +448,12 @@ final class Server {
         log("ck-aggregate v\(CKVersion) on 127.0.0.1:\(aggPort) (SOCKS5 and HTTP), \(openFiles) files, \(maxClients) clients at most")
         var refusedAt = Date.distantPast
         while true {
+            // v71: wait in poll, so a drain (SIGTERM, or the successor of an interim server) is seen within 0.2 s
+            var pfd = pollfd(fd: s, events: Int16(POLLIN), revents: 0)
+            if poll(&pfd, 1, 200) != 1 {
+                if aggDraining { Handover.drainAndExit(self, listener: s) }
+                continue
+            }
             let c = accept(s, nil, nil)
             if c < 0 { usleep(20_000); continue }               // out of files for a moment: never a loop at full speed
             lock.lock(); let full = clients >= maxClients; if !full { clients += 1 }; lock.unlock()
@@ -465,7 +487,7 @@ final class Server {
     // nor a device he unticked while it stayed plugged in.
     func joinPlugged(_ appeared: Set<String>) {
         let ticks = Aggregation.selected
-        guard !aggTestCopy, Aggregation.aggregateMode, !ticks.isEmpty, !appeared.isEmpty else { return }
+        guard !aggTestCopy, !aggQuiet, Aggregation.aggregateMode, !ticks.isEmpty, !appeared.isEmpty else { return }
         let wifi = Net.wifiInterface()
         var names: [String] = []
         for e in appeared.sorted() {
@@ -540,7 +562,7 @@ extension Server {
         if req[1] == 3 { udp(c); return }
         // v65 (request 84): through the bond when it is on and a leg is up; else, or when the relay cannot reach it, today's path
         if let b = Bond.active(for: host) {
-            if let s = b.open(host, port, optimistic: true) {
+            if let s = b.open(host, port, timeout: 1) {          // v71: not bonded within 1 s → today's path at once
                 guard sendAll(c, [5, 0, 0, 1, 0, 0, 0, 0, 0, 0]) else { b.reset(s); close(c); return }
                 b.bridge(c, s); return
             }
@@ -679,7 +701,7 @@ extension Server {
             let hp = line[1].split(separator: ":", omittingEmptySubsequences: false)
             let host = hp.dropLast().joined(separator: ":").trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
             if let port = UInt16(hp.last ?? ""), let b = Bond.active(for: host) {
-                if let s = b.open(host, port, optimistic: true) {
+                if let s = b.open(host, port, timeout: 1) {
                     guard sendAll(c, Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8)) else { b.reset(s); close(c); return }
                     b.bridge(c, s); return
                 }
@@ -701,7 +723,7 @@ extension Server {
             var rest = text.components(separatedBy: "\r\n").dropFirst().filter { !$0.lowercased().hasPrefix("proxy-connection:") && !$0.lowercased().hasPrefix("connection:") }
             rest.insert("Connection: close", at: rest.count - 2)
             let req = "\(line[0]) \(path) \(line.count > 2 ? line[2] : "HTTP/1.1")\r\n" + rest.joined(separator: "\r\n")
-            if let b = Bond.active(for: host), let s = b.open(host, UInt16(url.port ?? 80), optimistic: true) { b.bridge(c, s, first: Array(req.utf8)); return }
+            if let b = Bond.active(for: host), let s = b.open(host, UInt16(url.port ?? 80), timeout: 1) { b.bridge(c, s, first: Array(req.utf8)); return }
             guard let (out, u) = open(host, UInt16(url.port ?? 80), for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }
@@ -875,6 +897,7 @@ case "test": test(seconds: argv.count > 1 ? Int(argv[1]) ?? 6 : 6)
 case "test-line" where argv.count > 1: test(seconds: argv.count > 2 ? Int(argv[2]) ?? 6 : 6, only: argv[1])
 case "on": Aggregation.systemProxy(true).forEach { print($0) }
 case "off": Aggregation.systemProxy(false).forEach { print($0) }
+case "handover": Handover.run(Array(argv.dropFirst()))
 case "bond-init": print(BondConfigFile.initFile())
 case "bond-selftest": bondSelftest(Array(argv.dropFirst()))
 default: print("usage: ck-aggregate serve | uplinks | test [seconds] | test-line <name> [seconds] | on | off | bond-init | bond-selftest"); exit(2)

@@ -31,15 +31,23 @@ jobs:
         run: |
           T=$(mktemp -d)
           head -c 67108864 /dev/urandom > "$T/big.bin"
+          head -c 2048 /dev/urandom > "$T/small.bin"
           SHA=$(shasum -a 256 "$T/big.bin" | cut -d' ' -f1)
           openssl rand -hex 32 > "$T/token"
           python3 -m http.server 18080 --bind 127.0.0.1 --directory "$T" >/dev/null 2>&1 &
-          build/ck-bond-server-darwin -listen 127.0.0.1:18443 -token-file "$T/token" -allow-local 2> "$T/server.log" &
+          build/ck-bond-server-darwin -listen 127.0.0.1:18443 -token-file "$T/token" -allow-local -drain 60s 2> "$T/server.log" &
+          RELAY=$!
           sleep 2
           ok=0
           perl -e 'alarm 300; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" bond-selftest \
-            --server 127.0.0.1:18443 --token-file "$T/token" --url http://127.0.0.1:18080/big.bin --sha "$SHA" || ok=$?
+            --server 127.0.0.1:18443 --token-file "$T/token" --url http://127.0.0.1:18080/big.bin --sha "$SHA" --relay-pid "$RELAY" --small /small.bin || ok=$?
           echo "--- relay log"; tail -60 "$T/server.log"
+          pkill -f ck-bond-server-darwin || true
+          [ $ok -ne 0 ] && exit $ok
+          echo "--- ck-aggregate hand-over under load (20 probes/s + a long download)"
+          mkdir -p "$T/agg"
+          python3 Tools/ci/handover_test.py "build/$APP.app/Contents/MacOS/ck-aggregate" "$T/agg" 18080 "$SHA" || ok=$?
+          echo "--- aggregate log"; grep -E "HANDOVER|ck-aggregate v|taken" "$T/agg/aggregate.log" | tail -30
           exit $ok
       - name: Pack
         run: cd build && cp "$(ls *-connection-keeper-v*.zip | head -1)" app.zip
