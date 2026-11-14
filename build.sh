@@ -32,7 +32,14 @@ mkdir -p "$APP/Contents/Resources/phone"
 cp Tools/ck-wires "$APP/Contents/Resources/ck-wires" && chmod +x "$APP/Contents/Resources/ck-wires"
 # ck-claude (v46, request 65): Claude Code's connection drops, followed while the app runs
 cp Tools/ck-claude "$APP/Contents/Resources/ck-claude" && chmod +x "$APP/Contents/Resources/ck-claude"
-swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/App/*.swift -framework AppKit -o "$APP/Contents/MacOS/Connection Keeper"
+# the speed test browser's ad blocking (v57, request 76): uBlock Origin's default lists turned into WebKit rules.
+# Fetched only on GitHub's runner (ADBLOCK_FETCH=1, the workflow); elsewhere only the hand-written seed.json is used.
+mkdir -p "$APP/Contents/Resources/adblock" && cp Resources/adblock/seed.json "$APP/Contents/Resources/adblock/"
+if [ -n "${ADBLOCK_FETCH:-}" ]; then
+  python3 Tools/make_adblock.py "$APP/Contents/Resources/adblock"
+  swift Tools/check_adblock.swift "$APP/Contents/Resources/adblock"
+fi
+swiftc -O -swift-version 5 Sources/Shared/*.swift Sources/App/*.swift -framework AppKit -framework WebKit -o "$APP/Contents/MacOS/Connection Keeper"
 sed "s/__VERSION__/$V/g" Resources/Info.plist > "$APP/Contents/Info.plist"
 swift Tools/make_icon.swift build/AppIcon.iconset "$V"
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"

@@ -24,7 +24,7 @@ enum LineTest {
 }
 
 extension Stripe {
-    @objc func testSpeedPressed() { runLineTest("speed") }
+    @objc func testSpeedPressed() { SpeedBrowser.open() }   // v57, request 76: the old line test is no longer on this icon
     @objc func testHealthPressed() { runLineTest("health") }
 
     func runLineTest(_ kind: String) {

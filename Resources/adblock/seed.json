@@ -1,0 +1,554 @@
+[
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?doubleclick\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?googlesyndication\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?googleadservices\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?googletagservices\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?adservice\\.google\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?pagead2\\.googlesyndication\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?adnxs\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?amazon-adsystem\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?pubmatic\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?rubiconproject\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?openx\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?criteo\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?criteo\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?taboola\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?outbrain\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?moatads\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?adsrvr\\.org[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?casalemedia\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?indexww\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?smartadserver\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?3lift\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?sharethrough\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?teads\\.tv[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?yieldmo\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?gumgum\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?media\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?advertising\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?scorecardresearch\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?quantserve\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?quantcount\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?lijit\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?sovrn\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?bidswitch\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?contextweb\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?adform\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?33across\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?onetag-sys\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?sonobi\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?rhythmone\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?adsafeprotected\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?doubleverify\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?serving-sys\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?mathtag\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?turn\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?bluekai\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?krxd\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?exelator\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?agkn\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?rlcdn\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?tapad\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?demdex\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?everesttech\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?omnitagjs\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?id5-sync\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?liadm\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?prebid\\.org[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?cdn\\.adsafeprotected\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?zdbb\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?adligature\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?2mdn\\.net[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?imasdk\\.googleapis\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?ads\\.pubmatic\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?adsymptotic\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?primis\\.tech[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?connatix\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?springserve\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?spotxchange\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?spotx\\.tv[/:?]"
+},
+"action": {
+"type": "block"
+}
+},
+{
+"trigger": {
+"url-filter": "^[^:]+://+([^:/]+\\.)?aniview\\.com[/:?]"
+},
+"action": {
+"type": "block"
+}
+}
+]

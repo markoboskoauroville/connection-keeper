@@ -186,7 +186,7 @@ final class Stripe: NSObject {
     lazy var aggWord = word("AGGREGATE", Ink.grey, #selector(pickAggregateRoute), id: "route-aggregate", tip: "AGGREGATE: everything through the joined lines; the Mac's own Wi-Fi never used, even when they stumble")
     lazy var bothWord = word("BOTH", Ink.grey, #selector(pickBoth), id: "route-both", tip: "BOTH: through the joined lines; when they stop carrying traffic the Mac's own connection takes over within seconds, and gives back when they work again")
     lazy var testWord: NSTextField = { let t = NSTextField(labelWithString: "TEST:"); t.font = .monospacedSystemFont(ofSize: 12, weight: .bold); t.textColor = Ink.dim; t.setContentHuggingPriority(.required, for: .horizontal); return t }()
-    lazy var testSpeedWord = word("SPEED", Ink.text, #selector(testSpeedPressed), id: "test-speed", tip: "Every line alone, then all together: download, upload, the ping under load, in a report window with graphs (about 50 s, about 600 MB of SIM data)")
+    lazy var testSpeedWord = word("SPEED", Ink.text, #selector(testSpeedPressed), id: "test-speed", tip: "speedtest.net in the app's own browser window, ads blocked by uBlock Origin's lists")
     lazy var testHealthWord = word("HEALTH", Ink.text, #selector(testHealthPressed), id: "test-health", tip: "Every line at once: ping, jitter, loss, HTTPS times, public address, the phones' radio, in a report window (10 s, almost no data)")
     let dlBox = NSStackView()
     let ruleLines = Rule(), ruleStatus = Rule()      // v44 (request 62): under the first row, above the status lines
