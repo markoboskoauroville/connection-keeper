@@ -151,9 +151,9 @@ final class BLeg {
     let key: String, line: String, fd: Int32, tx: BondCipher, rx: BondCipher
     var ctlq: [[UInt8]] = [], dataq: [[UInt8]] = []
     var sent: UInt64 = 0, acked: UInt64 = 0, recv: UInt64 = 0, recvAcked: UInt64 = 0     // sequenced bytes only
-    var rttMin = 0.05, rttMinAt = 0.0, gotPong = false, rate = 1_250_000.0, capped = false
+    var rttMin = 0.05, rttMinAt = 0.0, gotPong = false, rate = 2_500_000.0, capped = false
     var sampleAt = bnow(), sampleAcked: UInt64 = 0
-    var winMax = 0.0, prevMax = 1_250_000.0, winAt = bnow(), cappedWin = false   // v65: windowed-max rate
+    var busyAll = true, peerRate = 0.0                   // v67: backlogged since the last sample; the relay's estimate (its PONGs)
     var lastHeard = bnow(), lastPing = 0.0, pingID: UInt32 = 0, dead = false
     init(key: String, line: String, fd: Int32, tx: BondCipher, rx: BondCipher) {
         self.key = key; self.line = line; self.fd = fd; self.tx = tx; self.rx = rx
@@ -169,6 +169,7 @@ final class BStream {
     var opened = 0                                       // 0 waiting, 1 OPEN_OK, 2 OPEN_FAIL
     var finSent = false, finRecv = false, done = false, delivering = true
     var up = 0, down = 0
+    var born = bnow(), sentTotal = 0                    // v67: the watchdog of an optimistic OPEN; the priority of a young stream
     init(_ id: UInt32) { self.id = id }
 }
 
@@ -183,6 +184,8 @@ final class BondClient {
     var running = true, dialing: Set<String> = [], retryAt: [String: Double] = [:], fails: [String: Int] = [:]
     var noLegsSince: Double?
     var bytesUp = 0, bytesDown = 0, opened = 0
+    var bypassSaid: String?
+    static let minLines = 2                              // v67: fewer lines up and the bond steps aside (one line gains nothing)
 
     init(host: String, port: UInt16, token: [UInt8], paths: @escaping () -> [BondPath]) {
         self.host = host; self.port = port; self.token = token; self.paths = paths
@@ -318,12 +321,14 @@ final class BondClient {
     }
 
     // (under cv) The live leg where n bytes arrive first: RTT/2 + queued/rate, among those under their in-flight cap.
-    func pick(_ n: Int) -> BLeg? {
+    // `urgent` (v67): a young stream (its first 64 KB: a TLS handshake, a request) may use up to twice the cap, so it never
+    // waits behind the bulk of the others (measured 14.11.2026: 0.6-1.4 s for google.com with one leg carrying the Mac).
+    func pick(_ n: Int, urgent: Bool = false) -> BLeg? {
         var best: BLeg?, bt = Double.infinity
         for l in legs where !l.dead {
             let infl = Double(l.sent - l.acked)
             let limit = max(BondProto.minCap, l.rate * (2 * l.rttMin + 0.05))
-            if infl > 0 && infl + Double(n) > limit { l.capped = true; continue }
+            if infl > 0 && infl + Double(n) > limit && !(urgent && infl + Double(n) <= 2 * limit) { l.capped = true; continue }
             let t = l.rttMin / 2 + (infl + Double(n)) / l.rate
             if t < bt { bt = t; best = l }
         }
@@ -332,7 +337,7 @@ final class BondClient {
 
     func place(_ st: BSent, _ s: BStream) -> Bool {
         while running && !s.done {
-            if let l = pick(st.enc.count) {
+            if let l = pick(st.enc.count, urgent: s.sentTotal <= 65536) {
                 l.dataq.append(st.enc); l.sent += UInt64(st.enc.count); st.leg = l; st.legEnd = l.sent
                 cv.broadcast()
                 return true
@@ -355,20 +360,17 @@ final class BondClient {
 
     func legAck(_ l: BLeg, _ v: UInt64) {
         if v > l.acked && v <= l.sent { l.acked = v }
+        // v67: the rate is the delivery over >= 250 ms (and 2 RTT), smoothed. It follows a sample down only when the leg was
+        // backlogged the whole time (found full between every two ACKs): idle time measures the traffic, not the line
+        // (v65's average spiralled a leg to nothing). v66's best-100-ms maximum believed a phone's adb bursts: live on
+        // 14.11.2026 the phone took 87 % of a stream and filled its window, 40 Mbit/s against 51 direct.
+        if !l.capped { l.busyAll = false }
+        l.capped = false
         let now = bnow(), dt = now - l.sampleAt
-        if dt >= 0.1 {
-            // the rate is the best 100 ms delivery of the last 1.5-3 s; it falls only through a window in which the leg
-            // was at its cap (a measure of the line), never through idle time (a measure of the traffic): an average
-            // spiralled a leg down to nothing in the first CI run (8.6 % of the stream on a line as fast as the best)
+        if dt >= max(0.25, 2 * l.rttMin) {
             let sample = Double(l.acked - l.sampleAcked) / dt
-            l.winMax = max(l.winMax, sample)
-            if l.capped { l.cappedWin = true }
-            if now - l.winAt >= 1.5 {
-                l.prevMax = l.cappedWin ? l.winMax : max(l.prevMax, l.winMax)
-                l.winMax = 0; l.winAt = now; l.cappedWin = false
-            }
-            l.rate = max(16384, l.prevMax, l.winMax)
-            l.capped = false; l.sampleAt = now; l.sampleAcked = l.acked
+            if l.busyAll { l.rate = max(16384, 0.6 * l.rate + 0.4 * sample) } else if sample > l.rate { l.rate = 0.6 * l.rate + 0.4 * sample }
+            l.busyAll = true; l.sampleAt = now; l.sampleAcked = l.acked
         }
         cv.broadcast()
     }
@@ -386,9 +388,10 @@ final class BondClient {
         let now = bnow()
         l.lastHeard = now
         switch f.type {
-        case BondProto.ping: ctl(l, BFrame(BondProto.pong, 0, f.seq, f.payload))
+        case BondProto.ping: ctl(l, BFrame(BondProto.pong, 0, f.seq, Array(f.payload.prefix(8)) + be64(UInt64(l.rate))))   // v67: + our rate
         case BondProto.pong:
-            guard f.payload.count == 8 else { return }
+            guard f.payload.count >= 8 else { return }
+            if f.payload.count >= 16 { l.peerRate = Double(rd64(f.payload, 8)) }
             let rtt = max(now - Double(rd64(f.payload, 0)) / 1e9, 0.0005)
             // the lowest seen on this leg: a PING waits behind the leg's own queue, and a minimum that followed it up would
             // grow the in-flight cap, which grows the queue (the leg is made again when its line changes)
@@ -440,7 +443,7 @@ final class BondClient {
         let f = BFrame(type, s.id, s.nextSeq, payload)
         s.nextSeq += 1
         let st = BSent(f.seq, f.encode())
-        s.unacked[f.seq] = st; s.unackedBytes += n
+        s.unacked[f.seq] = st; s.unackedBytes += n; s.sentTotal += n
         if type == BondProto.fin { s.finSent = true }
         if type == BondProto.data { s.up += payload.count; bytesUp += payload.count }
         return place(st, s)
@@ -455,6 +458,7 @@ final class BondClient {
             if l.recv != l.recvAcked { legAckSend(l) }
         }
         for (id, s) in streams {
+            if !s.done && s.opened == 0 && now - s.born > 10 { log("BOND stream \(s.id): no OPEN_OK in 10 s, reset"); finish(s, rst: true) }
             if s.delivered != s.ackSent || s.ackForce { streamAckSend(s) }
             if s.done && !s.delivering { streams[id] = nil }
         }
@@ -467,13 +471,29 @@ final class BondClient {
                 clientID = BondCrypto.random(16); noLegsSince = now
             }
         } else { noLegsSince = nil }
+        let why = bypass()
+        if why != bypassSaid {
+            log(why.map { "BOND stepped aside: \($0)" } ?? "BOND in use: \(Set(legs.map(\.line)).sorted().joined(separator: " + "))")
+            bypassSaid = why
+        }
         cv.broadcast()
     }
+
+    // (under cv) Why new connections do not take the bond now, or nil when they do.
+    func bypass() -> String? {
+        let lines = Set(legs.filter { !$0.dead }.map(\.line))
+        if lines.isEmpty { return "no leg to the relay is up: new connections go direct" }
+        if lines.count < BondClient.minLines { return "only one line (\(lines.first!)) has a leg: one line gains nothing from the relay, new connections go direct" }
+        return nil
+    }
+    var usable: Bool { cv.lock(); defer { cv.unlock() }; return running && bypass() == nil }
 
     // MARK: the use
 
     // A stream to host:port through the relay, after its OPEN_OK; nil when no leg is up, it failed, or 10 s went by.
-    func open(_ host: String, _ port: UInt16, timeout: Double = 10) -> BStream? {
+    // `optimistic` (v67): returned as soon as OPEN is on its way, so the client's first bytes follow without waiting one
+    // relay round trip; an OPEN_FAIL then closes the client's socket, and no OPEN_OK in 10 s resets the stream.
+    func open(_ host: String, _ port: UInt16, timeout: Double = 10, optimistic: Bool = false) -> BStream? {
         cv.lock()
         guard running, legs.contains(where: { !$0.dead }), streams.count < BondProto.maxStreams else { cv.unlock(); return nil }
         let s = BStream(nextID); nextID += 1; streams[s.id] = s
@@ -482,6 +502,7 @@ final class BondClient {
         let target = host.contains(":") ? "[\(host)]:\(port)" : "\(host):\(port)"
         cv.lock(); defer { cv.unlock() }
         guard sendSeq(s, BondProto.open, Array(target.utf8)) else { finish(s, rst: true); return nil }
+        if optimistic { opened += 1; return s }
         let end = bnow() + timeout
         while s.opened == 0 && !s.done && bnow() < end { _ = cv.wait(until: Date().addingTimeInterval(0.05)) }
         if s.opened == 1 && !s.done { opened += 1; return s }
@@ -552,10 +573,10 @@ final class BondClient {
         cv.lock(); defer { cv.unlock() }
         let ls: [[String: Any]] = legs.map { l in
             ["line": l.line, "key": l.key, "alive": !l.dead, "rttMs": Double(Int(l.rttMin * 10_000)) / 10,
-             "rateMbps": Double(Int(l.rate * 8 / 100_000)) / 10, "inflightKB": Int(l.sent - l.acked) / 1024,
+             "rateUpMbps": Double(Int(l.rate * 8 / 100_000)) / 10, "rateDownMbps": Double(Int(l.peerRate * 8 / 100_000)) / 10, "inflightKB": Int(l.sent - l.acked) / 1024,
              "mbSent": Double(Int(Double(l.sent) / 1e4)) / 100, "mbReceived": Double(Int(Double(l.recv) / 1e4)) / 100]
         }
-        return ["on": running, "server": "\(host):\(port)", "legs": ls, "streams": streams.count, "opened": opened,
+        return ["on": running, "bypass": bypass() ?? NSNull(), "server": "\(host):\(port)", "legs": ls, "streams": streams.count, "opened": opened,
                 "mbUp": Double(Int(Double(bytesUp) / 1e4)) / 100, "mbDown": Double(Int(Double(bytesDown) / 1e4)) / 100]
     }
 }
@@ -569,7 +590,7 @@ enum Bond {
     // The bond for a new connection to host, or nil: bond off, no leg up, or a destination in the house.
     static func active(for host: String) -> BondClient? {
         lock.lock(); let c = client; lock.unlock()
-        guard let c, !local(host), c.ready else { return nil }
+        guard let c, !local(host), c.usable else { return nil }
         return c
     }
 

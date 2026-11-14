@@ -26,8 +26,12 @@ app ─SOCKS/HTTP─▶ ck-aggregate ──leg 1 (cable  en17)──┐
    answers OPEN_OK, then the bytes flow both ways as DATA frames spread over all legs. Destinations in the house
    (loopback, 10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10 incl. Tailscale, `.local`, names without a dot) stay
    on today's path.
-3. No leg up, or the relay cannot open the destination: the connection takes today's `race()` path at once.
-4. UDP (QUIC, calls, DNS over UDP) is not bonded: it keeps today's one-line path.
+3. Fewer than two lines with a leg up (v67): the bond steps aside, new connections take today's `race()` path, and
+   `/status` `bond.bypass` says why (one line gains nothing from the relay, it only adds its hop). The legs stay up, so
+   the bond is back the moment a second line is.
+4. OPEN is optimistic (v67): the client gets its SOCKS/HTTP answer and its first bytes follow OPEN at once, without
+   waiting a relay round trip for OPEN_OK. OPEN_FAIL closes the client's socket; no OPEN_OK within 10 s resets the stream.
+5. UDP (QUIC, calls, DNS over UDP) is not bonded: it keeps today's one-line path.
 
 ## The wire
 
@@ -82,8 +86,12 @@ Types 1–5 are **sequenced**: numbered per stream and direction from 0, reliabl
 - `arrival(leg) = minRTT/2 + (bytes in flight on the leg + this frame) / rate`; the leg with the earliest arrival wins.
 - In flight = sequenced bytes put on the leg minus its leg ACK. Cap: `max(64 KB, rate × (2 × minRTT + 50 ms))`; a leg
   at its cap takes nothing until its ACKs come back. This bounds the reordering and keeps the kernel's buffers small.
-- `rate`: delivered bytes per 100 ms from the leg ACKs; while the leg was at its cap it follows the samples (½ old,
-  ½ new, at least 16 KB/s), otherwise it only rises. Starting value 10 Mbit/s.
+- `rate` (v67): delivered bytes from the leg ACKs over at least 250 ms (and 2 × minRTT), smoothed 0.6 old / 0.4 new. It
+  follows a sample down only when the leg was backlogged the whole sample (found full between every two ACKs); otherwise
+  it only rises. Starting value 20 Mbit/s. Each side sends its estimate in its PONGs, so the Mac shows both directions.
+  (v65 averaged over 100 ms and spiralled a leg to nothing; v66 took the best 100 ms and believed a phone's adb bursts.)
+- A young stream (its first 64 KB: a handshake, a request, a small answer) may use up to twice a leg's cap, so it does
+  not queue behind the other streams' bulk.
 - `minRTT`: the lowest PING time seen on the leg (a ping waits behind the leg's own queue; a minimum that followed it
   up would grow the cap and with it the queue). The leg is made again when its line changes.
 
@@ -103,7 +111,7 @@ link-local (the cloud's metadata), and 100.64/10 (Tailscale) are refused unless 
 | Mac client | `Sources/Aggregate/Bond.swift`; hooks in `socks()` / `http()` of `main.swift` |
 | Config (0600) | `~/Library/Application Support/connection-keeper/bond.json` `{"on":false,"server":"130.61.181.83","port":443,"token":"<64 hex>","legsPerLine":1}` |
 | Relay token | `/etc/ckbond/token` (hex, root 0600), read through systemd `LoadCredential` |
-| Status | `curl -s 127.0.0.1:8857/status` → `"bond": {on, server, legs: [{line, rttMs, rateMbps, alive, inflightKB, …}], streams, opened, mbUp, mbDown}` |
+| Status | `curl -s 127.0.0.1:8857/status` → `"bond": {on, bypass, server, legs: [{line, rttMs, rateUpMbps (the Mac's estimate), rateDownMbps (the relay's, from its PONGs), alive, inflightKB, …}], streams, opened, mbUp, mbDown}`; `bypass` is null when the bond is used, else why not |
 | Log | lines starting with `BOND` (ck-aggregate's log; `journalctl -u ckbond` on the VM) |
 
 - `ck-aggregate bond-init`: writes bond.json with a new random token, bond off; prints only `token written to <path>`.

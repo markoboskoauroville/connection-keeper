@@ -100,7 +100,7 @@ struct BondFetch { var ok = false, bytes = 0, length = -1, sha = "", secs = 0.0,
 func bondFetch(_ b: BondClient, host: String, port: UInt16, path: String, progress: ((Int) -> Void)? = nil) -> BondFetch {
     var r = BondFetch()
     let t0 = bnow()
-    guard let s = b.open(host, port) else { r.why = "the stream did not open"; return r }
+    guard let s = b.open(host, port, optimistic: true) else { r.why = "the stream did not open"; return r }   // the request follows OPEN at once
     var sv: [Int32] = [0, 0]
     guard socketpair(AF_UNIX, SOCK_STREAM, 0, &sv) == 0 else { b.reset(s); r.why = "socketpair failed"; return r }
     var big: Int32 = 1 << 20, one: Int32 = 1

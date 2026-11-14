@@ -518,7 +518,7 @@ extension Server {
         if req[1] == 3 { udp(c); return }
         // v65 (request 84): through the bond when it is on and a leg is up; else, or when the relay cannot reach it, today's path
         if let b = Bond.active(for: host) {
-            if let s = b.open(host, port) {
+            if let s = b.open(host, port, optimistic: true) {
                 guard sendAll(c, [5, 0, 0, 1, 0, 0, 0, 0, 0, 0]) else { b.reset(s); close(c); return }
                 b.bridge(c, s); return
             }
@@ -657,7 +657,7 @@ extension Server {
             let hp = line[1].split(separator: ":", omittingEmptySubsequences: false)
             let host = hp.dropLast().joined(separator: ":").trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
             if let port = UInt16(hp.last ?? ""), let b = Bond.active(for: host) {
-                if let s = b.open(host, port) {
+                if let s = b.open(host, port, optimistic: true) {
                     guard sendAll(c, Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8)) else { b.reset(s); close(c); return }
                     b.bridge(c, s); return
                 }
@@ -679,7 +679,7 @@ extension Server {
             var rest = text.components(separatedBy: "\r\n").dropFirst().filter { !$0.lowercased().hasPrefix("proxy-connection:") && !$0.lowercased().hasPrefix("connection:") }
             rest.insert("Connection: close", at: rest.count - 2)
             let req = "\(line[0]) \(path) \(line.count > 2 ? line[2] : "HTTP/1.1")\r\n" + rest.joined(separator: "\r\n")
-            if let b = Bond.active(for: host), let s = b.open(host, UInt16(url.port ?? 80)) { b.bridge(c, s, first: Array(req.utf8)); return }
+            if let b = Bond.active(for: host), let s = b.open(host, UInt16(url.port ?? 80), optimistic: true) { b.bridge(c, s, first: Array(req.utf8)); return }
             guard let (out, u) = open(host, UInt16(url.port ?? 80), for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }

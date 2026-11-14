@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -53,8 +54,7 @@ type leg struct {
 	rttMin, rttMinAt, rate     float64
 	sampleAt                   float64
 	sampleAcked                uint64
-	winMax, prevMax, winAt     float64 // the windowed-max rate
-	cappedWin                  bool
+	busyAll                    bool // backlogged since the last rate sample
 	capped, dead, gotPong      bool
 	lastHeard, lastPing, start float64
 	pingID                     uint32
@@ -69,6 +69,7 @@ type stream struct {
 	nextSeq, peerAck uint32
 	unacked          map[uint32]*pending
 	unackedBytes     int
+	sentBytes        int // v67: a stream's first 64 KB may use twice a leg's cap
 	expect           uint32
 	ooo              map[uint32]frame
 	inbox            []frame
@@ -118,8 +119,7 @@ func (g *group) addLeg(l *leg) bool {
 	l.id = g.nextLeg
 	g.nextLeg++
 	l.lastHeard, l.start, l.sampleAt = now, now, now
-	l.rate, l.rttMin = 1.25e6, 0.05
-	l.prevMax, l.winAt = 1.25e6, now
+	l.rate, l.rttMin, l.busyAll = 2.5e6, 0.05, true
 	l.ctlq = append(l.ctlq, frame{typ: fWelcome}.encode()) // the first record of the leg
 	g.legs = append(g.legs, l)
 	g.cond.Broadcast()
@@ -254,7 +254,9 @@ func (g *group) killLeg(l *leg, why string) {
 
 // pick (under g.mu): the live leg where these n bytes would arrive first, RTT/2 + queued/rate, among those under their
 // in-flight cap (about 2 x rate x RTT plus the ACK interval, at least 64 KB). nil: every leg is full (or none is up).
-func (g *group) pick(n int) *leg {
+// urgent: a young stream (its first 64 KB, a handshake or a small answer) may use up to twice the cap, so it does not wait
+// behind the bulk of the other streams.
+func (g *group) pick(n int, urgent bool) *leg {
 	var best *leg
 	bt := 0.0
 	for _, l := range g.legs {
@@ -263,7 +265,7 @@ func (g *group) pick(n int) *leg {
 		}
 		infl := float64(l.sent - l.acked)
 		limit := max(minCap, l.rate*(2*l.rttMin+0.05))
-		if infl > 0 && infl+float64(n) > limit {
+		if infl > 0 && infl+float64(n) > limit && !(urgent && infl+float64(n) <= 2*limit) {
 			l.capped = true
 			continue
 		}
@@ -282,7 +284,7 @@ func (g *group) place(s *stream, p *pending) bool {
 		if g.gone || s.done {
 			return false
 		}
-		if l := g.pick(n); l != nil {
+		if l := g.pick(n, s.sentBytes <= 65536); l != nil {
 			l.dataq = append(l.dataq, p.enc)
 			l.sent += uint64(n)
 			p.leg, p.legEnd = l, l.sent
@@ -332,24 +334,21 @@ func (g *group) legAck(l *leg, v uint64) {
 	if v > l.acked && v <= l.sent {
 		l.acked = v
 	}
+	// the delivery over >= 250 ms (and 2 RTT), smoothed; it follows a sample down only when the leg was backlogged the whole
+	// time (found full between every two ACKs). A best-100-ms maximum believed a phone's adb bursts (v66, live 14.11.2026).
+	if !l.capped {
+		l.busyAll = false
+	}
+	l.capped = false
 	now := mono()
-	if dt := now - l.sampleAt; dt >= 0.1 {
-		// the best 100 ms delivery of the last 1.5-3 s; it falls only through a window in which the leg was at its cap
+	if dt := now - l.sampleAt; dt >= max(0.25, 2*l.rttMin) {
 		sample := float64(l.acked-l.sampleAcked) / dt
-		l.winMax = max(l.winMax, sample)
-		if l.capped {
-			l.cappedWin = true
+		if l.busyAll {
+			l.rate = max(16384, 0.6*l.rate+0.4*sample)
+		} else if sample > l.rate {
+			l.rate = 0.6*l.rate + 0.4*sample
 		}
-		if now-l.winAt >= 1.5 {
-			if l.cappedWin {
-				l.prevMax = l.winMax
-			} else {
-				l.prevMax = max(l.prevMax, l.winMax)
-			}
-			l.winMax, l.winAt, l.cappedWin = 0, now, false
-		}
-		l.rate = max(16384, l.prevMax, l.winMax)
-		l.capped, l.sampleAt, l.sampleAcked = false, now, l.acked
+		l.busyAll, l.sampleAt, l.sampleAcked = true, now, l.acked
 	}
 	g.cond.Broadcast()
 }
@@ -359,10 +358,15 @@ func (g *group) onFrame(l *leg, f frame) {
 	l.lastHeard = now
 	switch f.typ {
 	case fPing:
-		g.ctl(l, frame{typ: fPong, seq: f.seq, payload: f.payload})
+		if len(f.payload) >= 8 { // the echo, and our rate for this leg (v67: shown in the Mac's /status)
+			p := make([]byte, 16)
+			copy(p, f.payload[:8])
+			binary.BigEndian.PutUint64(p[8:], uint64(l.rate))
+			g.ctl(l, frame{typ: fPong, seq: f.seq, payload: p})
+		}
 	case fPong:
-		if len(f.payload) == 8 {
-			rtt := max(now-float64(binary.BigEndian.Uint64(f.payload))/1e9, 0.0005)
+		if len(f.payload) >= 8 {
+			rtt := max(now-float64(binary.BigEndian.Uint64(f.payload[:8]))/1e9, 0.0005)
 			if !l.gotPong || rtt < l.rttMin { // the lowest seen: a PING waits behind the leg's own queue
 				l.rttMin, l.rttMinAt = rtt, now
 			}
@@ -454,6 +458,7 @@ func (g *group) sendSeq(s *stream, typ byte, payload []byte) bool {
 	p := &pending{seq: f.seq, enc: f.encode()}
 	s.unacked[f.seq] = p
 	s.unackedBytes += n
+	s.sentBytes += n
 	switch typ {
 	case fFin:
 		s.finSent = true
@@ -682,7 +687,11 @@ func (g *group) loop() {
 			}
 		}
 		if wall.Sub(g.lastReport) >= time.Minute && (g.up > 0 || g.down > 0) {
-			log.Printf("BOND group %s: %d legs, %d streams, %d opened, up %.1f MB, down %.1f MB in total", g.name, len(g.legs), len(g.streams), g.opened, float64(g.up)/1e6, float64(g.down)/1e6)
+			legs := ""
+			for _, l := range g.legs {
+				legs += fmt.Sprintf("; leg %d %s: rtt %.0f ms, rate %.1f Mbit/s, sent %.1f MB", l.id, l.remote, l.rttMin*1000, l.rate*8/1e6, float64(l.sent)/1e6)
+			}
+			log.Printf("BOND group %s: %d legs, %d streams, %d opened, up %.1f MB, down %.1f MB in total%s", g.name, len(g.legs), len(g.streams), g.opened, float64(g.up)/1e6, float64(g.down)/1e6, legs)
 			g.lastReport = wall
 		}
 		if len(g.legs) == 0 && wall.Sub(g.emptySince) > groupLinger {
