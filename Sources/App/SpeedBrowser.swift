@@ -25,8 +25,12 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
     override init() {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()          // speedtest.net's consent and settings are kept between opens
+        // v58 (request 77): only the test frame (GO, download, upload, the line, Telemach); Resources/speedtest/frame.js
+        if let u = Bundle.main.resourceURL?.appendingPathComponent("speedtest/frame.js"), let js = try? String(contentsOf: u, encoding: .utf8) {
+            config.userContentController.addUserScript(WKUserScript(source: js, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         web = WKWebView(frame: .zero, configuration: config)
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 800), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 600), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
         super.init()
         window.title = "speedtest.net"
         window.isReleasedWhenClosed = false
@@ -51,7 +55,8 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
         status.textColor = .secondaryLabelColor
         status.stringValue = "Ad blocking: loading the lists…"
         let bar = NSStackView(views: [button("chevron.left", "Back", #selector(back)), button("arrow.clockwise", "Reload", #selector(reload)),
-                                      button("house", "speedtest.net", #selector(goHome)), status])
+                                      button("house", "speedtest.net", #selector(goHome)),
+                                      button("eye", "The whole page, or only the test frame", #selector(toggleFull)), status])
         bar.orientation = .horizontal
         bar.spacing = 10
         bar.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 10)
@@ -75,7 +80,7 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
         // on the screen of the stripe, centred
         if let s = (NSApp.windows.first { $0 is NSPanel && $0.isVisible })?.screen ?? NSScreen.main {
             let f = s.visibleFrame
-            let w = min(1100, f.width - 40), h = min(800, f.height - 40)
+            let w = min(820, f.width - 40), h = min(600, f.height - 40)
             window.setFrame(NSRect(x: f.midX - w / 2, y: f.midY - h / 2, width: w, height: h), display: false)
         }
         window.makeKeyAndOrderFront(nil)
@@ -92,6 +97,11 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
 
     @objc func back() { if web.canGoBack { web.goBack() } }
     @objc func reload() { web.reload() }
+    var full = false
+    @objc func toggleFull() {
+        full.toggle()
+        web.evaluateJavaScript("window.ckFull = \(full); window.ckTidy && window.ckTidy()")
+    }
     @objc func goHome() { web.load(URLRequest(url: SpeedBrowser.home)) }
 
     // a link meant for a new window opens in this one

@@ -34,6 +34,7 @@ cp Tools/ck-wires "$APP/Contents/Resources/ck-wires" && chmod +x "$APP/Contents/
 cp Tools/ck-claude "$APP/Contents/Resources/ck-claude" && chmod +x "$APP/Contents/Resources/ck-claude"
 # the speed test browser's ad blocking (v57, request 76): uBlock Origin's default lists turned into WebKit rules.
 # Fetched only on GitHub's runner (ADBLOCK_FETCH=1, the workflow); elsewhere only the hand-written seed.json is used.
+mkdir -p "$APP/Contents/Resources/speedtest" && cp Resources/speedtest/frame.js "$APP/Contents/Resources/speedtest/"
 mkdir -p "$APP/Contents/Resources/adblock" && cp Resources/adblock/seed.json "$APP/Contents/Resources/adblock/"
 if [ -n "${ADBLOCK_FETCH:-}" ]; then
   python3 Tools/make_adblock.py "$APP/Contents/Resources/adblock"
