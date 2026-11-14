@@ -821,4 +821,4 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > then you need to make use of an interface so I understand what's going on. Connection keeper: now not Cable is active and AX is backup. But when I look at the interface, all I see is they are both green, so they look both active. So you need to put some backup badge or something so I understand it's not. Second, update this speed testing small web page. Please make it draggable with the mouse, so I can drag it anywhere I like
 
-**Status:** saved; v82 in progress.
+**Status 14.11.2026 (v82, installed 21:40, CI run 43637770959 green):** in NOTHING ONLY the Nothing row says ACTIVE (green) and AX88179B STANDBY (dim, no live speed), swapped to FALLBACK·ACTIVE / NO ANSWER on fallback, also in ALL and the ▾ lists, menu bar dot amber on fallback (seen in a window capture 21:42). The speed test window has a grip bar on top (drag anywhere on it, ✕ closes) and keeps its place; not yet tried by hand. NOTHING ONLY skips the start-up and midnight speed tests (seen: 'START SPEED TEST skipped … small check 3/3, 352 ms').

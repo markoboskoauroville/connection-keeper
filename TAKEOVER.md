@@ -1,3 +1,14 @@
+**14.11.2026, v82 (request 91): STANDBY badge; the speed test window draggable; no speed test over the Nothing's SIM.**
+ck-aggregate's /status gives each line a "role" (active / standby / fallback, from Server.usable). In NOTHING ONLY the
+stripe's rows, the ALL tab and the ▾ lists show the Nothing "ACTIVE" (green) and AX88179B "STANDBY" (dim name, grey word, no
+live speed, a quiet dash); on fallback AX88179B shows "FALLBACK·ACTIVE" (amber name, red word) and the Nothing "NO ANSWER";
+the menu bar dot turns amber while on the fallback. Lines remembered from before the mode come back as standby (the v81 ~10 s
+gap closed). The speed test window (SpeedBrowser) has a 16 pt grip bar on top: drag anywhere on it, ✕ at its right end closes
+(Esc and the speedometer too); its place (screen + top-left, UserDefaults speedWindowPlace) is kept between opens and never
+pushed back. **Speed tests skipped in NOTHING ONLY**: the start-up all-lines test (ck-net test speed --quick, ~150 MB) and the
+midnight speedtest.net run do not start; three generate_204 requests instead, said on the stripe and in the log ("START SPEED
+TEST skipped in NOTHING ONLY"); a click on a line's speed or the speedometer still tests by hand.
+
 **14.11.2026, v81 (requests 89 + 90): the Nothing only by its USB cable; NOTHING ONLY (cable); the window stays where he puts it.**
 Sources/Shared/CableOnly.swift. The Nothing is a line only as an adb device with a `usb:` transport (Phones.list); the wireless
 adb 100.67.149.40:5555 and any 127.0.0.1 entry are never lines. Phone hotspots (phone-hotspots.txt; "Something" built in, the
