@@ -710,7 +710,7 @@ extension Server {
         lock.lock(); defer { lock.unlock() }
         let ls: [[String: Any]] = lines.map { u in
             ["name": u.name, "device": u.iface, "publicIP": u.publicIP ?? "", "gateway": u.gateway ?? "", "mbps": u.mbps, "rate": u.meter.rate, "capacity": u.capacity, "probed": u.meter.probed ?? 0, "radio": u.meter.radio ?? "",
-             "alive": u.alive, "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6]
+             "alive": u.alive, "rttMs": u.rttMs.map { (($0 * 10).rounded()) / 10 } ?? NSNull(), "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6]
         }
         let ig: [[String: String]] = ignored.map { ["name": $0.0.name, "device": $0.0.iface, "sameLineAs": $0.1.name] }
         let d: [String: Any] = ["version": CKVersion, "port": Int(aggPort), "since": ISO8601DateFormatter().string(from: started), "lines": ls, "ignored": ig]

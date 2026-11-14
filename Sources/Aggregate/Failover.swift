@@ -195,15 +195,22 @@ extension Server {
         Thread.detachNewThread { [self] in
             let gone = u.phone == nil && ipv4(of: u.iface) == nil
             var ok = false
-            if !gone && !faulted(u, timeout: 2) {
+            if !gone && !faulted(u, timeout: 1) {
+                // v62: both answer points at once, the first answer counts (one after the other a quiet line took 3 s)
+                let t0 = Date(), g = DispatchGroup(), l = NSLock()
+                var first: Double?
                 for host in ["1.1.1.1", "8.8.8.8"] {
-                    let t0 = Date()
-                    if let fd = u.phone.map({ Phones.dial(host, 443, via: $0.port, timeout: 2) }) ?? dial(host, 443, via: u.iface, timeoutMs: 1500) {
-                        close(fd); ok = true
-                        noteRTT(u, Date().timeIntervalSince(t0) * 1000)
-                        break
+                    g.enter()
+                    Thread.detachNewThread {
+                        if let fd = u.phone.map({ Phones.dial(host, 443, via: $0.port, timeout: 2) }) ?? dial(host, 443, via: u.iface, timeoutMs: 1200) {
+                            close(fd)
+                            l.lock(); if first == nil { first = Date().timeIntervalSince(t0) * 1000 }; l.unlock()
+                        }
+                        g.leave()
                     }
                 }
+                g.wait()
+                if let ms = first { ok = true; noteRTT(u, ms) }
             }
             lock.lock()
             u.probing = false
