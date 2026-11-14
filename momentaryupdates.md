@@ -810,3 +810,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > Continue working on connection keeper and in general I don't know what's going on. My connection keeper when I put it down in my window, by itself it's just raising up user interface. Second I connected my nothing phone over cable and the cable connection was not recognized. when I share it with hotspot. So how to make this when I click refresh that nothing is also recognized by the cable. So basically I want now to do one thing. Update my app to recognize ADB devices. and right now I want this kind of connection only cable to my noting phone, nothing else noting phone is only connection and only through the cable, please make this happen
 
 **Status:** saved; v81 in progress.
+
+## 14.11.2026, request 90 (NOTHING ONLY: the Nothing by cable is the ground truth, its cell modem, TP-Link ignored)
+
+> Cable is good now the camera is on the hotspot on the Wi-Fi on the cable. Please debug it I say camera, not in phone read it as noting phone nothing Phone nothing phone is a ground truth when you're able to attach to it by debugging, remove Wi-Fi and let it use its cell modem to be on the internet and then use Connection Keeper to go only through the cable and only through the noting phone and ignore completely TP Link
+
+**Status:** saved; built into v81 as the selectable mode NOTHING ONLY (cable).
