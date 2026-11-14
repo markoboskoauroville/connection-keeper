@@ -1,0 +1,23 @@
+# ckbond v1 relay (Network Aggregate Connection Keeper, request 84): the far end of the Mac's bonded lines.
+# Installed by Tools/bond/install.sh as /etc/systemd/system/ckbond.service on chromium-vm.
+[Unit]
+Description=ckbond relay (Connection Keeper bonding)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ck-bond-server -listen :443 -token-file ${CREDENTIALS_DIRECTORY}/token
+LoadCredential=token:/etc/ckbond/token
+DynamicUser=yes
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LimitNOFILE=65536
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

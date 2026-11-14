@@ -15,6 +15,8 @@
 //   ck-aggregate test [s]        each line alone, then all through the server, down and up, s seconds each (default 6)
 //   ck-aggregate test-line <n>   one line alone, down and up (a click on its row's speed)
 //   ck-aggregate on | off        macOS's SOCKS proxy on every network service → the server, or back off
+//   ck-aggregate bond-init       v65: bond.json with a new token (bond off); prints only where it is
+//   ck-aggregate bond-selftest   v65: the loopback proof of ckbond (CI): 3 emulated lines, one killed mid-fetch
 import Foundation
 import Darwin
 
@@ -380,6 +382,7 @@ final class Server {
         Resolver.lines = { [self] in lock.lock(); defer { lock.unlock() }; return lines }
         Thread.detachNewThread { [self] in while true { sleep(1); checkLines() } }   // v62: 1 s (was 3 s): failover ~2-3 s
         startBalance()                                   // v47: live rate, probes on 4G ↔ 5G (Balance.swift)
+        Bond.watch(self)                                 // v65 (request 84): the bond, when bond.json says "on"
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
         // v32 (request 49): at once too when a device comes or goes (a phone plugged in, a cable), and when ⟳ is pressed.
         Thread.detachNewThread { [self] in
@@ -513,6 +516,14 @@ extension Server {
         guard let p = readExact(c, 2) else { close(c); return }
         let port = UInt16(p[0]) << 8 | UInt16(p[1])
         if req[1] == 3 { udp(c); return }
+        // v65 (request 84): through the bond when it is on and a leg is up; else, or when the relay cannot reach it, today's path
+        if let b = Bond.active(for: host) {
+            if let s = b.open(host, port) {
+                guard sendAll(c, [5, 0, 0, 1, 0, 0, 0, 0, 0, 0]) else { b.reset(s); close(c); return }
+                b.bridge(c, s); return
+            }
+            log("BOND \(host):\(port) did not open through the relay: today's path")
+        }
         guard let (out, u) = open(host, port, for: c) else { _ = sendAll(c, [5, 4, 0, 1, 0, 0, 0, 0, 0, 0]); close(c); return }
         guard sendAll(c, [5, 0, 0, 1, 0, 0, 0, 0, 0, 0]) else { finish(c, out, u, 0, 0); return }
         relay(c, out, u)
@@ -645,6 +656,13 @@ extension Server {
         if line[0] == "CONNECT" {
             let hp = line[1].split(separator: ":", omittingEmptySubsequences: false)
             let host = hp.dropLast().joined(separator: ":").trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
+            if let port = UInt16(hp.last ?? ""), let b = Bond.active(for: host) {
+                if let s = b.open(host, port) {
+                    guard sendAll(c, Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8)) else { b.reset(s); close(c); return }
+                    b.bridge(c, s); return
+                }
+                log("BOND \(host):\(port) did not open through the relay: today's path")
+            }
             guard let port = UInt16(hp.last ?? ""), let (out, u) = open(host, port, for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }
@@ -660,10 +678,11 @@ extension Server {
             let path = (url.path.isEmpty ? "/" : url.path) + (url.query.map { "?\($0)" } ?? "")
             var rest = text.components(separatedBy: "\r\n").dropFirst().filter { !$0.lowercased().hasPrefix("proxy-connection:") && !$0.lowercased().hasPrefix("connection:") }
             rest.insert("Connection: close", at: rest.count - 2)
+            let req = "\(line[0]) \(path) \(line.count > 2 ? line[2] : "HTTP/1.1")\r\n" + rest.joined(separator: "\r\n")
+            if let b = Bond.active(for: host), let s = b.open(host, UInt16(url.port ?? 80)) { b.bridge(c, s, first: Array(req.utf8)); return }
             guard let (out, u) = open(host, UInt16(url.port ?? 80), for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }
-            let req = "\(line[0]) \(path) \(line.count > 2 ? line[2] : "HTTP/1.1")\r\n" + rest.joined(separator: "\r\n")
             guard sendAll(out, Array(req.utf8)) else { finish(c, out, u, 0, 0); return }
             relay(c, out, u)
         } else {
@@ -709,13 +728,14 @@ extension Server {
     }
 
     func status() -> String {
+        let bond = Bond.status()                         // v65: before the lock (the bond's paths take it)
         lock.lock(); defer { lock.unlock() }
         let ls: [[String: Any]] = lines.map { u in
             ["name": u.name, "device": u.iface, "publicIP": u.publicIP ?? "", "gateway": u.gateway ?? "", "mbps": u.mbps, "rate": u.meter.rate, "capacity": u.capacity, "probed": u.meter.probed ?? 0, "radio": u.meter.radio ?? "",
              "alive": u.alive, "rttMs": rttValue(u), "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6]
         }
         let ig: [[String: String]] = ignored.map { ["name": $0.0.name, "device": $0.0.iface, "sameLineAs": $0.1.name] }
-        let d: [String: Any] = ["version": CKVersion, "port": Int(aggPort), "since": ISO8601DateFormatter().string(from: started), "lines": ls, "ignored": ig]
+        let d: [String: Any] = ["version": CKVersion, "port": Int(aggPort), "since": ISO8601DateFormatter().string(from: started), "lines": ls, "ignored": ig, "bond": bond]
         return String(decoding: try! JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted, .sortedKeys]), as: UTF8.self) + "\n"
     }
 }
@@ -833,5 +853,7 @@ case "test": test(seconds: argv.count > 1 ? Int(argv[1]) ?? 6 : 6)
 case "test-line" where argv.count > 1: test(seconds: argv.count > 2 ? Int(argv[2]) ?? 6 : 6, only: argv[1])
 case "on": Aggregation.systemProxy(true).forEach { print($0) }
 case "off": Aggregation.systemProxy(false).forEach { print($0) }
-default: print("usage: ck-aggregate serve | uplinks | test [seconds] | test-line <name> [seconds] | on | off"); exit(2)
+case "bond-init": print(BondConfigFile.initFile())
+case "bond-selftest": bondSelftest(Array(argv.dropFirst()))
+default: print("usage: ck-aggregate serve | uplinks | test [seconds] | test-line <name> [seconds] | on | off | bond-init | bond-selftest"); exit(2)
 }
