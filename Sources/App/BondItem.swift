@@ -1,5 +1,5 @@
 // THE BOND ON THE STRIPE (v75, request 85 item 5): one word in the first row, from ck-aggregate's /status "bond":
-//   ⇄ FRA 2 · 48↓        green: bonded through Frankfurt, two legs, 48 Mbit/s coming in now
+//   ⇄ FRA 2 · 48↓        green: through Frankfurt, two legs (bonded), 48 Mbit/s coming in now; ⇄ FRA 1: one line, private
 //   ⇄ ASIDE              amber: on, but stepping aside (one line, draining …): new connections go direct
 //   ⇄ DOWN               red: on, no leg to the relay (STRICT: nothing goes out)
 //   ⇄ off                grey: bond.json says off
@@ -31,7 +31,8 @@ extension Stripe {
                 tip = "Bond: \(why)"
             } else {
                 text = String(format: "⇄ FRA %d · %.0f↓", lines.count, mbps); color = Ink.green
-                tip = "Bonded through the relay (\(b["server"] as? String ?? "?")): " + lines.sorted().joined(separator: " + ") + String(format: "; %.1f Mbit/s in now. Click: the full check.", mbps)
+                tip = "Through the relay (\(b["server"] as? String ?? "?")): " + lines.sorted().joined(separator: " + ") + String(format: "; %.1f Mbit/s in now", mbps)
+                    + (lines.count == 1 ? ". One line: private (the home address hidden), no speed gain." : ". Bonded.") + " Click: the full check."
             }
         }
         if strict { text += " STRICT"; tip += ". PRIVACY STRICT: with no leg up, nothing goes over the home line." }

@@ -320,6 +320,21 @@ func bondSelftest(_ args: [String]) -> Never {
         }
     }
 
+    // 4b. v79: one live line left (lineA and lineB silenced): the bond is still in use (privacy); with "bond only when it
+    // adds speed" it steps aside
+    do {
+        sleep(4)                                            // lineB's leg is declared dead after 3 s of silence
+        let one = client.status()
+        let inUse = one["bypass"] is NSNull
+        client.cv.lock(); client.minLines = 2; client.cv.unlock()
+        let aside = client.status()["bypass"] as? String
+        client.cv.lock(); client.minLines = 1; client.cv.unlock()
+        let alive = (one["legs"] as? [[String: Any]] ?? []).filter { ($0["alive"] as? Bool) == true }.count
+        print("one line left (\(alive) leg): bond \(inUse ? "in use (privacy)" : "STEPPED ASIDE"); with speed-only: \(aside ?? "in use")")
+        if !inUse { failures.append("one leg: the bond stepped aside although privacy is the default") }
+        if aside == nil { failures.append("one leg + speed-only: the bond did not step aside") }
+    }
+
     // 5. v74: the direct list (bond-direct.txt) by name and by an address a DNS answer named
     if let df = aggEnv["CK_BOND_DIRECT"] {
         try? "# test\nexample.com\n*.youtube.com\n".write(toFile: df, atomically: true, encoding: .utf8)
@@ -335,6 +350,7 @@ func bondSelftest(_ args: [String]) -> Never {
     do {
         var drainedAt = -1.0, refusedMs = -1.0
         let t6 = bnow()
+        let legs6 = client.legCount
         let f6 = bondFetch(client, host: host, port: port, path: path, progress: { got in
             if drainedAt < 0 && got >= 16 << 20 {
                 drainedAt = bnow() - t6
@@ -344,6 +360,7 @@ func bondSelftest(_ args: [String]) -> Never {
                 print(String(format: "  bond switched off (drain) at %d bytes; a new connection was turned away in %.1f ms (%@)", got, refusedMs, s == nil ? "goes direct" : "WAS BONDED"))
             }
         })
+        print("  fetch 6 ran over \(legs6) leg(s): traffic through the relay with one line")
         print(String(format: "fetch 6 (bond off mid-way): %d bytes in %.2f s; sha %@ (%@)", f6.bytes, f6.secs, f6.sha, f6.sha == want ? "matches" : "DIFFERENT"))
         if !f6.ok || f6.sha != want { failures.append("fetch 6: the draining stream did not finish intact") }
         if refusedMs < 0 || refusedMs > 50 { failures.append("fetch 6: a new connection was not turned away at once") }

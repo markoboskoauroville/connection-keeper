@@ -10,7 +10,7 @@ Marko, 14.11.2026: "my whole machine now running on frankfurt ip that is fine, b
     ck-bondcheck --clean        after quitting it: the same as before? (PASS = identical; request 87)
 
 Checks: bond switched on (bond.json); DNS without leaks (whoami.cloudflare via 1.1.1.1 = the relay; the system
-resolver's question to Google not from the home line); the aggregate's bond has two or more live legs and is not stepping aside; the
+resolver's question to Google not from the home line); the aggregate's bond has a live leg (one = private, no speed gain; a note) and is not stepping aside; the
 public IPv4 seen from outside is the relay's address; Cloudflare places the Mac in Frankfurt (colo FRA); no IPv6 path
 around the bond (an IPv6 address would leak the home line); the relay's port 443 answers; on the VM the CKBOND service
 runs (through vmctl, when it is installed). Never prints the token.
@@ -80,7 +80,7 @@ def clean(argv):
 def main(argv):
     if "--clean" in argv or "--clean-save" in argv:
         return clean(argv)
-    rows, server = [], None
+    rows, server, notes = [], None, []
 
     def check(name, ok, detail):
         rows.append({"check": name, "ok": bool(ok), "detail": detail})
@@ -99,7 +99,10 @@ def main(argv):
         b = full.get("bond") or {}
         legs = [l for l in b.get("legs", []) if l.get("alive")]
         names = ", ".join(f"{l['line']} {l.get('rttMs', '?')} ms" for l in legs) or "none"
-        check("two or more live legs", len(legs) >= 2, names)
+        # v79: one leg is enough for privacy (the bond as a VPN); two or more add speed (a note, not a failure)
+        check("a live leg to the relay", len(legs) >= 1, names)
+        if len(legs) == 1:
+            notes.append("one line only: private through the relay, no speed gain (a second line adds it)")
         check("bond in use (not stepping aside)", not b.get("bypass"), b.get("bypass") or "in use")
     except Exception as e:
         check("aggregate status", False, f"no answer on {STATUS} ({e})")
@@ -162,10 +165,12 @@ def main(argv):
 
     ok = all(r["ok"] for r in rows)
     if "--json" in argv:
-        print(json.dumps({"pass": ok, "checks": rows}, indent=1))
+        print(json.dumps({"pass": ok, "checks": rows, "notes": notes}, indent=1))
     else:
         for r in rows:
             print(f"{'OK  ' if r['ok'] else 'FAIL'}  {r['check']:<34} {r['detail']}")
+        for n in notes:
+            print(f"NOTE  {n}")
         print("PASS: the whole Mac leaves through Frankfurt, bonded" if ok else "FAIL: see the lines above")
     return 0 if ok else 1
 

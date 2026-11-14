@@ -205,7 +205,10 @@ final class BondClient {
     // second in manage(), named in `bypass` and in the path log, so a line that never gets a leg is never a mystery
     var excluded: () -> [String] = { [] }
     var excludedNow: [String] = [], pathsSaid = ""
-    static let minLines = 2                              // v67: fewer lines up and the bond steps aside (one line gains nothing)
+    // v79 (Marko's priority is privacy: "acting as my VPN, hiding my real IP behind Frankfurt"): ONE live leg is enough;
+    // only with none do new connections go direct (or are refused under STRICT). bond.json "speedOnly": true brings back
+    // v67's rule (fewer than two lines: step aside, one line gains no speed).
+    var minLines = 1
 
     init(host: String, port: UInt16, token: [UInt8], paths: @escaping () -> [BondPath]) {
         self.host = host; self.port = port; self.token = token; self.paths = paths
@@ -543,7 +546,7 @@ final class BondClient {
         if !accepting { return "draining (bond switched off or changed): the open streams finish, new connections go direct" }
         let why = excludedNow.isEmpty ? "" : "; left out: " + excludedNow.joined(separator: ", ")
         if lines.isEmpty { return "no leg to the relay is up: new connections go direct" + why }
-        if lines.count < BondClient.minLines { return "only one line (\(lines.first!)) has a leg: one line gains nothing from the relay, new connections go direct" + why }
+        if lines.count < minLines { return "only one line (\(lines.first!)) has a leg and \"bond only when it adds speed\" is on: new connections go direct" + why }
         return nil
     }
     var usable: Bool { cv.lock(); defer { cv.unlock() }; return running && bypass() == nil }
@@ -750,16 +753,17 @@ enum Bond {
                     log("BOND PRIVACY \(strict ? "STRICT: without a bond leg nothing goes over the home line" : "normal: without a bond leg connections go direct")")
                 }
                 let token = want.flatMap { bondUnhex($0.token) }
-                let sig = want.map { "\($0.server)|\($0.port)|\($0.legsPerLine)|\(SHA256.hash(data: Array($0.token.utf8)).description)" }
+                let sig = want.map { "\($0.server)|\($0.port)|\($0.legsPerLine)|\($0.speedOnly ?? false)|\(SHA256.hash(data: Array($0.token.utf8)).description)" }
                 if sig != last {
                     lock.lock(); let old = client; client = nil; lock.unlock()
                     old?.drain()                     // v71: its open streams finish; new connections go direct meanwhile
                     if let c = want, let token, token.count >= 16 {
                         let nc = BondClient(host: c.server, port: c.port, token: token, paths: server.bondPaths(c))
                         nc.excluded = { [weak server] in server?.bondExcluded() ?? [] }
+                        nc.minLines = (c.speedOnly ?? false) ? 2 : 1
                         nc.start()
                         lock.lock(); client = nc; lock.unlock()
-                        log("BOND on: relay \(c.server):\(c.port), \(max(1, min(c.legsPerLine, 2))) leg(s) per line")
+                        log("BOND on: relay \(c.server):\(c.port), \(max(1, min(c.legsPerLine, 2))) leg(s) per line, \((c.speedOnly ?? false) ? "only with 2+ lines (speed)" : "also with one line (privacy)")")
                         warned = false
                     } else if want != nil {
                         if !warned { log("BOND bond.json: the token is not hex (at least 32 characters): bond stays off"); warned = true }

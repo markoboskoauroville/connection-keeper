@@ -9,6 +9,7 @@ struct BondConfig: Codable {
     var token: String
     var legsPerLine: Int
     var strict: Bool?          // v74: PRIVACY STRICT: no leg up = new connections refused, never direct (default off)
+    var speedOnly: Bool?       // v79: bond only when it adds speed (2+ lines); default off: one leg is enough (privacy, a VPN)
 }
 
 enum BondConfigFile {

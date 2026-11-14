@@ -199,3 +199,11 @@ The app is a normal Mac app (Dock, ⌘-Tab, a titled window, a main menu). `Sour
 - **/status `watchdog`:** acceptLoopMs, clients, maxClients, openFiles, uptimeS, draining, interim, pid, app (lease),
   strict; the log says "WATCHDOG" when the accept loop stops turning for 5 s. The server's log rotates at 10 MB
   (`.1`); the relay logs to journald (rotated by it).
+
+## One line = still through Frankfurt (v79)
+
+Marko's priority is privacy ("acting as my VPN, hiding my real IP behind Frankfurt"): with ONE live leg every connection
+still goes through the relay (no speed gain, the home address hidden); only with NO leg do new connections go direct (or
+are refused under PRIVACY STRICT). ⚙ "Bond only when it adds speed (2+ lines)" (bond.json `"speedOnly": true`, off by
+default) brings back the v67 rule. ck-bondcheck: "a live leg to the relay" is the check; one leg adds the NOTE "no speed
+gain". The stripe shows ⇄ FRA 1.
