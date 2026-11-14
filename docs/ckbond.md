@@ -124,4 +124,5 @@ still finish intact. The step fails on FAIL, before the release.
 - UDP: QUIC, video calls, DNS over UDP keep their one-line path. A UDP-in-frames mode (or a TUN on both ends) is phase 2.
 - The relay is one more hop: about +35 ms on every bonded connection, and the VM's own 2 Gbit/s and Oracle's egress
   are the ceiling. Every site sees the VM's address (Frankfurt), not the house's.
-- The relay is not yet installed and port 443 on the VM is not yet open (Oracle's security list + the VM's iptables).
+- The relay is not yet installed (14.11.2026). Port 443: the VCN's Default Security List already allows it and the VM's
+  iptables INPUT policy is ACCEPT (checked by the oci CLI, request 84); install.sh adds an ACCEPT rule anyway when a REJECT exists.
