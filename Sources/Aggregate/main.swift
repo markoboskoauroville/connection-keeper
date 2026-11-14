@@ -421,6 +421,7 @@ final class Server {
         Thread.detachNewThread { [self] in while true { sleep(1); checkLines() } }   // v62: 1 s (was 3 s): failover ~2-3 s
         startBalance()                                   // v47: live rate, probes on 4G ↔ 5G (Balance.swift)
         Bond.watch(self)                                 // v65 (request 84): the bond, when bond.json says "on"
+        if !aggTestCopy && !aggQuiet { Session.watch { log($0) } }   // v73 (request 87): the app gone without quitting = a clean close
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
         // v32 (request 49): at once too when a device comes or goes (a phone plugged in, a cable), and when ⟳ is pressed.
         Thread.detachNewThread { [self] in
@@ -898,6 +899,10 @@ case "test-line" where argv.count > 1: test(seconds: argv.count > 2 ? Int(argv[2
 case "on": Aggregation.systemProxy(true).forEach { print($0) }
 case "off": Aggregation.systemProxy(false).forEach { print($0) }
 case "handover": Handover.run(Array(argv.dropFirst()))
+case "session" where argv.count > 1:                // v73: what the app does at open and quit (CI tests it without a screen)
+    let pid = argv.firstIndex(of: "--app-pid").flatMap { $0 + 1 < argv.count ? Int32(argv[$0 + 1]) : nil } ?? getpid()
+    if argv[1] == "open" { Session.open(app: pid) { print($0) } } else if argv[1] == "close" { Session.close { print($0) } }
+    else { print("usage: ck-aggregate session open [--app-pid N] | close"); exit(2) }
 case "bond-init": print(BondConfigFile.initFile())
 case "bond-selftest": bondSelftest(Array(argv.dropFirst()))
 default: print("usage: ck-aggregate serve | uplinks | test [seconds] | test-line <name> [seconds] | on | off | bond-init | bond-selftest"); exit(2)

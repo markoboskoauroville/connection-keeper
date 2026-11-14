@@ -6,6 +6,8 @@ Marko, 14.11.2026: "my whole machine now running on frankfurt ip that is fine, b
     ck-bondcheck            the checks, one line each, then PASS or FAIL (exit 0 / 1)
     ck-bondcheck --speed    also one 10 MB download through the system (about 10 MB of SIM data)
     ck-bondcheck --json     the same as JSON
+    ck-bondcheck --clean-save   before opening the app: keep proxies, routes, service order, DNS, our processes
+    ck-bondcheck --clean        after quitting it: the same as before? (PASS = identical; request 87)
 
 Checks: bond switched on (bond.json); the aggregate's bond has two or more live legs and is not stepping aside; the
 public IPv4 seen from outside is the relay's address; Cloudflare places the Mac in Frankfurt (colo FRA); no IPv6 path
@@ -33,7 +35,50 @@ def run(cmd, timeout=20):
         return 1, str(e)
 
 
+CLEAN = os.path.join(SUPPORT, "clean-before.json")
+
+
+def clean_state():
+    """What the app may change on the Mac and must give back at quit (request 87): the proxies, the default and half
+    routes, the service order, the DNS resolvers, and our processes."""
+    st = {}
+    st["proxy"] = run(["scutil", "--proxy"])[1]
+    routes = run(["netstat", "-rn", "-f", "inet"])[1].splitlines()
+    st["routes"] = sorted(" ".join(l.split()[:2] + l.split()[3:4]) for l in routes
+                          if l.split() and l.split()[0] in ("default", "0/1", "128.0/1") and "I" not in (l.split()[2] if len(l.split()) > 2 else ""))
+    st["service order"] = [l for l in run(["networksetup", "-listnetworkserviceorder"])[1].splitlines() if l.startswith("(")]
+    st["dns"] = sorted(set(l.strip() for l in run(["scutil", "--dns"])[1].splitlines() if "nameserver[" in l))
+    ps = run(["ps", "-axo", "comm"])[1].splitlines()
+    st["processes"] = sorted(set(os.path.basename(p) for p in ps if os.path.basename(p) in ("ck-aggregate", "connection-keeperd", "hev-socks5-tunnel")))
+    st["tunnel flag"] = os.path.exists(os.path.join(SUPPORT, "tunnel-on"))
+    return st
+
+
+def clean(argv):
+    """--clean-save: keep the state before opening the app. --clean: compare with it after quitting (PASS = identical)."""
+    now = clean_state()
+    if "--clean-save" in argv:
+        json.dump(now, open(CLEAN, "w"), indent=1)
+        print(f"saved the state before: {len(now['routes'])} default/half routes, {len(now['service order'])} services, "
+              f"{len(now['dns'])} resolvers, processes {now['processes'] or 'none'}")
+        return 0
+    try:
+        before = json.load(open(CLEAN))
+    except Exception:
+        print("FAIL: no saved state (run ck-bondcheck --clean-save before opening the app)")
+        return 1
+    ok = True
+    for k in before:
+        same = before[k] == now.get(k)
+        ok &= same
+        print(f"{'OK  ' if same else 'FAIL'}  {k:<14} " + ("as before" if same else f"before {before[k]!r} now {now.get(k)!r}"))
+    print("PASS: the Mac is exactly as before the app" if ok else "FAIL: something of the app is left")
+    return 0 if ok else 1
+
+
 def main(argv):
+    if "--clean" in argv or "--clean-save" in argv:
+        return clean(argv)
     rows, server = [], None
 
     def check(name, ok, detail):

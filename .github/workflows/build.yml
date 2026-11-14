@@ -49,6 +49,15 @@ jobs:
           python3 Tools/ci/handover_test.py "build/$APP.app/Contents/MacOS/ck-aggregate" "$T/agg" 18080 "$SHA" || ok=$?
           echo "--- aggregate log"; grep -E "HANDOVER|ck-aggregate v|taken" "$T/agg/aggregate.log" | tail -30
           exit $ok
+      - name: Session test (open = through the aggregation, quit and crash = the Mac as before; 10 probes/s)
+        run: ./Tools/ci/session_test.sh
+      - name: Window snapshot (the selftest's picture of the stripe)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-window
+          path: build/selftest-window.png
+          if-no-files-found: ignore
       - name: Pack
         run: cd build && cp "$(ls *-connection-keeper-v*.zip | head -1)" app.zip
       - name: Release (Latest)

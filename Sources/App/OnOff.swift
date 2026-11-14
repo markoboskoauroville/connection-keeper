@@ -86,7 +86,8 @@ extension Stripe {
             let said = OnOff.cleanUp()
             for l in said { appendLog("\(logStamp()) OFF: \(l)") }
             UserDefaults.standard.set(true, forKey: OnOff.offKey)
-            DispatchQueue.main.async { NSApp.terminate(nil) }
+            try? FileManager.default.removeItem(at: Session.lease)
+            DispatchQueue.main.async { AppShell.shared.offDone = true; NSApp.terminate(nil) }
         }
     }
 }

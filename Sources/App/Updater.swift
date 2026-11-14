@@ -111,6 +111,7 @@ enum Updater {
         p.standardOutput = FileHandle.nullDevice; p.standardError = FileHandle.nullDevice
         do { try p.run() } catch { tell("Update failed: \(error)"); return }
         log("installing \(newApp.path) over \(target)")
+        AppShell.shared.updating = true            // v73: the quit keeps the session for the new copy
         NSApp.terminate(nil)
     }
 

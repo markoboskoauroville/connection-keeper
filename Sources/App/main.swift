@@ -14,7 +14,7 @@ enum OnTop {
     static let key = "alwaysOnTop"
     static let changed = Notification.Name("ConnectionKeeperOnTopChanged")
     static var on: Bool {
-        get { UserDefaults.standard.object(forKey: key) as? Bool ?? true }
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? false }    // v73: off by default (a normal window)
         set { UserDefaults.standard.set(newValue, forKey: key); NotificationCenter.default.post(name: changed, object: nil) }
     }
 }
@@ -242,14 +242,21 @@ final class Stripe: NSObject {
     var lineTesting = Set<String>()             // request 30: the rows being tested now ("JOINED" for all)
 
     override init() {
-        panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 760, height: 30),
-                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        // v73 (request 86): a normal titled window: the system's traffic lights, minimize to the Dock, moved by the title bar
+        panel = StripeWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 30),
+                        styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
+        panel.title = "Connection Keeper"
+        panel.isFloatingPanel = false
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.worksWhenModal = false
+        panel.isReleasedWhenClosed = false
+        panel.tabbingMode = .disallowed
         applyOnTop()
         NotificationCenter.default.addObserver(forName: OnTop.changed, object: nil, queue: .main) { [weak self] _ in self?.applyOnTop(); self?.showTop() }
         panel.isMovableByWindowBackground = true
-        panel.backgroundColor = .clear
-        panel.isOpaque = false
+        panel.backgroundColor = Ink.ground
+        panel.isOpaque = true
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
 
@@ -619,12 +626,12 @@ final class Stripe: NSObject {
     // only a click on its menu bar icon brings it to where he is (menuBarClicked, .moveToActiveSpace for that moment).
     func applyOnTop() {
         if OnTop.on {
-            panel.level = .statusBar
-            panel.collectionBehavior = [.managed, .fullScreenAuxiliary, .ignoresCycle]
+            panel.level = .floating
+            panel.collectionBehavior = [.managed, .fullScreenAuxiliary]
             if !MenuBarPrefs.stripeHidden { panel.orderFrontRegardless() }
         } else {
             panel.level = .normal
-            panel.collectionBehavior = [.managed, .ignoresCycle]
+            panel.collectionBehavior = [.managed]
         }
     }
 
@@ -711,7 +718,6 @@ final class Stripe: NSObject {
         keepOnScreen()
         applyOnTop()
         panel.orderFrontRegardless()
-        NSApp.setActivationPolicy(.accessory)
         appendLog("\(logStamp()) stripe back from minimized")
     }
 
@@ -734,7 +740,8 @@ final class Stripe: NSObject {
         // changes the scale, so the words grow or shrink with it and are never cut
         let size = NSSize(width: ceil(natural.width * scale), height: ceil(natural.height * scale))
         if root.bounds.size != natural { rescale(root, natural) }
-        if abs(size.width - panel.frame.width) < 1 && abs(size.height - panel.frame.height) < 1 { return }
+        let now = panel.contentRect(forFrameRect: panel.frame).size      // v73: the window has a title bar
+        if abs(size.width - now.width) < 1 && abs(size.height - now.height) < 1 { return }
         let x = panel.frame.minX, top = panel.frame.maxY
         resizingByHand = true
         panel.setContentSize(size)
@@ -1029,7 +1036,7 @@ final class Stripe: NSObject {
         log.target = self
         menu.addItem(log)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit the stripe", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        let quit = NSMenuItem(title: "Quit (back to the normal connection)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         menu.addItem(quit)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: connButton.bounds.height + 4), in: connButton)
     }
@@ -1234,8 +1241,16 @@ func loadAgents() {
 
 let app = NSApplication.shared
 if !OnOff.atStart(login: CommandLine.arguments.contains("--login") || (ProcessInfo.processInfo.systemUptime < 600 && !CommandLine.arguments.contains("--selftest"))) { exit(0) }   // v39: OFF stays off at login
-app.setActivationPolicy(.accessory)
+app.setActivationPolicy(.regular)                  // v73 (request 86): a Dock icon, ⌘-Tab, a main menu
 let stripe = Stripe()
+stripe.lights.isHidden = true                       // the system's own traffic lights replace the drawn ones
+AppShell.shared.install(on: app)
+let atLogin = CommandLine.arguments.contains("--login")
+if !CommandLine.arguments.contains("--selftest") {
+    // v73 (request 87): open = Frankfurt; the session's order never leaves the Mac without a road
+    DispatchQueue.global().async { Session.open { appendLog("\(logStamp()) \($0)") } }
+    if atLogin && !WindowPrefs.openAtLogin { MenuBarPrefs.stripeHidden = true; stripe.panel.orderOut(nil) }
+}
 if CommandLine.arguments.contains("--settings") { stripe.openSettings() }
 if CommandLine.arguments.contains("--check-data") { stripe.checkDataByHand() }    // v8: the same as a click on the data item
 if CommandLine.arguments.contains("--rescan") { stripe.rescanNow() }             // v32: the same as ⟳
@@ -1247,7 +1262,16 @@ if CommandLine.arguments.contains("--selftest") {
     stripe.fit(); stripe.layoutLines()
     RunLoop.current.run(until: Date().addingTimeInterval(4))
     stripe.fit()
-    print("selftest OK: Stripe built, laid out, \(stripe.panel.frame.size)")
+    // v73: the window is a normal one, and its picture for the CI artifact (looked at by Claude, never by Marko's screen)
+    let m = stripe.panel.styleMask
+    guard m.contains(.titled), m.contains(.miniaturizable), m.contains(.closable), NSApp.activationPolicy() == .regular, NSApp.mainMenu != nil else {
+        print("selftest FAIL: not a normal window/app (style \(m.rawValue), policy \(NSApp.activationPolicy().rawValue))"); exit(1)
+    }
+    if let v = stripe.panel.contentView, let rep = v.bitmapImageRepForCachingDisplay(in: v.bounds) {
+        v.cacheDisplay(in: v.bounds, to: rep)
+        try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: "build/selftest-window.png"))
+    }
+    print("selftest OK: Stripe built, laid out, \(stripe.panel.frame.size); titled window, Dock app, menu: \(NSApp.mainMenu?.items.map(\.title).joined(separator: ", ") ?? "")")
     exit(0)
 }
 app.run()
