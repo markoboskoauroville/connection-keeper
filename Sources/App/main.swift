@@ -86,7 +86,7 @@ func speedSample() -> String {
     let u = SpeedUnit.current
     let digits = (u == .autoBits || u == .autoBytes) ? 4 : 9
     let n = String(repeating: "8", count: digits) + " " + String(repeating: "M", count: u.unitWidth)
-    return "88\(n)  88\(n)"   // v60: room for the arrows; v51: one number per direction (the test result is in the tooltip)
+    return "888\(n)  888\(n)"   // v60: room for the arrows; v51: one number per direction (the test result is in the tooltip)
 }
 
 // v12 (Marko 18.10.2026: "you're using too much of my real estate ... remove internet ... just in parentheses. Put the
@@ -350,6 +350,7 @@ final class Stripe: NSObject {
         // v27 (request 45: "On the left side, make a minimize button which looks exactly as minimize button from the
         // macOS ... align that button with the rest of the text"): the yellow circle, "−" on it while the mouse is over
         wireLights()
+        for (w, l) in [(lanFilter, "LAN filter"), (wifiFilter, "Wi-Fi filter"), (helpWord, "Help")] { w.setAccessibilityLabel(l) }
         for (w, sym) in [(testSpeedWord, "speedometer"), (testHealthWord, "waveform.path.ecg"), (helpWord, "questionmark.circle"), (lanFilter, "cable.connector.horizontal"), (wifiFilter, "wifi"), (cloudWord, "cloud.fill"), (tsWord, "point.3.connected.trianglepath.dotted")] {
             w.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil); w.title = w.image == nil ? "TS" : ""; w.imagePosition = .imageOnly
         }

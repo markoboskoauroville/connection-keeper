@@ -43,7 +43,8 @@ extension Stripe {
         if o.sameAs != nil || o.ms == nil {
             show("\(Net.shown(o.name, o.iface)): \(o.sameAs ?? "no internet through it"), it cannot join", Ink.amber, for: 6); return
         }
-        var sel = Aggregation.selected
+        // aggregation off: old ticks from an earlier run do not count; a click always joins (the Mac's line + this one)
+        var sel = Aggregation.on ? Aggregation.selected : []
         let joining = !sel.contains(o.name)
         if joining {
             // the Mac's own line counts as ticked too while nothing was chosen yet
