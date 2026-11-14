@@ -816,3 +816,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > Cable is good now the camera is on the hotspot on the Wi-Fi on the cable. Please debug it I say camera, not in phone read it as noting phone nothing Phone nothing phone is a ground truth when you're able to attach to it by debugging, remove Wi-Fi and let it use its cell modem to be on the internet and then use Connection Keeper to go only through the cable and only through the noting phone and ignore completely TP Link
 
 **Status 14.11.2026 (v81, live 21:17):** NOTHING ONLY (cable) on: the Nothing's Wi-Fi switched off over USB, its cell modem, the only line and the only bond leg (public 130.61.181.83, FRA); AX88179B standby only. Fallback test 21:18:28 (ck-phone killed on the phone): AX88179B carried within 2 s, 0 failed requests, the Nothing back by itself after 5 s.
+
+## 14.11.2026, request 91 (STANDBY badge for the backup line; the speed test window draggable)
+
+> then you need to make use of an interface so I understand what's going on. Connection keeper: now not Cable is active and AX is backup. But when I look at the interface, all I see is they are both green, so they look both active. So you need to put some backup badge or something so I understand it's not. Second, update this speed testing small web page. Please make it draggable with the mouse, so I can drag it anywhere I like
+
+**Status:** saved; v82 in progress.
