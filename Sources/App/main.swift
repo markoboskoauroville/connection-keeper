@@ -1241,7 +1241,7 @@ if CommandLine.arguments.contains("--check-data") { stripe.checkDataByHand() }  
 if CommandLine.arguments.contains("--rescan") { stripe.rescanNow() }             // v32: the same as ⟳
 // v55: `--selftest` builds the whole stripe, lays it out, lets the timers run for 4 s and exits 0 (CI runs it; a crash in
 // Stripe.init, like the v54 constraint without a common ancestor, fails the workflow instead of shipping).
-if !CommandLine.arguments.contains("--selftest") { MenuBarPlace.registerLogin() }
+if !CommandLine.arguments.contains("--selftest") { MenuBarPlace.registerLogin(); Updater.checkAtStart() }   // v62: asks to update at start
 if CommandLine.arguments.contains("--selftest") {
     stripe.panel.orderOut(nil)
     stripe.fit(); stripe.layoutLines()
