@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI only: new connections to 1.1.1.1:80 (an HTTP GET; any HTTP answer counts) from two threads, together at least 10 a
+"""CI only: new connections to 1.1.1.1:80 (an HTTP GET; any HTTP answer counts) from three threads, together at least 10 a
 second, for <seconds>, through whatever road the Mac has. A NEW connection that cannot be opened or gets no answer within
 3 s is counted "newFailed"; one that was open and broke, "inflightBroken" (a road changed under it). One JSON line at the end."""
 import json, socket, sys, threading, time
@@ -28,7 +28,7 @@ def worker():
                 st["newFailed" if r[0] == "connect" else "inflightBroken"] += 1
                 if len(st["log"]) < 20: st["log"].append(f"{time.time() - t0:.1f} s {r[0]}: {r[1]}")
         time.sleep(max(0, 0.18 - (time.time() - start)))
-ts = [threading.Thread(target=worker) for _ in range(2)]
+ts = [threading.Thread(target=worker) for _ in range(3)]
 for t in ts: t.start()
 for t in ts: t.join()
 st["perSecond"] = round(st["probes"] / secs, 1)
