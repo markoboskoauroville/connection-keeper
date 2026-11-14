@@ -66,7 +66,8 @@ Record: `len u16` (ciphertext + 16-byte tag) | ciphertext | tag. One frame per r
 | 8 / 9 | PING / PONG | id | the sender's clock (ns), echoed |
 | 10 | WELCOME | – | none |
 
-Types 1–5 are **sequenced**: numbered per stream and direction from 0, reliable, delivered in order.
+Types 1–5 are **sequenced**: numbered per stream and direction from 0, reliable, delivered in order. A stream is made on its first frame,
+whatever it is (its DATA may overtake its OPEN on a faster leg); one whose OPEN does not come within 10 s is reset.
 
 ### Reliability
 

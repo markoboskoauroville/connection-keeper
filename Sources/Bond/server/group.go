@@ -80,6 +80,7 @@ type stream struct {
 	finSent, finRecv bool
 	failed, done     bool
 	target           string
+	born             time.Time
 	lastActive       time.Time
 }
 
@@ -402,17 +403,15 @@ func (g *group) onSeq(l *leg, f frame) {
 			g.ctl(l, frame{typ: fAck, stream: f.stream, seq: f.seq + 1}) // a late copy: it has all it needs
 			return
 		}
-		if f.typ != fOpen || f.seq != 0 {
-			g.ctl(l, frame{typ: fRst, stream: f.stream}) // not known here (a group made again): the Mac ends it
-			return
-		}
+		// v67: any first frame makes the stream: with the Mac's optimistic OPEN its first DATA can come on a faster leg
+		// than the OPEN (it waits in ooo). A stream whose OPEN never comes (a group made again) is reset after 10 s.
 		if len(g.streams) >= maxStreams {
 			g.closed[f.stream] = time.Now()
 			g.ctl(l, frame{typ: fRst, stream: f.stream})
 			log.Printf("BOND group %s: %d streams open, a new one refused", g.name, maxStreams)
 			return
 		}
-		s = &stream{id: f.stream, g: g, unacked: map[uint32]*pending{}, ooo: map[uint32]frame{}, lastActive: time.Now()}
+		s = &stream{id: f.stream, g: g, unacked: map[uint32]*pending{}, ooo: map[uint32]frame{}, lastActive: time.Now(), born: time.Now()}
 		s.cond = sync.NewCond(&g.mu)
 		g.streams[f.stream] = s
 		go s.deliver()
@@ -672,6 +671,9 @@ func (g *group) loop() {
 		for id, s := range g.streams {
 			if s.delivered != s.ackSent || s.ackForce {
 				g.sendStreamAck(s)
+			}
+			if !s.done && s.expect == 0 && wall.Sub(s.born) > 10*time.Second {
+				g.finish(s, true) // its OPEN never came
 			}
 			if !s.done && wall.Sub(s.lastActive) > streamIdle {
 				g.finish(s, true)
