@@ -724,3 +724,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > Add one more icon next to the top and close to this test health, which is H. That's the help. It is kind of infographics explaining all the parts of the user interface, and it is using the same ASP test, same browser, to show itself. I can read about the app there, but infographics is the most important thing. So quickly, I can see what each icon does and how to use this app.
 
 **Status:** built 14.11.2026 (v60): H (question-mark icon) after HEALTH; Resources/help/index.html, a numbered drawing of the stripe with a card per part, the colours, four steps to faster internet; shown in the same edgeless WebKit window, H again or Esc closes.
+
+**Tested 14.11.2026 (v61):** filters, join by click, arrows, help, speed window open/close: all seen working on the Mac. See TAKEOVER for the aggregation QC.

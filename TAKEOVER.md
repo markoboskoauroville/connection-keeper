@@ -1,3 +1,18 @@
+**14.11.2026, v59–v61 (requests 78–82).** v59: the speed window edgeless (no title, no bar), frame.js measures the frame and the
+window takes its size + 12 pt (seen: 514 × 374), the speedometer opens and closes it, Esc closes, Cmd-drag moves; the grip closes the
+gaps (stack spacing and margins, `stripeGap`) before the letters shrink. v60: ALL: a click on a name joins (green) or leaves (white);
+LAN and Wi-Fi filter icons beside ALL; SF arrows before both speeds; H (questionmark.circle) opens Resources/help/index.html, the
+numbered infographic, in the same edgeless window. v61: with aggregation off a click always joins (yesterday's saved ticks ignored:
+the first try removed the Nothing instead). Tested on the Mac 14.11.2026 05:39–05:50: LAN filter → AX88179B + Nothing; Wi-Fi → mantra;
+click Nothing → JOINED, BOTH on, both IN USE, internet 0.28 s; help and speed open/close by their icons.
+**Aggregation QC (research 14.11.2026, Sonnet worker, from knowledge, not re-checked on the web):** our per-connection weighted balancer
+is the right class without a server (better than dispatch-proxy-style round robin); a single flow (video call, speedtest single
+connection) can never exceed one line without a bonding server (glorytun/mud, OpenMPTCProuter, Speedify). Ranked fixes: 1. ck-net
+end-game (last pieces raced on the fastest line, Net/main.swift:554); 2. piece size and streams by line rate (:457, :613); 3. an RTT
+term in Balance.swift:37 so small connections avoid the slow-ping phone; 4. failover 6 s → ~2 s (Failover.swift:171-208 probe 1 s);
+5. packet bonding through chromium-vm (glorytun/mud, about a day). Measured today: the Nothing at −105 dBm / SINR −2 adds little
+(joined ↓6.7 ↑10.5 vs AX88179B alone ↓6 ↑10); its place is the gain.
+
 **14.11.2026, v58 (request 77): only the test frame on speedtest.net** (Resources/speedtest/frame.js, a WKUserScript at document
 start with a MutationObserver: outside .pure-u-custom-speedtest hidden, #content-card-stack and below hidden, RESULTS · SETTINGS and
 Connections rows hidden; the privacy box kept). Window 820 × 600, an eye on the bottom bar shows the whole page. Seen on the Mac: GO,

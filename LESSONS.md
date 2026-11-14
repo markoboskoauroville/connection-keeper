@@ -341,3 +341,8 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 
 ## 13.11.2026 (v55): a constraint between views that are not in one hierarchy crashes the launch
 - v54 activated `spacerL.width == spacerR.width` before both were in the tab row: NSGenericException "no common ancestor" in Stripe.init, the app died at every start. Activate a constraint only after both views are subviews of one parent. The CI now runs the built app with `--selftest` (build the stripe, lay it out, run the timers 4 s, exit 0), so a launch crash fails the workflow.
+
+- 14.11.2026: `macro ax-press` matches labels without case: "Wi-Fi" pressed the WI-FI word (its network menu opened and blocked the
+  stripe until a click outside), and "off" would have hit OFF (the app quits). Icon buttons get a unique accessibility label
+  (LAN filter, Wi-Fi filter, Help); press by that, or click by screen coordinates from a window screenshot.
+- 14.11.2026: Aggregation.selected survives "one connection" mode; any UI that adds a tick must start fresh when aggregation is off.
