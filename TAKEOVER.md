@@ -1,3 +1,10 @@
+**14.11.2026, v57 (request 76): the speedometer icon opens speedtest.net in the app's own browser window** (SpeedBrowser.swift,
+WKWebView, the Mac's WebKit; Chromium/CEF weighed and left: ~250 MB per release over a SIM line). Ads: uBlock Origin's default
+lists converted to WebKit content rules on GitHub's runner (Tools/make_adblock.py → Resources/adblock/network.json + cosmetic.json,
+Tools/check_adblock.swift drops any rule WebKit refuses), plus Resources/adblock/seed.json (69 ad networks, always). v57 build:
+102,024 network + 5,916 cosmetic rules, all compile; seen on the Mac: page loaded, bar "Ad blocking on … (108009 rules)". The old
+line test (ck-net test speed, LineTestWindow) stays in the code, no longer on this icon. Installed 14.11.2026 05:13.
+
 # connection-keeper: takeover
 
 **28.10.2026, 23:37: the v32 tunnel helper is installed** (Marko typed `sudo ./tunnel.sh install`; the first try hit
