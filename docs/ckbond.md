@@ -28,7 +28,9 @@ app ─SOCKS/HTTP─▶ ck-aggregate ──leg 1 (cable  en17)──┐
    on today's path.
 3. Fewer than two lines with a leg up (v67): the bond steps aside, new connections take today's `race()` path, and
    `/status` `bond.bypass` says why (one line gains nothing from the relay, it only adds its hop). The legs stay up, so
-   the bond is back the moment a second line is.
+   the bond is back the moment a second line is. The bond takes the aggregation's lines as they are: a ticked line the
+   stripe's HTTPS probe marks NO DATA (dead-lines.json) or that is not found is left out, and `bypass` and the log line
+   `BOND paths: … ; left out: …` (written whenever the set changes) say so (v69).
 4. OPEN is optimistic (v67): the client gets its SOCKS/HTTP answer and its first bytes follow OPEN at once, without
    waiting a relay round trip for OPEN_OK. OPEN_FAIL closes the client's socket; no OPEN_OK within 10 s resets the stream.
 5. UDP (QUIC, calls, DNS over UDP) is not bonded: it keeps today's one-line path.

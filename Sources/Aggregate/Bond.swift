@@ -185,6 +185,10 @@ final class BondClient {
     var noLegsSince: Double?
     var bytesUp = 0, bytesDown = 0, opened = 0
     var bypassSaid: String?
+    // v69: the lines the aggregation leaves out, and why (NO DATA from the stripe's probe, not answering): asked once a
+    // second in manage(), named in `bypass` and in the path log, so a line that never gets a leg is never a mystery
+    var excluded: () -> [String] = { [] }
+    var excludedNow: [String] = [], pathsSaid = ""
     static let minLines = 2                              // v67: fewer lines up and the bond steps aside (one line gains nothing)
 
     init(host: String, port: UInt16, token: [UInt8], paths: @escaping () -> [BondPath]) {
@@ -209,8 +213,11 @@ final class BondClient {
 
     // Every second: a leg for every path that has none, the legs of a line that is gone closed.
     func manage() {
-        let want = paths()
+        let want = paths(), out = excluded()
+        let said = (want.isEmpty ? "none" : want.map { "\($0.key) (\($0.line))" }.joined(separator: " + ")) + (out.isEmpty ? "" : "; left out: " + out.joined(separator: ", "))
         cv.lock()
+        excludedNow = out
+        if said != pathsSaid { pathsSaid = said; log("BOND paths: \(said)") }
         let keys = Set(want.map(\.key))
         for l in legs where !keys.contains(l.key) { kill(l, "its line is gone") }
         let now = bnow()
@@ -482,8 +489,9 @@ final class BondClient {
     // (under cv) Why new connections do not take the bond now, or nil when they do.
     func bypass() -> String? {
         let lines = Set(legs.filter { !$0.dead }.map(\.line))
-        if lines.isEmpty { return "no leg to the relay is up: new connections go direct" }
-        if lines.count < BondClient.minLines { return "only one line (\(lines.first!)) has a leg: one line gains nothing from the relay, new connections go direct" }
+        let why = excludedNow.isEmpty ? "" : "; left out: " + excludedNow.joined(separator: ", ")
+        if lines.isEmpty { return "no leg to the relay is up: new connections go direct" + why }
+        if lines.count < BondClient.minLines { return "only one line (\(lines.first!)) has a leg: one line gains nothing from the relay, new connections go direct" + why }
         return nil
     }
     var usable: Bool { cv.lock(); defer { cv.unlock() }; return running && bypass() == nil }
@@ -626,6 +634,7 @@ enum Bond {
                     old?.stop()
                     if let c = want, let token, token.count >= 16 {
                         let nc = BondClient(host: c.server, port: c.port, token: token, paths: server.bondPaths(c))
+                        nc.excluded = { [weak server] in server?.bondExcluded() ?? [] }
                         nc.start()
                         lock.lock(); client = nc; lock.unlock()
                         log("BOND on: relay \(c.server):\(c.port), \(max(1, min(c.legsPerLine, 2))) leg(s) per line")
@@ -644,6 +653,20 @@ enum Bond {
 }
 
 extension Server {
+    // The ticked lines the bond cannot use now, and why (v69: on 14.11.2026 the Nothing's hotspot "Something" was marked
+    // NO DATA by the stripe's HTTPS probe at 08:07:53, the server's 08:08:02 refresh left en0 out, and the bond, which
+    // takes the server's lines, said only "only one line").
+    func bondExcluded() -> [String] {
+        lock.lock(); let ls = lines; lock.unlock()
+        var out = ls.filter { !$0.alive }.map { "\($0.name) (not answering the health check)" }
+        let present = Set(ls.map(\.name))
+        let dead = Set(Aggregation.dead)
+        for name in Aggregation.selected where !present.contains(name) {
+            out.append(dead.contains(name) ? "\(name) (NO DATA: the stripe's HTTPS probe through it fails; back after a minute of good probes)" : "\(name) (not found as a line now)")
+        }
+        return out
+    }
+
     // One path per live line (and per leg of it): cable and Wi-Fi bound to their device, phones through their SOCKS port.
     func bondPaths(_ c: BondConfig) -> () -> [BondPath] {
         let host = c.server, port = c.port, k = max(1, min(c.legsPerLine, 2))
