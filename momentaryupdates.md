@@ -746,3 +746,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **14.11.2026 07:18 live:** v66 installed on the Mac, bond-init, relay on chromium-vm (install.sh: "ckbond: active on :443"), bond on: leg AX88179B up (rtt 40 ms), public address 130.61.181.83. Found: page loads 0.6–1.4 s through the bond vs 0.33 s direct, and only one line in the pool (the Nothing went VIA WI-FI). Bond set off at 07:22; the worker fixes the delay and makes bond step aside with fewer than two lines.
 
 **14.11.2026 07:28 live, two lines (Nothing Wi-Fi off):** 10 MB single stream: direct 51 Mbit/s; bonded 40 Mbit/s (AX88179B 1.35 MB, Nothing 9.2 MB; both legs show rateMbps 10: the rate estimate does not learn). Pages through the bond 0.25-0.30 s. Bond off again; the worker fixes the estimator.
+
+**Status 14.11.2026 (v67–v68):** after the first live test: rate estimator fixed (the phone's bursts), optimistic OPEN, bond steps aside below two lines (`bond.bypass`), relay rate visible in /status. CI v68: 96.3 Mbit/s one stream over 80 + 80 + 16, intact after a line died. Waiting: v68 on the Mac and the v68 relay on chromium-vm, then the live 10 MB comparison again.

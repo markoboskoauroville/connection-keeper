@@ -362,3 +362,11 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   Keep some credit in the token bucket (20 ms here).
 - Both the Swift and the Go side compiled at the first push: write the CI step that proves it before the code (the selftest
   failing the workflow is what made the slow rate visible at all).
+- A maximum of short delivery samples believes bursts: a phone behind adb delivers in lumps, so a best-100-ms rate made it look
+  far faster than it is, it got most of the stream and filled the window (live 14.11.2026: 40 Mbit/s bonded vs 51 direct). Samples
+  of >= 250 ms, smoothed, and lowered only when the leg was backlogged throughout.
+- Show the estimate that does the work: for a download the relay schedules, so the Mac's own (upload) rate in /status read "10"
+  and looked broken. The relay now sends its rate in PONG.
+- An optimistic OPEN means the stream's first DATA can arrive first on a faster leg: the far end must make the stream on any
+  first frame and hold the gap (v67 CI failed with 0 bytes, v68 fixed).
+- One line through the relay is a hop with no gain: bond only with two or more lines up.

@@ -1,3 +1,14 @@
+**14.11.2026, v67–v68 (request 84, after the first live run):** live with two legs (AX88179B 31 ms, Nothing 48 ms) bond added
+only one relay hop to small requests (google 0.17–0.29 s vs 0.14 direct), but one 10 MB stream lost to direct (40 vs 51 Mbit/s,
+87 % on the phone): v66's best-100-ms rate believed the phone's adb bursts. The Mac's rateMbps "stuck at 10" was only its own
+upload estimate. v67: rate = delivery over >= 250 ms smoothed, down only when backlogged the whole sample; the relay's estimate
+comes back in every PONG (`rateDownMbps`) and in its minute log per leg; OPEN optimistic (one relay round trip less per
+connection); a young stream's first 64 KB may use twice a leg's cap; fewer than 2 lines up → bond steps aside (`bond.bypass`
+says why, log "BOND stepped aside" / "BOND in use"). v67's CI run failed (DATA overtook the optimistic OPEN on a faster leg, the
+relay sent RST); v68: the relay makes a stream on its first frame. CI v68 (run 43566598328): 96.3 Mbit/s one stream over
+80 + 80 + 16 (shares 56/32/12 %), relay estimates 86.9 and 16.8 Mbit/s; after a silenced line 59.9 Mbit/s intact. Not yet seen
+live: v68 needs both the Mac app and the relay (its PONG format changed) installed together.
+
 **14.11.2026, v65–v66 (request 84): ckbond, one connection over every line through the relay on chromium-vm.**
 Protocol, workflow and limits: [docs/ckbond.md](docs/ckbond.md). Relay: Sources/Bond/server (Go, standard library), release asset
 `ck-bond-server-linux-arm64`, unit + installer in Tools/bond. Mac: Sources/Aggregate/Bond.swift (legs per live line, frames
