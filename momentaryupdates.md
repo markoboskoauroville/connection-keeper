@@ -802,3 +802,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status:** sent to the bonding worker together with "one line is enough for Frankfurt".
 
 **Status 14.11.2026 (v79–v80):** one leg = through Frankfurt (privacy), speed-only setting off by default; request 88 FRANKFURT / CROATIA buttons built, CI way test 0 failures, address switches in under 1 s. Not installed live.
+
+**14.11.2026 12:51 INSTALLED LIVE (Marko: "now it is a quiet time. Please install it"):** relay v80 on chromium-vm (install.sh, one restart from v68: ~2 s, the Mac leg back at once; Type=notify, vmcore.slice, nice -15 kept); Mac v80 (signed Mantra Apps, `ck-aggregate handover`: 0 open connections, old pid drained) with a live probe 60/60 OK. ck-bondcheck PASS: one line AX88179B, public 130.61.181.83 colo FRA, DNS via the relay, no IPv6 leak, CKBOND running. The window is open but not on screen (not brought front, Marko works). Lessons: scp to the public address of the relay ran through the relay itself and broke once; zsh mangles "$V:ckbond" (the :c modifier) — write the address out; Tailscale SSH asks for a browser check, use the hostname.
