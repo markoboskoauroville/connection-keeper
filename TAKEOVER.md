@@ -6,6 +6,15 @@ IPv4 = relay, Cloudflare colo FRA, no IPv6 leak, relay 443 over the cable, VM CK
 check goes out over en17/en0 (through the Mac's own tunnel 443 "answered" in 1 ms). Open: YouTube on the Mac may ask to sign
 in (Frankfurt address) — a direct list was offered, not asked for; UDP (QUIC, calls) not bonded yet (phase 2).
 
+**14.11.2026, v79–v80 (privacy first; request 88).** v79: ONE live leg is enough, the bond is a VPN (only with no leg:
+direct, or refused under STRICT); ⚙ "Bond only when it adds speed (2+ lines)" (bond.json speedOnly) off by default;
+ck-bondcheck "a live leg" + NOTE "no speed gain"; stripe ⇄ FRA 1. v80: FRANKFURT and CROATIA buttons in the first row (the
+chosen green), View ⇧⌘F / ⇧⌘C, a right click on the menu bar icon; bond.json "on" read every second; seamless through the
+drain. CI v80 (run 43590468604): one leg in use, speed-only steps aside, fetch over one leg through the relay; way test
+FRANKFURT → CROATIA → FRANKFURT, 241 new connections at 12/s, 0 failed; the far end saw the relay's address
+(127.0.0.2) / the line's (127.0.0.1), switched in 0.39 s and 0.96 s; session, hand-over tests green. v79's release step
+got HTTP 403 from GitHub once (tests green); v80 released normally. Not installed live.
+
 **14.11.2026, v76–v78 (the throughput question; test tooling only, nothing in the data path changed).** `bench.yml`
 (workflow_dispatch) builds several tags and runs the same selftest interleaved on ONE runner. Run 43585816772, 3 rounds,
 fetch 1 medians: v70 50.0, v72 71.9, v73 86.4, v74 101.8, v75 77.2, HEAD 82.1 Mbit/s; inside one version up to 2x apart

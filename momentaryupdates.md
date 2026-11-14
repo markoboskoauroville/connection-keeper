@@ -800,3 +800,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > regarding the connection, give me the option of Frankfurt or Croatia in my user interface. I will understand that. Give me two action buttons: Frankfurt and Croatia
 
 **Status:** sent to the bonding worker together with "one line is enough for Frankfurt".
+
+**Status 14.11.2026 (v79–v80):** one leg = through Frankfurt (privacy), speed-only setting off by default; request 88 FRANKFURT / CROATIA buttons built, CI way test 0 failures, address switches in under 1 s. Not installed live.
