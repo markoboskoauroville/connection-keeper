@@ -622,7 +622,7 @@ final class Stripe: NSObject {
         if dayTried == "" { dayTried = today; return }          // the start already asked
         guard dayTried != today else { return }
         dayTried = today
-        let needData = !isToday(DataBalance.load()?.checked), needSpeed = !isToday(WebSpeed.load()?.at)
+        let needData = !isToday(DataBalance.load()?.checked), needSpeed = !NothingOnly.on && !isToday(WebSpeed.load()?.at)   // v82: not over the Nothing's SIM
         if needData { checkData(visible: false) { if needSpeed { self.testSpeed(visible: false) } } }
         else if needSpeed { testSpeed(visible: false) }
     }

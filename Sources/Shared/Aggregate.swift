@@ -170,6 +170,7 @@ enum Aggregation {
 struct AggLine: Codable {
     let name: String, device: String, publicIP: String, gateway: String
     let mbps: Double, alive: Bool, active: Int, connections: Int, mbDown: Double, mbUp: Double
+    var role: String? = nil              // v82 (request 91): "active", "standby" (NOTHING ONLY's waiting line), "fallback"
 }
 struct AggIgnored: Codable { let name: String, device: String, sameLineAs: String }
 struct AggStatus: Codable { let version: Int, port: Int, lines: [AggLine], ignored: [AggIgnored] }

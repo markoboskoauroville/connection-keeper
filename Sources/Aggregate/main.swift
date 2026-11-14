@@ -221,7 +221,7 @@ enum Lines {
             let u = Uplink(iface: s.iface, name: s.name, gateway: s.gateway, gatewayMAC: s.gatewayMAC, publicIP: s.publicIP)
             if let serial = s.serial, let port = s.port { u.phone = Phone(serial: serial, name: s.name, port: port) }
             u.cellular = s.cellular
-            u.standby = (s.standby ?? false) && NothingOnly.on
+            u.standby = NothingOnly.on && (s.standby ?? (s.serial == nil))   // v82: a line saved before the mode waits too
             if let m = w[u.publicIP ?? u.iface] { u.mbps = max(m, 0.5) }
             return u
         }
@@ -918,8 +918,9 @@ extension Server {
                                        "app": lease.map { Session.appAlive($0) ? "open (pid \($0.pid))" : ($0.updatingUntil != nil ? "updating" : "gone") } ?? "no lease",
                                        "strict": Bond.strictOn]                         // v65: before the lock (the bond's paths take it)
         lock.lock(); defer { lock.unlock() }
+        let inUse = Set(usable(lines).map { $0.iface })           // v82 (request 91): who carries, who waits
         let ls: [[String: Any]] = lines.map { u in
-            ["name": u.name, "device": u.iface, "publicIP": u.publicIP ?? "", "gateway": u.gateway ?? "", "mbps": u.mbps, "rate": u.meter.rate, "capacity": u.capacity, "probed": u.meter.probed ?? 0, "radio": u.meter.radio ?? "",
+            ["role": !u.standby ? "active" : inUse.contains(u.iface) ? "fallback" : "standby", "name": u.name, "device": u.iface, "publicIP": u.publicIP ?? "", "gateway": u.gateway ?? "", "mbps": u.mbps, "rate": u.meter.rate, "capacity": u.capacity, "probed": u.meter.probed ?? 0, "radio": u.meter.radio ?? "",
              "alive": u.alive, "rttMs": rttValue(u), "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6]
         }
         let ig: [[String: String]] = ignored.map { ["name": $0.0.name, "device": $0.0.iface, "sameLineAs": $0.1.name] }

@@ -85,7 +85,9 @@ extension Stripe {
         let dot: CGFloat = 9, gap: CGFloat = 5, h: CGFloat = 22
         let img = NSImage(size: NSSize(width: dot + gap + textW, height: h), flipped: false) { _ in
             b.effectiveAppearance.performAsCurrentDrawingAppearance {
-                (self.internetUp() ? Ink.green : Ink.red).withAlphaComponent(0.85).setFill()
+                // v82 (request 91): amber while NOTHING ONLY runs on its fallback line
+                let fallback = NothingOnly.state?.hasPrefix("standby") == true
+                (self.internetUp() ? (fallback ? Ink.amber : Ink.green) : Ink.red).withAlphaComponent(0.85).setFill()
                 NSBezierPath(ovalIn: NSRect(x: 0, y: (h - dot) / 2, width: dot, height: dot)).fill()
                 let style = NSMutableParagraphStyle(); style.alignment = .right
                 let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor, .paragraphStyle: style]

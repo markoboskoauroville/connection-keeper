@@ -30,6 +30,56 @@ final class EdgelessWindow: NSWindow {
     }
 }
 
+// v82 (request 91, Marko 14.11.2026: "update this speed testing small web page. Please make it draggable with the mouse, so
+// I can drag it anywhere I like"): a thin grip bar on top of the page (the page itself takes the mouse, so a drag on it
+// tests the page, not the window): a drag anywhere on the bar moves the window, ✕ at its right end closes. The place is
+// kept (screen + top-left) between opens and is never pushed back by the app; the page's own size changes keep the
+// top-left corner.
+final class GripBar: NSView {
+    static let height: CGFloat = 16
+    var onClose: (() -> Void)?
+    override var mouseDownCanMoveWindow: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(calibratedWhite: 0.10, alpha: 1).setFill(); bounds.fill()
+        NSColor(calibratedWhite: 0.45, alpha: 1).setFill()
+        let w: CGFloat = 36
+        NSBezierPath(roundedRect: NSRect(x: bounds.midX - w / 2, y: bounds.midY - 1.5, width: w, height: 3), xRadius: 1.5, yRadius: 1.5).fill()
+        let x = NSAttributedString(string: "✕", attributes: [.font: NSFont.systemFont(ofSize: 10, weight: .bold), .foregroundColor: NSColor(calibratedWhite: 0.7, alpha: 1)])
+        x.draw(at: NSPoint(x: bounds.maxX - 16, y: (bounds.height - x.size().height) / 2))
+    }
+    var closeRect: NSRect { NSRect(x: bounds.maxX - 22, y: 0, width: 22, height: bounds.height) }
+    override func resetCursorRects() {
+        addCursorRect(bounds.insetBy(dx: 0, dy: 0).divided(atDistance: bounds.width - 22, from: .minXEdge).slice, cursor: .openHand)
+        addCursorRect(closeRect, cursor: .pointingHand)
+    }
+    override func mouseDown(with e: NSEvent) {
+        if closeRect.contains(convert(e.locationInWindow, from: nil)) { onClose?(); return }
+        NSCursor.closedHand.push()
+        window?.performDrag(with: e)
+        NSCursor.pop()
+    }
+}
+
+enum SpeedPlace {
+    static let key = "speedWindowPlace"
+    static func save(_ w: NSWindow) {
+        guard let s = w.screen else { return }
+        let f = w.frame
+        UserDefaults.standard.set(["screen": s.localizedName, "x": f.minX - s.frame.minX, "top": s.frame.maxY - f.maxY], forKey: key)
+    }
+    // the saved top-left, only when that display is still there and the grip would be on it
+    static func restore(_ w: NSWindow) -> Bool {
+        guard let p = UserDefaults.standard.dictionary(forKey: key), let name = p["screen"] as? String,
+              let x = p["x"] as? Double, let top = p["top"] as? Double,
+              let s = NSScreen.screens.first(where: { $0.localizedName == name }) else { return false }
+        let origin = NSPoint(x: s.frame.minX + x, y: s.frame.maxY - top - w.frame.height)
+        let grip = NSRect(x: origin.x, y: origin.y + w.frame.height - GripBar.height, width: w.frame.width, height: GripBar.height)
+        guard s.frame.intersection(grip).width >= 60 else { return false }
+        w.setFrameOrigin(origin)
+        return true
+    }
+}
+
 final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     static var shared: SpeedBrowser?
     static let home = URL(string: "https://www.speedtest.net/")!
@@ -61,16 +111,26 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
         window.backgroundColor = .black
         window.hasShadow = true
         window.isOpaque = false
-        window.contentView = web
-        web.wantsLayer = true
-        web.layer?.cornerRadius = 10
-        web.layer?.masksToBounds = true
+        // v82: the grip bar on top, the page under it
+        let box = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 520 + GripBar.height))
+        box.wantsLayer = true
+        box.layer?.cornerRadius = 10
+        box.layer?.masksToBounds = true
+        box.layer?.backgroundColor = NSColor.black.cgColor
+        let grip = GripBar(frame: NSRect(x: 0, y: 520, width: 760, height: GripBar.height))
+        grip.autoresizingMask = [.width, .minYMargin]
+        web.frame = NSRect(x: 0, y: 0, width: 760, height: 520)
+        web.autoresizingMask = [.width, .height]
+        box.addSubview(web); box.addSubview(grip)
+        window.setContentSize(box.frame.size)
+        window.contentView = box
+        grip.onClose = { [weak self] in self?.window.close() }
         web.navigationDelegate = self
         web.uiDelegate = self
         web.underPageBackgroundColor = .black
 
-        // on the screen of the stripe, centred
-        if let s = (NSApp.windows.first { $0 is NSPanel && $0.isVisible })?.screen ?? NSScreen.main {
+        // where he left it last time (v82); else on the screen of the stripe, centred
+        if !SpeedPlace.restore(window), let s = (NSApp.windows.first { $0 is NSPanel && $0.isVisible })?.screen ?? NSScreen.main {
             let f = s.visibleFrame
             window.setFrameOrigin(NSPoint(x: f.midX - 380, y: f.midY - 260))
         }
@@ -90,7 +150,7 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
     // frame.js: {w, h} of the frame in CSS pixels; the window keeps its top-left corner
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let d = message.body as? [String: Any], let w = (d["w"] as? NSNumber)?.doubleValue, let h = (d["h"] as? NSNumber)?.doubleValue, w > 40, h > 40 else { return }
-        let size = NSSize(width: ceil(w) + 2 * SpeedBrowser.edge, height: ceil(h) + 2 * SpeedBrowser.edge)
+        let size = NSSize(width: ceil(w) + 2 * SpeedBrowser.edge, height: ceil(h) + 2 * SpeedBrowser.edge + GripBar.height)
         let f = window.frame
         if abs(f.width - size.width) > 2 || abs(f.height - size.height) > 2 {
             window.setFrame(NSRect(x: f.minX, y: f.maxY - size.height, width: size.width, height: size.height), display: true)
@@ -104,7 +164,10 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
         return nil
     }
 
+    func windowDidMove(_ notification: Notification) { SpeedPlace.save(window) }   // v82: his place, kept
+
     func windowWillClose(_ notification: Notification) {
+        SpeedPlace.save(window)
         web.stopLoading()
         web.loadHTMLString("", baseURL: nil)           // the test stops when the window closes; no data spent after
         web.configuration.userContentController.removeScriptMessageHandler(forName: "ckFrame")

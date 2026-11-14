@@ -91,6 +91,9 @@ extension Stripe {
             else if let s = o.sameAs { st = s; c = Ink.grey }
             else if deadIfaces.contains(o.iface) { st = "NO DATA"; c = Ink.amber }
             else if o.ms == nil { st = "NO NET"; c = Ink.grey }
+            if let w = roleWord(o.iface) {                        // v82 (request 91): NOTHING ONLY's roles
+                st = w; c = w == "STANDBY" ? Ink.grey : w == "ACTIVE" ? Ink.green : w == "NO ANSWER" ? Ink.red : Ink.amber
+            }
             want.append(("dev:" + o.iface, Net.shown(o.name, o.iface), st, c))
         }
         let have = Set(others.map(\.name))

@@ -208,6 +208,24 @@ extension Stripe {
     }
 
     func startSpeedTest() {
+        // v82 (request 91 brief): in NOTHING ONLY the start-up test (all lines, about 150 MB) would run over the Nothing's
+        // SIM: skipped; a small check instead (three 204 answers, a few KB). A click on a line's speed still tests by hand.
+        if NothingOnly.on {
+            DispatchQueue.global().async {
+                var ok = 0, ms: [Double] = []
+                for _ in 0..<3 {
+                    let t = Date()
+                    let r = shell("/usr/bin/curl", ["-s", "-m", "8", "-o", "/dev/null", "-w", "%{http_code}", "https://www.google.com/generate_204"], timeout: 10)
+                    if r.out.trimmingCharacters(in: .whitespacesAndNewlines) == "204" { ok += 1; ms.append(Date().timeIntervalSince(t) * 1000) }
+                }
+                let med = ms.sorted().dropFirst(ms.count / 2).first ?? 0
+                let words = ok == 3 ? String(format: "NOTHING ONLY: internet ✓ (3 of 3, %.0f ms); start speed test skipped (SIM data)", med)
+                                    : "NOTHING ONLY: internet \(ok) of 3 answered; start speed test skipped (SIM data)"
+                appendLog("\(logStamp()) START SPEED TEST skipped in NOTHING ONLY (SIM data): small check \(ok)/3, \(Int(med)) ms")
+                DispatchQueue.main.async { self.show(words, ok == 3 ? Ink.green : Ink.amber, for: 20) }
+            }
+            return
+        }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: LineTest.tool)
         p.arguments = ["test", "speed", "--quick"]

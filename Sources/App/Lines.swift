@@ -89,6 +89,11 @@ final class LineRow {
         let u = up.map(rate) ?? dash
         speed.attributedStringValue = speedWithArrows(d, u, dim ? Ink.grey : Ink.green, dim ? Ink.grey : Ink.red)
     }
+    // v82 (request 91): a STANDBY line shows no live speed and no arrows, only a quiet dash
+    func setIdle() {
+        let s = String(repeating: " ", count: max(0, rate(0).count - 1)) + "—"
+        speed.attributedStringValue = NSAttributedString(string: s, attributes: [.font: monoFont, .foregroundColor: Ink.grey])
+    }
 }
 
 // v60 (request 81, Marko 14.11.2026: "next to upload speed, make a nice up arrow. Next to the download speed, make a nice
@@ -252,6 +257,25 @@ extension Stripe {
                 ?? (Aggregation.on && line != nil ? String(format: "%d·%.0fMB", line!.active, line!.mbDown + line!.mbUp)
                     : ok ? "not joined" : "no net")
             if deadIfaces.contains(o.iface) { r.info.stringValue = "NO DATA"; r.info.textColor = Ink.amber; r.name.textColor = Ink.amber }
+            // v82 (request 91): NOTHING ONLY: one line ACTIVE (green), the other STANDBY (grey, no speed); swapped on fallback
+            if let role = lineRole(o.iface) {
+                switch role {
+                case "standby":
+                    r.name.textColor = Ink.dim; r.info.stringValue = "STANDBY"; r.info.textColor = Ink.grey; r.setIdle()
+                    r.name.toolTip = "STANDBY: NOTHING ONLY is on. This line waits; it carries only if the Nothing stops answering."
+                case "fallback":
+                    r.name.textColor = Ink.amber; r.info.stringValue = "FALLBACK·ACTIVE"; r.info.textColor = Ink.red
+                    r.name.toolTip = "FALLBACK, ACTIVE: the Nothing does not answer, so this line carries until it is back."
+                default:
+                    if line?.alive == false {
+                        r.name.textColor = Ink.red; r.info.stringValue = "NO ANSWER"; r.info.textColor = Ink.red
+                        r.name.toolTip = "The Nothing does not answer: the standby line carries (FALLBACK)."
+                    } else {
+                        r.info.stringValue = "ACTIVE"; r.info.textColor = Ink.green
+                        r.name.toolTip = "ACTIVE: NOTHING ONLY, the Nothing on its USB cable carries the internet."
+                    }
+                }
+            }
             r.speed.toolTip = "Its own live speed (its default route).\nClick: test this line now (Cloudflare, about 6 s each way)."
             if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: !ok, mark: lineTesting.contains(o.name) ? "..." : nil) }
         }
@@ -337,6 +361,7 @@ extension Stripe {
             let c = all[o.iface]
             let v = rates(r.lastBytes, c)
             r.lastBytes = c
+            if lineRole(o.iface) == "standby" { r.setIdle(); continue }      // v82: no live speed on a waiting line
             r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil, mark: lineTesting.contains(o.name) ? "..." : nil)
             if joined.contains(o.iface), let v { sumDown += v.0; sumUp += v.1 }
             if o.sameAs == nil, let v { allDown += v.0; allUp += v.1 }
@@ -422,7 +447,8 @@ extension Stripe {
         let ticked = Set(Aggregation.selected)
         for (name, ok, dev) in names {
             let same = others.first { $0.name == name }?.sameAs
-            let b = NSButton(checkboxWithTitle: Net.shown(name, dev) + (same.map { "   (\($0))" } ?? ""), target: self, action: #selector(toggleJoin(_:)))
+            let role = roleWord(dev).map { "   \($0)" } ?? ""          // v82 (request 91)
+            let b = NSButton(checkboxWithTitle: Net.shown(name, dev) + (same.map { "   (\($0))" } ?? "") + role, target: self, action: #selector(toggleJoin(_:)))
             b.state = ticked.contains(name) ? .on : .off
             b.isEnabled = ok && same == nil
             b.identifier = NSUserInterfaceItemIdentifier(name)
@@ -568,5 +594,21 @@ extension Stripe {
         // the first look after start says only a problem; "not on the cable" while it never was is said on ⟳ only
         if !force && !n.ok && n.words == "Nothing: not on the cable" { return }
         show(n.words, n.ok ? Ink.green : Ink.amber, for: n.ok ? 15 : 45, tip: n.detail)
+    }
+}
+
+// v82 (request 91): the line's role in NOTHING ONLY ("active", "standby", "fallback"), nil in every other mode.
+extension Stripe {
+    func lineRole(_ dev: String) -> String? {
+        guard NothingOnly.on else { return nil }
+        return agg?.lines.first { $0.device == dev }?.role
+    }
+    func roleWord(_ dev: String) -> String? {
+        switch lineRole(dev) {
+        case "standby": return "STANDBY"
+        case "fallback": return "FALLBACK·ACTIVE"
+        case "active": return agg?.lines.first { $0.device == dev }?.alive == false ? "NO ANSWER" : "ACTIVE"
+        default: return nil
+        }
     }
 }

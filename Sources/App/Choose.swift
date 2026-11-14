@@ -182,11 +182,11 @@ extension Stripe {
         for s in Net.lanServices() {
             let up = Net.ipAddress(s.device) != nil
             let dead = deadIfaces.contains(s.device)
-            listItem(menu, Net.shown(s.name, s.device) + (dead ? "   NO DATA" : up ? "" : "   (no address)"), ticked: ticks == nil || ticks!.contains(s.name), id: s.name, action: #selector(pickCable(_:)))
+            listItem(menu, Net.shown(s.name, s.device) + (dead ? "   NO DATA" : up ? "" : "   (no address)") + (roleWord(s.device).map { "   \($0)" } ?? ""), ticked: ticks == nil || ticks!.contains(s.name), id: s.name, action: #selector(pickCable(_:)))
             any = true
         }
         for o in others where Phones.isPhone(o.iface) {
-            listItem(menu, o.name + (o.sameAs.map { "   (\($0))" } ?? "   (phone over adb)"), ticked: o.sameAs == nil && (ticks == nil || ticks!.contains(o.name)), enabled: o.sameAs == nil, id: o.name, action: #selector(pickCable(_:)))
+            listItem(menu, o.name + (o.sameAs.map { "   (\($0))" } ?? "   (phone over adb)") + (roleWord(o.iface).map { "   \($0)" } ?? ""), ticked: o.sameAs == nil && (ticks == nil || ticks!.contains(o.name)), enabled: o.sameAs == nil, id: o.name, action: #selector(pickCable(_:)))
             any = true
         }
         if !any { listHead(menu, "  no wired interface found") }
