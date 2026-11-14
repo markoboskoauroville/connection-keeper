@@ -349,3 +349,16 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 - 14.11.2026: proof.ovh.net/files/100Mb.dat is 100 MB (megabytes), not 100 megabits: a "12.5 MB" end-game test spent 105 MB of SIM
   data. Check the size with `curl -sI` before any test download. The same server answers HTTP 429 to many parallel ranges from one
   address; ck-net v64 rests that line 15 s.
+
+## 14.11.2026 (v65–v66): ckbond, bonding through the relay
+- A leg's rate must not be an average of delivery samples: a leg that was at its cap for a moment and then idle (the stream's
+  window full behind a slow line) read a low sample, got a smaller cap, carried less, read lower: in the first CI run one of two
+  equal 80 Mbit/s lines carried 8.6 % and the stream ran at 36.7 Mbit/s. A windowed maximum that falls only through windows in
+  which the leg was at its cap gave 105.6 Mbit/s over 80 + 80 + 16.
+- The minimum RTT must not follow the pings up: a ping waits behind the leg's own queue, the cap is built on the RTT, so a minimum
+  that rises grows the queue that raised it. The lowest seen per leg; the leg is made again when its line changes.
+- Count only the sequenced frames in the leg ACKs, on both ends: counting the ACKs themselves makes each ACK call for another.
+- On GitHub's macOS runner a usleep of 1–2 ms lasts several ms more: a test line paced per chunk ran at a third of its speed.
+  Keep some credit in the token bucket (20 ms here).
+- Both the Swift and the Go side compiled at the first push: write the CI step that proves it before the code (the selftest
+  failing the workflow is what made the slow rate visible at all).
