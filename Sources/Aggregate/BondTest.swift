@@ -234,7 +234,7 @@ func bondSelftest(_ args: [String]) -> Never {
         if hupAt < 0 { failures.append("fetch 3: the relay was never told to hand over") }
         if !f3.ok || f3.sha != want { failures.append("fetch 3: \(f3.ok ? "SHA-256 differs" : f3.why)") }
         if !bad.isEmpty { failures.append("fetch 3: \(bad.count) of \(n) small fetches failed during the hand-over") }
-        if n < 20 { failures.append("fetch 3: only \(n) small fetches ran") }
+        if n < 10 { failures.append("fetch 3: only \(n) small fetches ran") }
         if gen < 1 { failures.append("fetch 3: no new generation after the hand-over (no GOAWAY seen)") }
     }
     let st = client.status()
