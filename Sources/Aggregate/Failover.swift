@@ -190,6 +190,11 @@ extension Server {
         let due = force || u.misses > 0 || !u.alive || now.timeIntervalSince(u.lastProbe) >= 2   // v62: a failed real connection checks at once
         u.probing = !fresh && due
         if u.probing { u.lastProbe = now }
+        // v70: the probe's patience follows the line, 4 x its smoothed connect time, 1.2-3.5 s: the cable (30 ms) keeps
+        // its 1.2 s fast failover; a 4G hotspot on a tree (~300 ms, Something on 14.11.2026) is no longer "does not
+        // answer" / "is back" every few seconds
+        let waitMs = Int32(min(3500, max(1200, 4 * (u.rttMs ?? 0))))
+        let phoneWait = Int((Double(waitMs) / 1000).rounded(.up))
         lock.unlock()
         if fresh || !due { return }
         Thread.detachNewThread { [self] in
@@ -202,7 +207,7 @@ extension Server {
                 for host in ["1.1.1.1", "8.8.8.8"] {
                     g.enter()
                     Thread.detachNewThread {
-                        if let fd = u.phone.map({ Phones.dial(host, 443, via: $0.port, timeout: 2) }) ?? dial(host, 443, via: u.iface, timeoutMs: 1200) {
+                        if let fd = u.phone.map({ Phones.dial(host, 443, via: $0.port, timeout: phoneWait) }) ?? dial(host, 443, via: u.iface, timeoutMs: waitMs) {
                             close(fd)
                             l.lock(); if first == nil { first = Date().timeIntervalSince(t0) * 1000 }; l.unlock()
                         }

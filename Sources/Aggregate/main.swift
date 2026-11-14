@@ -305,9 +305,31 @@ final class Server {
             return old
         }
         let before = lines.map { "\($0.name)/\($0.iface)" }, after = fresh.map { "\($0.name)/\($0.iface)" }
+        let previous = lines
         lines = fresh; ignored = d.ignored
         lock.unlock()
         if !fresh.isEmpty { Lines.remember(fresh) }
+        // v70: a line that leaves the list says why (Something vanished at 08:08:02 on 14.11.2026 without a word)
+        let gone = previous.filter { o in !fresh.contains { $0.iface == o.iface } }
+        for u in gone {
+            let why: String
+            if let ig = d.ignored.first(where: { $0.0.iface == u.iface }) {
+                why = ig.1.name == "SAME UPLINK" ? "the same uplink as another line" : "\(ig.1.name) (a phone without its own uplink)"
+            } else if Aggregation.dead.contains(u.name) {
+                why = "NO DATA: the stripe's HTTPS probe through it failed twice (back after a minute of good probes)"
+            } else if !Aggregation.selected.isEmpty && !Aggregation.selected.contains(u.name) {
+                why = "not ticked any more"
+            } else if u.phone == nil && ipv4(of: u.iface) == nil {
+                why = "its device has no IPv4 address now"
+            } else if u.phone == nil && Lines.gateway(u.iface) == nil {
+                why = "its device has no router now"
+            } else if let p = u.phone, !Phones.answers(p) {
+                why = "its phone's server does not answer over adb"
+            } else {
+                why = "not found again by the search (device list or address lookup)"
+            }
+            log("\(u.name) (\(u.iface)) left the lines: \(why)")
+        }
         if before != after {
             log("lines: \(d.lines.map { "\($0.name) (\($0.iface), \($0.publicIP ?? "?"), \(Int($0.mbps)) Mbit/s)" }.joined(separator: " + "))"
                 + (d.ignored.isEmpty ? "" : "; ignored, same line: " + d.ignored.map { "\($0.0.name) = \($0.1.name)" }.joined(separator: ", ")))
