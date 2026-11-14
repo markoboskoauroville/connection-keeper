@@ -782,3 +782,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > also, please build Connection Keeper as a normal app, so I can start it from the dock. I can minimize it. I can move it. It has its settings in the menu bar, etc
 
 **Status:** queued with the bonding worker, after the hitless transitions (request 85).
+
+## 14.11.2026, request 87 (open = Frankfurt, closed = everything as before, seamlessly)
+
+> in the same way, when I'm closing the app, that should be seamlessly switched to normal connection, so there are no leftovers or nonsense. When it's open, it goes to Frankfurt. When it's closed, everything is as before
+
+**Status:** sent to the worker; replaces request 86's "Quit keeps the connection running".
