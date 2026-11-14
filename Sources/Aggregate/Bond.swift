@@ -727,6 +727,7 @@ enum Bond {
 
     // Loopback, private, link-local, carrier-grade NAT (Tailscale) and names without a dot stay on today's path.
     static func local(_ host: String) -> Bool {
+        if aggEnv["CK_BOND_ALLOW_LOCAL"] != nil { return false }   // CI's way test only: its "internet" is on 127.0.0.1
         let h = host.lowercased()
         if h == "localhost" || h.hasSuffix(".local") || h.hasSuffix(".ts.net") || (!h.contains(".") && !h.contains(":")) { return true }
         if h.contains(":") { return h == "::1" || h.hasPrefix("fe80") || h.hasPrefix("fc") || h.hasPrefix("fd") }
@@ -772,7 +773,7 @@ enum Bond {
                     }
                     last = sig
                 }
-                sleep(5)
+                sleep(1)                             // v80: FRANKFURT / CROATIA take effect within a second
             }
         }
     }

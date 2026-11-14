@@ -18,4 +18,14 @@ enum BondConfigFile {
         guard let d = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(BondConfig.self, from: d)
     }
+    // Changed in place: its 0600 mode and its token stay. false: there is no bond.json (bond-init first).
+    @discardableResult
+    static func update(_ change: (inout BondConfig) -> Void) -> Bool {
+        guard var c = load() else { return false }
+        change(&c)
+        let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let d = try? enc.encode(c), let h = FileHandle(forWritingAtPath: url.path) else { return false }
+        h.truncateFile(atOffset: 0); h.write(d); h.closeFile()
+        return true
+    }
 }

@@ -54,6 +54,7 @@ extension Stripe {
             b.imagePosition = .imageOnly
             b.target = self
             b.action = #selector(menuBarClicked)
+            b.sendAction(on: [.leftMouseUp, .rightMouseUp])     // v80: a right click opens FRANKFURT / CROATIA
             b.toolTip = "Network Aggregate Connection Keeper\nInternet speed now: upload on top, download below (as iStat Menus).\nThe dot: green connected, red disconnected. Click: show or hide the stripe."
         }
     }
@@ -118,6 +119,15 @@ extension Stripe {
     // Now a click brings the stripe to the display whose icon was clicked (top middle, unless it is on that display
     // already), on top of everything; only a click while it stands there, in front, hides it again.
     @objc func menuBarClicked() {
+        if NSApp.currentEvent?.type == .rightMouseUp || NSApp.currentEvent?.modifierFlags.contains(.control) == true {
+            let m = NSMenu()
+            let on = BondConfigFile.load()?.on == true
+            let f = NSMenuItem(title: "FRANKFURT (through the relay)", action: #selector(pickFrankfurt), keyEquivalent: ""); f.target = self; f.state = on ? .on : .off
+            let c = NSMenuItem(title: "CROATIA (straight over my lines)", action: #selector(pickCroatia), keyEquivalent: ""); c.target = self; c.state = on ? .off : .on
+            m.addItem(f); m.addItem(c)
+            if let b = menuItem?.button { m.popUp(positioning: nil, at: NSPoint(x: 0, y: b.bounds.height + 4), in: b) }
+            return
+        }
         let screen = menuItem?.button?.window?.screen ?? NSScreen.main
         let here = panel.isVisible && panel.screen == screen && panel.occlusionState.contains(.visible) && !MenuBarPrefs.stripeHidden
         if here {

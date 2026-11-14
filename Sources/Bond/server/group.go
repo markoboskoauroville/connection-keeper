@@ -595,6 +595,9 @@ func refuseLocal(network, address string, _ syscall.RawConn) error {
 func (s *stream) dial(target string) {
 	g := s.g
 	d := net.Dialer{Timeout: dialTimeout}
+	if g.srv.dialFrom != nil {
+		d.LocalAddr = &net.TCPAddr{IP: g.srv.dialFrom} // CI: the relay's connections come from another address
+	}
 	if !g.srv.allowLocal {
 		d.Control = refuseLocal
 	}

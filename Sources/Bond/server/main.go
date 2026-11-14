@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-const relayVersion = "v74"
+const relayVersion = "v80"
 
 const (
 	maxGroups      = 64
@@ -47,12 +47,14 @@ type server struct {
 	fails      map[string]*failRec
 	legs       int
 	draining   bool
+	dialFrom   net.IP
 }
 
 func main() {
 	listen := flag.String("listen", ":443", "address to listen on")
 	tokenFile := flag.String("token-file", "/etc/ckbond/token", "file holding the shared token (hex, 64 characters)")
 	allowLocal := flag.Bool("allow-local", false, "let streams reach loopback and private addresses (the loopback test only)")
+	dialFrom := flag.String("dial-from", "", "the source address of the relay's connections (CI tests only)")
 	drainFor := flag.Duration("drain", 10*time.Minute, "after a hand-over, how long the old process serves its streams at most")
 	flag.Parse()
 	log.SetFlags(log.LstdFlags)
@@ -64,7 +66,7 @@ func main() {
 	if err != nil || len(token) < 16 {
 		log.Fatalf("BOND the token file %s must hold at least 32 hex characters", *tokenFile)
 	}
-	s := &server{token: token, allowLocal: *allowLocal, groups: map[[16]byte]*group{}, fails: map[string]*failRec{}}
+	s := &server{token: token, allowLocal: *allowLocal, groups: map[[16]byte]*group{}, fails: map[string]*failRec{}, dialFrom: net.ParseIP(*dialFrom)}
 	ln, inherited, err := listener(*listen)
 	if err != nil {
 		log.Fatalf("BOND cannot listen on %s: %v", *listen, err)

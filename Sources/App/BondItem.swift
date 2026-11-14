@@ -36,10 +36,29 @@ extension Stripe {
             }
         }
         if strict { text += " STRICT"; tip += ". PRIVACY STRICT: with no leg up, nothing goes over the home line." }
+        let cfg = BondConfigFile.load()
+        frankfurtWord.contentTintColor = cfg?.on == true ? Ink.green : Ink.grey
+        croatiaWord.contentTintColor = cfg?.on == true ? Ink.grey : Ink.green
+        frankfurtWord.isEnabled = cfg != nil
+        if cfg == nil { frankfurtWord.toolTip = "No bond.json yet: ck-aggregate bond-init, then the relay's token" }
         if bondWord.title != text { bondWord.title = text }
         bondWord.contentTintColor = color
         bondWord.toolTip = tip
         bondWord.setAccessibilityValue(text)
+    }
+
+    // FRANKFURT / CROATIA: bond.json "on"; the server sees it within a second. Seamless: going to Croatia the open
+    // connections through Frankfurt finish there (the client drains) and every new one goes direct at once; going to
+    // Frankfurt, new connections go direct until the first leg is up (a fraction of a second), then through the relay.
+    @objc func pickFrankfurt() { pickWay(true) }
+    @objc func pickCroatia() { pickWay(false) }
+    func pickWay(_ frankfurt: Bool) {
+        guard BondConfigFile.update({ $0.on = frankfurt }) else { show("no bond.json: ck-aggregate bond-init first", Ink.amber, for: 6); return }
+        appendLog("\(logStamp()) WAY: \(frankfurt ? "FRANKFURT (through the relay)" : "CROATIA (straight over the Mac's own lines)")")
+        show(frankfurt ? "FRANKFURT: through the relay" : "CROATIA: straight over your lines", Ink.green, for: 4)
+        frankfurtWord.contentTintColor = frankfurt ? Ink.green : Ink.grey
+        croatiaWord.contentTintColor = frankfurt ? Ink.grey : Ink.green
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { self.showBond() }
     }
 
     @objc func bondPressed() {

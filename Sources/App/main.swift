@@ -156,6 +156,10 @@ final class Stripe: NSObject {
     lazy var wifiLabel = word("WI-FI", Ink.text, #selector(openWifiList), id: "choose-wifi", tip: "Tick: the Mac on its Wi-Fi (first in the service order, the cable second). Click the word: the Wi-Fi networks in range, tick the one to use.")
     lazy var cableLabel = word("CABLE", Ink.text, #selector(openCableList), id: "choose-cable", tip: "Tick: the cable first. Click the word: the wired interfaces and phones, tick the ones to use.")
     lazy var bothLabel = word("BOTH", Ink.text, #selector(tickBoth), id: "choose-both", tip: "Tick: aggregation over the ticked lines (the Wi-Fi in use and the ticked cables).")
+    // v80 (request 88, Marko: "give me the option of Frankfurt or Croatia ... two action buttons"): FRANKFURT = all traffic
+    // through the relay (bond on), CROATIA = straight over his own lines (bond off); the chosen one green (BondItem.swift)
+    lazy var frankfurtWord = word("FRANKFURT", Ink.grey, #selector(pickFrankfurt), id: "frankfurt", tip: "All traffic through the relay in Frankfurt: the home address hidden")
+    lazy var croatiaWord = word("CROATIA", Ink.grey, #selector(pickCroatia), id: "croatia", tip: "Straight over your own lines: the home address shows")
     lazy var bondWord = word("⇄ off", Ink.grey, #selector(bondPressed), id: "bond", tip: "The bond through the relay")   // v75 (BondItem.swift)
     var bondLast: (Date, Double)?
     lazy var cloudWord = word("", Ink.green, #selector(cloudPressed), id: "claude-cloud", tip: "Watches Claude Code's connection to Anthropic")
@@ -403,7 +407,7 @@ final class Stripe: NSObject {
         dlBox.alignment = .leading
         dlBox.spacing = 0
         dlBox.isHidden = true
-        let checkRow = NSStackView(views: [lights, wifiTick, wifiLabel, wifiNoData, pipe(), cableTick, cableLabel, cableNoData, pipe(), bothTick, bothLabel, cloudWord, tsWord, bondWord])
+        let checkRow = NSStackView(views: [lights, wifiTick, wifiLabel, wifiNoData, pipe(), cableTick, cableLabel, cableNoData, pipe(), bothTick, bothLabel, pipe(), frankfurtWord, croatiaWord, bondWord, cloudWord, tsWord])
         checkRow.orientation = .horizontal
         checkRow.spacing = 3
         checkRow.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)

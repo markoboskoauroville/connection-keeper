@@ -282,14 +282,7 @@ final class SettingsWindow: NSObject {
         appendLog("\(logStamp()) BOND \(speedOnlyBox.state == .on ? "only with 2+ lines (speed)" : "also with one line (privacy)") (Settings)")
     }
     // bond.json changed in place: its 0600 mode and its token stay
-    func writeBond(_ change: (inout BondConfig) -> Void) {
-        guard var c = BondConfigFile.load() else { return }
-        change(&c)
-        let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        if let d = try? enc.encode(c), let h = FileHandle(forWritingAtPath: BondConfigFile.url.path) {
-            h.truncateFile(atOffset: 0); h.write(d); h.closeFile()
-        }
-    }
+    func writeBond(_ change: (inout BondConfig) -> Void) { BondConfigFile.update(change) }
     @objc func openDirect() {
         let f = Paths.support.appendingPathComponent("bond-direct.txt")
         if !FileManager.default.fileExists(atPath: f.path) {

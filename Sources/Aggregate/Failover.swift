@@ -199,8 +199,8 @@ extension Server {
         if fresh || !due { return }
         Thread.detachNewThread { [self] in
             let gone = u.phone == nil && ipv4(of: u.iface) == nil
-            var ok = false
-            if !gone && !faulted(u, timeout: 1) {
+            var ok = aggEnv["CK_AGG_FAKE_LINE"] != nil            // CI's fake line (lo0) has no internet to probe: alive
+            if !ok && !gone && !faulted(u, timeout: 1) {
                 // v62: both answer points at once, the first answer counts (one after the other a quiet line took 3 s)
                 let t0 = Date(), g = DispatchGroup(), l = NSLock()
                 var first: Double?

@@ -50,6 +50,18 @@ jobs:
           python3 Tools/ci/handover_test.py "build/$APP.app/Contents/MacOS/ck-aggregate" "$T/agg" 18080 "$SHA" || ok=$?
           echo "--- aggregate log"; grep -E "HANDOVER|ck-aggregate v|taken" "$T/agg/aggregate.log" | tail -30
           exit $ok
+      - name: Way test (FRANKFURT → CROATIA → FRANKFURT under load; request 88)
+        run: |
+          T=$(mktemp -d); mkdir -p "$T/st"
+          sudo ifconfig lo0 alias 127.0.0.2 up
+          openssl rand -hex 32 > "$T/token"
+          build/ck-bond-server-darwin -listen 127.0.0.1:18444 -token-file "$T/token" -allow-local -dial-from 127.0.0.2 2> "$T/relay.log" &
+          sleep 1
+          ok=0
+          python3 Tools/ci/way_test.py "build/$APP.app/Contents/MacOS/ck-aggregate" "$T/st" 18444 "$T/token" || ok=$?
+          grep -E "BOND (on|off|draining|in use|stepped)" "$T/st/way-aggregate.log" | tail -8
+          pkill -f ck-bond-server-darwin || true
+          exit $ok
       - name: Session test (open = through the aggregation, quit and crash = the Mac as before; 10 probes/s)
         run: ./Tools/ci/session_test.sh
       - name: Window snapshot (the selftest's picture of the stripe)
