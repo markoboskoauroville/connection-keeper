@@ -732,3 +732,9 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 > improvements, building order. It's up to you. Just update it
 
 **Status:** built and tested 14.11.2026 (v62–v64). 4: health loop 1 s, both answer points at once, a failed real connection checks its line at once: a pulled cable out in 1.1 s, a quiet line in 3.9 s (was ~6 s both; test copy with the fault switch). 3: connect time smoothed per line, + rtt/1000 in the line choice; live 102 ms AX88179B, 85 ms Nothing. 1+2: ck-net end-game: a free connection takes the end of a running piece, split by the two speeds (pieces shrink to fit each line at the end); seen twice in a 105 MB test (11.8 Mbit/s, the file intact). v64: HTTP 429 rests a line 15 s. v63: asks to update at start (kits/mac-updater). 5 (bonding through chromium-vm): not built; a day's work, next.
+
+## 14.11.2026, request 84 (improvement 5: bonding through the Oracle Cloud server)
+
+> start to work on this improvement: 5, through bonding to Oracle Cloud Server. Take a day of work to do it now explain to me how we are using my cloud server for the bonding. What is the workflow? What is the reason to do that
+
+**Status:** explained 14.11.2026; facts: chromium-vm is eu-frankfurt-1, VM.Standard.A1.Flex 2 OCPU / 12 GB, 2 Gbit/s, public 130.61.181.83, ~35 ms from the cable and the Wi-Fi; only SSH (22) open to the internet. Waiting for Marko's yes to open one port (TCP, token-protected) on the VM for the bond server.
