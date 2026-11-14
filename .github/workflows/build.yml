@@ -35,12 +35,13 @@ jobs:
           SHA=$(shasum -a 256 "$T/big.bin" | cut -d' ' -f1)
           openssl rand -hex 32 > "$T/token"
           python3 -m http.server 18080 --bind 127.0.0.1 --directory "$T" >/dev/null 2>&1 &
+          python3 Tools/ci/udp_echo.py 18053 &
           build/ck-bond-server-darwin -listen 127.0.0.1:18443 -token-file "$T/token" -allow-local -drain 60s 2> "$T/server.log" &
           RELAY=$!
           sleep 2
           ok=0
-          perl -e 'alarm 300; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" bond-selftest \
-            --server 127.0.0.1:18443 --token-file "$T/token" --url http://127.0.0.1:18080/big.bin --sha "$SHA" --relay-pid "$RELAY" --small /small.bin || ok=$?
+          CK_BOND_DIRECT="$T/direct.txt" perl -e 'alarm 300; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" bond-selftest \
+            --server 127.0.0.1:18443 --token-file "$T/token" --url http://127.0.0.1:18080/big.bin --sha "$SHA" --relay-pid "$RELAY" --small /small.bin --udp-echo 127.0.0.1:18053 || ok=$?
           echo "--- relay log"; tail -60 "$T/server.log"
           pkill -f ck-bond-server-darwin || true
           [ $ok -ne 0 ] && exit $ok

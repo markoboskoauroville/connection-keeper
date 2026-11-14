@@ -49,7 +49,8 @@ type leg struct {
 	remote string
 	wcond  *sync.Cond
 
-	ctlq, dataq                [][]byte
+	ctlq, dataq, udpq          [][]byte
+	udpBytes                   int
 	sent, acked, recv, rAcked  uint64 // sequenced bytes: queued here / acked by the Mac; received here / acked to the Mac
 	rttMin, rttMinAt, rate     float64
 	sampleAt                   float64
@@ -99,10 +100,12 @@ type group struct {
 	up, down   int64 // bytes Mac -> destinations, destinations -> Mac
 	opened     int
 	lastReport time.Time
+	flows          map[uint32]*uflow
+	lastFlowReport time.Time
 }
 
 func newGroup(s *server, id [16]byte) *group {
-	g := &group{srv: s, id: id, name: hex.EncodeToString(id[:4]), streams: map[uint32]*stream{}, closed: map[uint32]time.Time{},
+	g := &group{srv: s, id: id, name: hex.EncodeToString(id[:4]), streams: map[uint32]*stream{}, closed: map[uint32]time.Time{}, flows: map[uint32]*uflow{},
 		emptySince: time.Now(), lastReport: time.Now()}
 	g.cond = sync.NewCond(&g.mu)
 	log.Printf("BOND group %s: new", g.name)
@@ -135,15 +138,15 @@ func (l *leg) writer() {
 	buf := make([]byte, 0, 1<<20)
 	for {
 		g.mu.Lock()
-		for !l.dead && len(l.ctlq) == 0 && len(l.dataq) == 0 {
+		for !l.dead && len(l.ctlq) == 0 && len(l.dataq) == 0 && len(l.udpq) == 0 {
 			l.wcond.Wait()
 		}
 		if l.dead {
 			g.mu.Unlock()
 			return
 		}
-		batch := append(l.ctlq, l.dataq...)
-		l.ctlq, l.dataq = nil, nil
+		batch := append(append(l.ctlq, l.udpq...), l.dataq...)
+		l.ctlq, l.udpq, l.dataq, l.udpBytes = nil, nil, nil, 0
 		g.mu.Unlock()
 		buf = buf[:0]
 		for _, p := range batch {
@@ -385,6 +388,10 @@ func (g *group) onFrame(l *leg, f frame) {
 		if s := g.streams[f.stream]; s != nil {
 			g.finish(s, false)
 		}
+	case fDgram:
+		g.onDgram(f)
+	case fDgramClose:
+		g.closeFlow(f.stream)
 	case fOpen, fOpenOK, fOpenFail, fData, fFin:
 		l.recv += uint64(f.size())
 		if l.recv-l.rAcked >= legAckEvery {
@@ -668,6 +675,7 @@ func (g *group) loop() {
 				g.sendLegAck(l)
 			}
 		}
+		g.expireFlows(wall)
 		for id, s := range g.streams {
 			if s.delivered != s.ackSent || s.ackForce {
 				g.sendStreamAck(s)
@@ -698,6 +706,9 @@ func (g *group) loop() {
 		}
 		if len(g.legs) == 0 && wall.Sub(g.emptySince) > groupLinger {
 			g.gone = true
+			for id := range g.flows {
+				g.closeFlow(id)
+			}
 			for _, s := range g.streams {
 				g.finish(s, false)
 			}

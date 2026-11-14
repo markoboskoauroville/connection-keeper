@@ -569,6 +569,7 @@ extension Server {
             }
             log("BOND \(host):\(port) did not open through the relay: today's path")
         }
+        if Bond.strictBlocks(host: host) { _ = sendAll(c, [5, 2, 0, 1, 0, 0, 0, 0, 0, 0]); close(c); return }   // v74: PRIVACY STRICT
         guard let (out, u) = open(host, port, for: c) else { _ = sendAll(c, [5, 4, 0, 1, 0, 0, 0, 0, 0, 0]); close(c); return }
         guard sendAll(c, [5, 0, 0, 1, 0, 0, 0, 0, 0, 0]) else { finish(c, out, u, 0, 0); return }
         relay(c, out, u)
@@ -607,6 +608,40 @@ extension Server {
 
         var running = true, client: sockaddr_in?, names: [String: in_addr] = [:]
         let box = NSLock(), group = DispatchGroup()
+        // v74 (request 85): UDP through the bond. The association gets one flow on the relay (its own outside socket);
+        // a question to the house's resolver (a private address, port 53) is asked at 1.1.1.1 through the relay instead
+        // and its answer handed back as if the house's resolver had answered: no DNS leaves over the home line.
+        var bondFlow: (BondClient, UInt32)?, dnsRedirected: [UInt16: [UInt8]] = [:]
+        func flowFor(_ b: BondClient) -> UInt32? {
+            if let bf = bondFlow, bf.0 === b { return bf.1 }
+            if let bf = bondFlow { bf.0.closeFlow(bf.1) }
+            let id = b.openFlow { body in
+                var reply = body
+                if reply.count > 9 && reply[0] == 1 && Array(reply[1..<7]) == [1, 1, 1, 1, 0, 53] {
+                    let qid = UInt16(reply[7]) << 8 | UInt16(reply[8])
+                    box.lock(); let orig = dnsRedirected.removeValue(forKey: qid); box.unlock()
+                    if let orig { reply.replaceSubrange(0..<7, with: orig) }
+                }
+                if reply.count > 9 && reply[0] == 1 && reply[5] == 0 && reply[6] == 53 { DNSNames.learn(Array(reply[7...])) }
+                box.lock(); let to = client; box.unlock()
+                guard var dest = to else { return }
+                let packet: [UInt8] = [0, 0, 0] + reply
+                _ = packet.withUnsafeBytes { p in withUnsafePointer(to: &dest) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { sendto(local, p.baseAddress, packet.count, 0, $0, size) } } }
+            }
+            bondFlow = id.map { (b, $0) }
+            return id
+        }
+        // the bond for this datagram, or nil (bond off or stepping aside, a destination in the house, IPv6)
+        func udpHost(_ b: [UInt8], _ n: Int) -> String? {
+            if b[3] == 1 && n > 10 { return "\(b[4]).\(b[5]).\(b[6]).\(b[7])" }
+            if b[3] == 3 && n > 5 + Int(b[4]) { return String(decoding: b[5..<(5 + Int(b[4]))], as: UTF8.self) }
+            return nil
+        }
+        func udpBond(_ b: [UInt8], _ n: Int) -> BondClient? {
+            guard let host = udpHost(b, n) else { return nil }
+            if b[3] == 1 && b[8] == 0 && b[9] == 53 && Bond.local(host) { return Bond.activeAny() }
+            return Bond.active(for: host)
+        }
         func flush(_ up: inout Int, _ down: inout Int) {
             lock.lock(); u.bytesUp += up; u.bytesDown += down; u.seen[c] = Date(); lock.unlock(); up = 0; down = 0
         }
@@ -623,6 +658,16 @@ extension Server {
                 let n = buf.withUnsafeMutableBytes { b in withUnsafeMutablePointer(to: &from) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(local, b.baseAddress, 65536, 0, $0, &fl) } } }
                 guard n > 10, buf[2] == 0 else { continue }                      // fragments are not supported (none are sent)
                 box.lock(); client = from; box.unlock()
+                if let b = udpBond(buf, n) {
+                    var body = Array(buf[3..<n])
+                    if body[0] == 1 && body.count > 9 && body[5] == 0 && body[6] == 53 && Bond.local("\(body[1]).\(body[2]).\(body[3]).\(body[4])") {
+                        let qid = UInt16(body[7]) << 8 | UInt16(body[8])
+                        box.lock(); dnsRedirected[qid] = Array(body[0..<7]); box.unlock()
+                        body.replaceSubrange(1..<5, with: [1, 1, 1, 1])
+                    }
+                    if let id = flowFor(b), b.sendDgram(id, body) { up += n - 3; continue }
+                }
+                if Bond.strictBlocks(host: udpHost(buf, n)) { continue }     // v74: PRIVACY STRICT: no datagram over the home line
                 var dst = sockaddr_in(); dst.sin_family = sa_family_t(AF_INET); dst.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
                 var at = 4
                 switch buf[3] {
@@ -668,6 +713,7 @@ extension Server {
                 let n = buf.withUnsafeMutableBytes { b in withUnsafeMutablePointer(to: &from) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(out, b.baseAddress, 65536, 0, $0, &fl) } } }
                 box.lock(); let to = client; box.unlock()        // after the packet: the first reply comes within the wait
                 guard n > 0, var dest = to else { continue }
+                if UInt16(bigEndian: from.sin_port) == 53 { DNSNames.learn(Array(buf[0..<n])) }   // v74: names for the direct list
                 var packet: [UInt8] = [0, 0, 0, 1]
                 withUnsafeBytes(of: from.sin_addr) { packet += $0 }
                 let port = UInt16(bigEndian: from.sin_port)
@@ -685,6 +731,7 @@ extension Server {
         while recv(c, &b, 1, 0) > 0 {}
         box.lock(); running = false; box.unlock()
         group.wait()
+        if let bf = bondFlow { bf.0.closeFlow(bf.1) }
         done()
     }
 
@@ -708,6 +755,7 @@ extension Server {
                 }
                 log("BOND \(host):\(port) did not open through the relay: today's path")
             }
+            if Bond.strictBlocks(host: host) { _ = sendAll(c, Array("HTTP/1.1 403 Forbidden (PRIVACY STRICT: no bond leg)\r\n\r\n".utf8)); close(c); return }
             guard let port = UInt16(hp.last ?? ""), let (out, u) = open(host, port, for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }
@@ -725,6 +773,7 @@ extension Server {
             rest.insert("Connection: close", at: rest.count - 2)
             let req = "\(line[0]) \(path) \(line.count > 2 ? line[2] : "HTTP/1.1")\r\n" + rest.joined(separator: "\r\n")
             if let b = Bond.active(for: host), let s = b.open(host, UInt16(url.port ?? 80), timeout: 1) { b.bridge(c, s, first: Array(req.utf8)); return }
+            if Bond.strictBlocks(host: host) { _ = sendAll(c, Array("HTTP/1.1 403 Forbidden (PRIVACY STRICT: no bond leg)\r\n\r\n".utf8)); close(c); return }
             guard let (out, u) = open(host, UInt16(url.port ?? 80), for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }

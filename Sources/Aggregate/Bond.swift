@@ -18,6 +18,7 @@ import CryptoKit
 enum BondProto {
     static let open: UInt8 = 1, openOK: UInt8 = 2, openFail: UInt8 = 3, data: UInt8 = 4, fin: UInt8 = 5
     static let rst: UInt8 = 6, ack: UInt8 = 7, ping: UInt8 = 8, pong: UInt8 = 9, welcome: UInt8 = 10, goaway: UInt8 = 13
+    static let dgram: UInt8 = 11, dgramClose: UInt8 = 12, udpQueueMax = 256 << 10, maxFlows = 256   // v74: UDP
     static let header = 11, maxPayload = 16384, tag = 16
     static let minRecord = 11 + 16, maxRecord = 11 + 16384 + 16
     static let window = 4 << 20, streamAckEvery = 256 << 10, legAckEvery: UInt64 = 32 << 10, minCap = 65536.0
@@ -112,6 +113,7 @@ struct BondConfig: Codable {
     var port: UInt16
     var token: String
     var legsPerLine: Int
+    var strict: Bool?          // v74: PRIVACY STRICT: no leg up = new connections refused, never direct (default off)
 }
 
 enum BondConfigFile {
@@ -149,7 +151,7 @@ final class BSent {
 
 final class BLeg {
     let key: String, line: String, fd: Int32, tx: BondCipher, rx: BondCipher
-    var ctlq: [[UInt8]] = [], dataq: [[UInt8]] = []
+    var ctlq: [[UInt8]] = [], dataq: [[UInt8]] = [], udpq: [[UInt8]] = [], udpBytes = 0
     var sent: UInt64 = 0, acked: UInt64 = 0, recv: UInt64 = 0, recvAcked: UInt64 = 0     // sequenced bytes only
     var rttMin = 0.05, rttMinAt = 0.0, gotPong = false, rate = 2_500_000.0, capped = false
     var sampleAt = bnow(), sampleAcked: UInt64 = 0
@@ -158,6 +160,27 @@ final class BLeg {
     var gen = 0                                          // v71: the relay process (generation) this leg belongs to
     init(key: String, line: String, fd: Int32, tx: BondCipher, rx: BondCipher) {
         self.key = key; self.line = line; self.fd = fd; self.tx = tx; self.rx = rx
+    }
+}
+
+// v74: one UDP association through the relay; `seen` drops the copies of a redundant flow's replies.
+final class BFlow {
+    let id: UInt32, onReply: ([UInt8]) -> Void
+    var gen: Int, seqOut: UInt32 = 0, seen = BDedupe(), redundant = true
+    var winStart = bnow(), winBytes = 0, winPackets = 0, lastOut = bnow(), lastIn = 0.0, up = 0, down = 0
+    init(_ id: UInt32, gen: Int, onReply: @escaping ([UInt8]) -> Void) { self.id = id; self.gen = gen; self.onReply = onReply }
+}
+
+struct BDedupe {
+    var max: UInt32 = 0, bits: UInt64 = 0, any = false
+    mutating func fresh(_ s: UInt32) -> Bool {
+        if !any { any = true; max = s; bits = 1; return true }
+        if s > max { let sh = s - max; bits = sh >= 64 ? 1 : bits << UInt64(sh) | 1; max = s; return true }
+        let off = max - s
+        if off >= 64 { return false }
+        let m: UInt64 = 1 << UInt64(off)
+        if bits & m != 0 { return false }
+        bits |= m; return true
     }
 }
 
@@ -186,6 +209,7 @@ final class BondClient {
     var running = true, dialing: Set<String> = [], retryAt: [String: Double] = [:], fails: [String: Int] = [:]
     var noLegsSince: Double?
     var bytesUp = 0, bytesDown = 0, opened = 0
+    var flows: [UInt32: BFlow] = [:], nextFlow: UInt32 = 1   // v74: UDP associations through the relay
     var bypassSaid: String?
     // v71 (request 85, hitless): a GOAWAY (the relay hands over to a new process) starts a new generation: a new client id,
     // new legs, new streams there; the old generation's legs carry its streams to their end, then close. `accepting` false:
@@ -294,10 +318,10 @@ final class BondClient {
     func writer(_ l: BLeg) {
         while true {
             cv.lock()
-            while !l.dead && l.ctlq.isEmpty && l.dataq.isEmpty { cv.wait() }
+            while !l.dead && l.ctlq.isEmpty && l.dataq.isEmpty && l.udpq.isEmpty { cv.wait() }
             if l.dead { cv.unlock(); return }
-            let batch = l.ctlq + l.dataq
-            l.ctlq = []; l.dataq = []
+            let batch = l.ctlq + l.udpq + l.dataq           // v74: datagrams before the bulk of the streams
+            l.ctlq = []; l.udpq = []; l.dataq = []; l.udpBytes = 0
             cv.unlock()
             var out = [UInt8]()
             out.reserveCapacity(batch.reduce(0) { $0 + $1.count + 18 })
@@ -436,6 +460,10 @@ final class BondClient {
         case BondProto.rst:
             if let s = streams[f.stream], !s.done { finish(s, rst: false) }
         case BondProto.welcome: break
+        case BondProto.dgram:
+            guard let fl = flows[f.stream], f.payload.count >= 2, fl.seen.fresh(f.seq) else { return }
+            fl.lastIn = now; fl.down += f.payload.count; bytesDown += f.payload.count
+            fl.onReply(Array(f.payload[1...]))          // atyp | address | port | data, as SOCKS5 UDP has it
         case BondProto.goaway:
             guard l.gen == gen else { return }
             gen += 1; clientID = BondCrypto.random(16); retryAt = [:]
@@ -534,6 +562,49 @@ final class BondClient {
     }
     var usable: Bool { cv.lock(); defer { cv.unlock() }; return running && bypass() == nil }
 
+    // MARK: UDP (v74, request 85)
+    // A flow = one UDP association: through the relay's one socket for it (a cone NAT), datagrams on the quickest leg of
+    // its generation; a quiet flow (under 64 kbit/s, small packets: a call's audio, DNS, game ticks) is "redundant": every
+    // datagram on the two quickest legs, the copy dropped by the far end (seq), so a dying line loses nothing of it.
+
+    func openFlow(onReply: @escaping ([UInt8]) -> Void) -> UInt32? {
+        cv.lock(); defer { cv.unlock() }
+        guard running, accepting, let g = servingGen(), flows.count < BondProto.maxFlows else { return nil }
+        let fl = BFlow(nextFlow, gen: g, onReply: onReply)
+        nextFlow &+= 1
+        flows[fl.id] = fl
+        return fl.id
+    }
+
+    // atyp | address | port | data (SOCKS5 UDP without its first three bytes). false: no leg (the caller goes direct).
+    @discardableResult
+    func sendDgram(_ id: UInt32, _ body: [UInt8]) -> Bool {
+        cv.lock(); defer { cv.unlock() }
+        guard let fl = flows[id], body.count + 1 + BondProto.header <= BondProto.header + BondProto.maxPayload else { return false }
+        if !legs.contains(where: { !$0.dead && $0.gen == fl.gen }), let g = servingGen() { fl.gen = g }   // its relay process is gone
+        let now = bnow()
+        fl.winBytes += body.count; fl.winPackets += 1
+        if now - fl.winStart >= 2 {
+            let rate = Double(fl.winBytes) / (now - fl.winStart), avg = fl.winBytes / max(fl.winPackets, 1)
+            fl.redundant = rate < 8000 && avg < 400
+            fl.winStart = now; fl.winBytes = 0; fl.winPackets = 0
+        }
+        fl.seqOut &+= 1; fl.lastOut = now; fl.up += body.count; bytesUp += body.count
+        let enc = BFrame(BondProto.dgram, id, fl.seqOut, [fl.redundant ? 1 : 0] + body).encode()
+        let cand = legs.filter { !$0.dead && $0.gen == fl.gen && $0.udpBytes + enc.count <= BondProto.udpQueueMax }.sorted { $0.rttMin < $1.rttMin }
+        guard let first = cand.first else { return legs.contains { !$0.dead && $0.gen == fl.gen } }   // full: dropped, as UDP may be
+        for l in cand.prefix(fl.redundant ? 2 : 1) { l.udpq.append(enc); l.udpBytes += enc.count }
+        _ = first
+        cv.broadcast()
+        return true
+    }
+
+    func closeFlow(_ id: UInt32) {
+        cv.lock(); defer { cv.unlock() }
+        guard let fl = flows.removeValue(forKey: id) else { return }
+        ctl(bestLeg(fl.gen), BFrame(BondProto.dgramClose, id))
+    }
+
     // MARK: the use
 
     // A stream to host:port through the relay, after its OPEN_OK; nil when no leg is up, it failed, or 10 s went by.
@@ -622,7 +693,7 @@ final class BondClient {
              "rateUpMbps": Double(Int(l.rate * 8 / 100_000)) / 10, "rateDownMbps": Double(Int(l.peerRate * 8 / 100_000)) / 10, "inflightKB": Int(l.sent - l.acked) / 1024,
              "mbSent": Double(Int(Double(l.sent) / 1e4)) / 100, "mbReceived": Double(Int(Double(l.recv) / 1e4)) / 100]
         }
-        return ["on": running, "bypass": bypass() ?? NSNull(), "server": "\(host):\(port)", "legs": ls, "generation": gen, "accepting": accepting, "streams": streams.count, "opened": opened,
+        return ["on": running, "bypass": bypass() ?? NSNull(), "server": "\(host):\(port)", "legs": ls, "generation": gen, "accepting": accepting, "streams": streams.count, "udpFlows": flows.count, "opened": opened,
                 "mbUp": Double(Int(Double(bytesUp) / 1e4)) / 100, "mbDown": Double(Int(Double(bytesDown) / 1e4)) / 100]
     }
 }
@@ -637,8 +708,28 @@ enum Bond {
     static func active(for host: String) -> BondClient? {
         lock.lock(); let c = client; lock.unlock()
         guard let c, !local(host), c.usable else { return nil }
+        if let rule = Direct.match(host) { Direct.said(host, rule); return nil }     // v74: bond-direct.txt
         return c
     }
+    // The bond whatever the destination (DNS for the house's resolver goes to 1.1.1.1 through it), or nil.
+    static func activeAny() -> BondClient? {
+        lock.lock(); let c = client; lock.unlock()
+        guard let c, c.usable else { return nil }
+        return c
+    }
+
+    // v74 (request 85, item 4): PRIVACY STRICT (bond.json "strict": true, default off). With no bond leg up a new
+    // connection to the internet is refused instead of going over the home line, so the home address never shows; the
+    // house (local addresses) and the direct list (his own choice) still go direct. The tunnel helper does not fail open
+    // either (its tunnel-strict flag follows this switch).
+    static var strictOn = false
+    static func strictBlocks(host: String?) -> Bool {
+        guard strictOn, let host, !local(host), Direct.match(host) == nil, activeAny() == nil else { return false }
+        Direct.lock.lock(); let last = strictSaid; strictSaid = Date(); Direct.lock.unlock()
+        if Date().timeIntervalSince(last) > 30 { log("BOND STRICT: no bond leg up: \(host) refused (the home address never shows)") }
+        return true
+    }
+    static var strictSaid = Date.distantPast
 
     static func status() -> [String: Any] {
         lock.lock(); let c = client; lock.unlock()
@@ -665,6 +756,13 @@ enum Bond {
             while true {
                 let cfg = BondConfigFile.load()
                 let want = (cfg?.on ?? false) ? cfg : nil
+                let strict = (cfg?.on ?? false) && (cfg?.strict ?? false)
+                if strict != strictOn {
+                    strictOn = strict
+                    let f = Paths.support.appendingPathComponent("tunnel-strict")
+                    if strict { FileManager.default.createFile(atPath: f.path, contents: Data()) } else { try? FileManager.default.removeItem(at: f) }
+                    log("BOND PRIVACY \(strict ? "STRICT: without a bond leg nothing goes over the home line" : "normal: without a bond leg connections go direct")")
+                }
                 let token = want.flatMap { bondUnhex($0.token) }
                 let sig = want.map { "\($0.server)|\($0.port)|\($0.legsPerLine)|\(SHA256.hash(data: Array($0.token.utf8)).description)" }
                 if sig != last {

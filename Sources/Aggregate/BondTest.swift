@@ -237,6 +237,86 @@ func bondSelftest(_ args: [String]) -> Never {
         if n < 10 { failures.append("fetch 3: only \(n) small fetches ran") }
         if gen < 1 { failures.append("fetch 3: no new generation after the hand-over (no GOAWAY seen)") }
     }
+    // 4. v74: UDP. A flow to a local echo: 300 datagrams of 100 bytes at 50 a second (a call's audio: the flow is
+    // "redundant", every datagram on two legs); lineB goes silent after 100. No copy may reach the app twice, and the
+    // datagrams must keep coming back after the line died.
+    if let ue = arg("--udp-echo"), let ep = ue.split(separator: ":").last.flatMap({ UInt16($0) }) {
+        let ul = NSLock()
+        var got: [Int: Double] = [:], dups = 0
+        var sentAt: [Int: Double] = [:]
+        let fid = client.openFlow { body in
+            guard body.count > 7, body[0] == 1 else { return }
+            let text = String(decoding: body[7...], as: UTF8.self)
+            guard let idx = Int(text.split(separator: "|").first ?? "") else { return }
+            ul.lock(); if got[idx] != nil { dups += 1 } else { got[idx] = bnow() }; ul.unlock()
+        }
+        if let fid {
+            var killedAt = -1
+            for i in 0..<300 {
+                let msg = Array("\(i)|".utf8) + [UInt8](repeating: 46, count: 100 - "\(i)|".utf8.count)
+                ul.lock(); sentAt[i] = bnow(); ul.unlock()
+                client.sendDgram(fid, [1, 127, 0, 0, 1, UInt8(ep >> 8), UInt8(ep & 255)] + msg)
+                if i == 100 { lines[1].blackhole(); killedAt = i; print("  lineB silenced after datagram 100") }
+                usleep(20_000)
+            }
+            sleep(2)
+            ul.lock()
+            let total = got.count, late = (200..<300).filter { got[$0] != nil }.count, around = (100..<200).filter { got[$0] != nil }.count
+            let rtts = got.compactMap { k, v in sentAt[k].map { (v - $0) * 1000 } }.sorted()
+            let median = rtts.isEmpty ? 0 : rtts[rtts.count / 2]
+            ul.unlock()
+            client.closeFlow(fid)
+            print(String(format: "UDP (redundant flow, 300 datagrams, lineB silenced at %d): %d came back (%d of 100 right after the loss, %d of the last 100), %d copies reached the app, median round trip %.0f ms",
+                         killedAt, total, around, late, dups, median))
+            if total < 285 { failures.append("UDP: only \(total) of 300 datagrams came back") }
+            if late < 98 { failures.append("UDP: only \(late) of the last 100 came back after the line died") }
+            if dups > 0 { failures.append("UDP: \(dups) duplicate datagrams reached the app") }
+        } else { failures.append("UDP: no flow could be opened") }
+        // a DNS question through the relay (to 1.1.1.1, from the relay's address)
+        let dl = NSLock(); var answer: [UInt8]?
+        if let dfid = client.openFlow(onReply: { body in dl.lock(); answer = body; dl.unlock() }) {
+            let q: [UInt8] = [0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7] + Array("example".utf8) + [3] + Array("com".utf8) + [0, 0, 1, 0, 1]
+            let t0 = bnow()
+            client.sendDgram(dfid, [1, 1, 1, 1, 1, 0, 53] + q)
+            while bnow() - t0 < 3 { dl.lock(); let a = answer; dl.unlock(); if a != nil { break }; usleep(20_000) }
+            dl.lock(); let a = answer; dl.unlock()
+            client.closeFlow(dfid)
+            if let a, a.count > 19, a[7] == 0x12, a[8] == 0x34 {
+                DNSNames.learn(Array(a[7...]))
+                let ips = DNSNames.map.keys.sorted()
+                print(String(format: "DNS through the relay: example.com answered by 1.1.1.1 in %.0f ms (%@)", (bnow() - t0) * 1000, ips.joined(separator: ", ")))
+            } else { failures.append("DNS: no answer from 1.1.1.1 through the relay in 3 s") }
+        }
+    }
+
+    // 5. v74: the direct list (bond-direct.txt) by name and by an address a DNS answer named
+    if let df = aggEnv["CK_BOND_DIRECT"] {
+        try? "# test\nexample.com\n*.youtube.com\n".write(toFile: df, atomically: true, encoding: .utf8)
+        let byName = Direct.match("www.youtube.com"), sub = Direct.match("m.example.com"), not = Direct.match("example.org")
+        let byIP = DNSNames.map.keys.first.flatMap { Direct.match($0) }
+        print("direct list: www.youtube.com → \(byName ?? "-"), m.example.com → \(sub ?? "-"), example.org → \(not ?? "-"), example.com's address → \(byIP ?? "-")")
+        if byName != "youtube.com" || sub != "example.com" || not != nil { failures.append("direct list: wrong matches") }
+        if arg("--udp-echo") != nil && byIP != "example.com" { failures.append("direct list: an address named by DNS did not match") }
+    }
+
+    // 6. v74: bond switched off in the middle of a fetch: the client drains. The fetch must finish intact; a new connection
+    // must be turned to today's path at once (open() → nil without waiting).
+    do {
+        var drainedAt = -1.0, refusedMs = -1.0
+        let t6 = bnow()
+        let f6 = bondFetch(client, host: host, port: port, path: path, progress: { got in
+            if drainedAt < 0 && got >= 16 << 20 {
+                drainedAt = bnow() - t6
+                client.drain()
+                let t = bnow(); let s = client.open(host, port, timeout: 1); refusedMs = (bnow() - t) * 1000
+                if let s { client.reset(s) }
+                print(String(format: "  bond switched off (drain) at %d bytes; a new connection was turned away in %.1f ms (%@)", got, refusedMs, s == nil ? "goes direct" : "WAS BONDED"))
+            }
+        })
+        print(String(format: "fetch 6 (bond off mid-way): %d bytes in %.2f s; sha %@ (%@)", f6.bytes, f6.secs, f6.sha, f6.sha == want ? "matches" : "DIFFERENT"))
+        if !f6.ok || f6.sha != want { failures.append("fetch 6: the draining stream did not finish intact") }
+        if refusedMs < 0 || refusedMs > 50 { failures.append("fetch 6: a new connection was not turned away at once") }
+    }
     let st = client.status()
     if let d = try? JSONSerialization.data(withJSONObject: st, options: [.sortedKeys]) { print("status: " + String(decoding: d, as: UTF8.self)) }
     if failures.isEmpty {
