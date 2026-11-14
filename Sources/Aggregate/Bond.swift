@@ -153,6 +153,7 @@ final class BLeg {
     var sent: UInt64 = 0, acked: UInt64 = 0, recv: UInt64 = 0, recvAcked: UInt64 = 0     // sequenced bytes only
     var rttMin = 0.05, rttMinAt = 0.0, gotPong = false, rate = 1_250_000.0, capped = false
     var sampleAt = bnow(), sampleAcked: UInt64 = 0
+    var winMax = 0.0, prevMax = 1_250_000.0, winAt = bnow(), cappedWin = false   // v65: windowed-max rate
     var lastHeard = bnow(), lastPing = 0.0, pingID: UInt32 = 0, dead = false
     init(key: String, line: String, fd: Int32, tx: BondCipher, rx: BondCipher) {
         self.key = key; self.line = line; self.fd = fd; self.tx = tx; self.rx = rx
@@ -356,8 +357,17 @@ final class BondClient {
         if v > l.acked && v <= l.sent { l.acked = v }
         let now = bnow(), dt = now - l.sampleAt
         if dt >= 0.1 {
+            // the rate is the best 100 ms delivery of the last 1.5-3 s; it falls only through a window in which the leg
+            // was at its cap (a measure of the line), never through idle time (a measure of the traffic): an average
+            // spiralled a leg down to nothing in the first CI run (8.6 % of the stream on a line as fast as the best)
             let sample = Double(l.acked - l.sampleAcked) / dt
-            if l.capped { l.rate = max(16384, 0.5 * l.rate + 0.5 * sample) } else if sample > l.rate { l.rate = sample }
+            l.winMax = max(l.winMax, sample)
+            if l.capped { l.cappedWin = true }
+            if now - l.winAt >= 1.5 {
+                l.prevMax = l.cappedWin ? l.winMax : max(l.prevMax, l.winMax)
+                l.winMax = 0; l.winAt = now; l.cappedWin = false
+            }
+            l.rate = max(16384, l.prevMax, l.winMax)
             l.capped = false; l.sampleAt = now; l.sampleAcked = l.acked
         }
         cv.broadcast()

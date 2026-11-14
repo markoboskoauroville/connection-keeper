@@ -53,6 +53,8 @@ type leg struct {
 	rttMin, rttMinAt, rate     float64
 	sampleAt                   float64
 	sampleAcked                uint64
+	winMax, prevMax, winAt     float64 // the windowed-max rate
+	cappedWin                  bool
 	capped, dead, gotPong      bool
 	lastHeard, lastPing, start float64
 	pingID                     uint32
@@ -117,6 +119,7 @@ func (g *group) addLeg(l *leg) bool {
 	g.nextLeg++
 	l.lastHeard, l.start, l.sampleAt = now, now, now
 	l.rate, l.rttMin = 1.25e6, 0.05
+	l.prevMax, l.winAt = 1.25e6, now
 	l.ctlq = append(l.ctlq, frame{typ: fWelcome}.encode()) // the first record of the leg
 	g.legs = append(g.legs, l)
 	g.cond.Broadcast()
@@ -331,12 +334,21 @@ func (g *group) legAck(l *leg, v uint64) {
 	}
 	now := mono()
 	if dt := now - l.sampleAt; dt >= 0.1 {
+		// the best 100 ms delivery of the last 1.5-3 s; it falls only through a window in which the leg was at its cap
 		sample := float64(l.acked-l.sampleAcked) / dt
+		l.winMax = max(l.winMax, sample)
 		if l.capped {
-			l.rate = max(16384, 0.5*l.rate+0.5*sample)
-		} else if sample > l.rate {
-			l.rate = sample
+			l.cappedWin = true
 		}
+		if now-l.winAt >= 1.5 {
+			if l.cappedWin {
+				l.prevMax = l.winMax
+			} else {
+				l.prevMax = max(l.prevMax, l.winMax)
+			}
+			l.winMax, l.winAt, l.cappedWin = 0, now, false
+		}
+		l.rate = max(16384, l.prevMax, l.winMax)
 		l.capped, l.sampleAt, l.sampleAcked = false, now, l.acked
 	}
 	g.cond.Broadcast()

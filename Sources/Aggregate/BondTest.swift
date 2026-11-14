@@ -72,9 +72,11 @@ final class ThrottleProxy {
             let (at, bytes) = chunks.removeFirst()
             queued -= bytes.count
             q.broadcast(); q.unlock()
-            let now = bnow(), when = max(at + delay, nextFree, now)
-            nextFree = when + Double(bytes.count * 8) / (mbps * 1e6)
-            if when > now { usleep(UInt32((when - now) * 1e6)) }
+            // a sleep on GitHub's runner can last several ms longer than asked (the first run read 27 of 80 Mbit/s):
+            // the bucket keeps up to 20 ms of credit, so the line still averages its speed
+            let now = bnow(), when = max(at + delay, nextFree)
+            nextFree = max(when, now - 0.02) + Double(bytes.count * 8) / (mbps * 1e6)
+            if when > now + 0.001 { usleep(UInt32((when - now) * 1e6)) }
             while isHoled { sleep(1) }
             if !sendAll(to, bytes) { return }
         }
