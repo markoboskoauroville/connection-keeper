@@ -384,3 +384,8 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   fine only if one of them is passive.
 - 14.11.2026: toggling the live bond.json during measurements cut Marko's bonded connections each time (v66–v70 stopped
   every stream on "off"). Measure on a test copy; since v71 "off" drains.
+- Quit must undo in the order that keeps a road: the helper deletes the half routes (the Mac's own default route was never
+  touched) before anything behind them stops; open adds the routes only after the server behind them answers. With that
+  order, 1685 new connections across open/quit/crash had 0 failures and even 0 in-flight breaks on the CI runner.
+- A probe must accept what the far end really says: 1.1.1.1:80 answers a redirect without "ip=", which counted 794 false
+  failures.

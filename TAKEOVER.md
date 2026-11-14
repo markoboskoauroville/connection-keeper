@@ -6,6 +6,17 @@ IPv4 = relay, Cloudflare colo FRA, no IPv6 leak, relay 443 over the cable, VM CK
 check goes out over en17/en0 (through the Mac's own tunnel 443 "answered" in 1 ms). Open: YouTube on the Mac may ask to sign
 in (Frankfurt address) — a direct list was offered, not asked for; UDP (QUIC, calls) not bonded yet (phase 2).
 
+**14.11.2026, v73 (requests 86 + 87): a normal Mac app; open = Frankfurt, quit = the Mac as before.** Dock icon, ⌘-Tab,
+a titled window (system traffic lights, minimise to the Dock, moved by its title bar, width by its edges), a main menu
+(Settings… ⌘,, Check for Updates…, Open Window at Login, Quit, OFF; View; Window; Help); TOP off by default.
+Sources/Shared/Session.swift: open = keeper + server answering, then the tunnel flag; quit = proxy off and tunnel flag
+removed first, service order back, keeper and server disabled and stopped (draining), ck-phone and forwards removed, lease
+removed; update keeps the session (lease "updating" 3 min); crash = ck-aggregate's lease watchdog does the same close.
+`ck-aggregate session open|close`, `ck-bondcheck --clean-save / --clean`. CI run 43582635340 (the real tunnel helper on the
+runner): open → quit and open → crash, 1685 new connections at 11.2/s, 0 failed, 0 broken; clean check PASS after both;
+the crash cleaned within ~2 s. Not installed live (Claude, Marko's quiet moment). Not seen yet: the window on a real
+screen (only the selftest picture of its content), the Dock/menus by hand.
+
 **14.11.2026, v71–v72 (request 85, item "hitless" first; Marko: "I need my connection non-stop").** Built and proven on GitHub's
 runner only (run 43580200100), nothing installed live. Relay: `systemctl reload ckbond` = SIGHUP = the binary on disk takes over
 the SAME listening socket (fd 3), READY on fd 4, MAINPID to systemd (unit now Type=notify, NotifyAccess=all, ExecReload); the old

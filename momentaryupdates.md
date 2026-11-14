@@ -790,3 +790,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 **Status:** sent to the worker; replaces request 86's "Quit keeps the connection running".
 
 **Status 14.11.2026 (v71–v72):** hitless transitions built first (relay hot upgrade with GOAWAY + generations, bond drain, 1 s fallback, ck-aggregate handover), proven in CI run 43580200100 (0 failures under load). Not installed live. UDP, DNS, direct list, kill switch, stripe item, rotation, and requests 86/87 not started.
+
+**Status 14.11.2026 (v73, requests 86 + 87):** normal Mac app + open = Frankfurt / quit = as before / crash watchdog built; CI run 43582635340: 0 failed of 1685 new connections across open/quit/crash, clean check PASS. Not installed live.

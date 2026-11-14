@@ -151,3 +151,23 @@ Once only: a relay before v71 (Type=simple, no SIGHUP hand-over) and a ck-aggreg
 hand over. The first install of v71 restarts the relay once (`install.sh` says "restarted … once"; the Mac goes direct
 for new connections within 1 s, bonded streams of that moment end), and `handover` stops a v70 server and takes its
 port the moment it is free (a few ms; that server's open connections end). Every later upgrade is hitless.
+
+## Open = Frankfurt, Quit = the Mac as before (v73, requests 86 + 87)
+
+The app is a normal Mac app (Dock, ⌘-Tab, a titled window, a main menu). `Sources/Shared/Session.swift`:
+
+- **Open:** the service order of now is kept once (the "before"); the keeper and the aggregation server are started and
+  answering; only then the tunnel flag (the root helper adds the two half routes through utun99). A lease
+  (`app-lease.json`: the app's pid and program path) says the app owns the session.
+- **Quit (⌘Q, Dock Quit, logout):** proxy off and the tunnel flag removed first (the helper deletes the half routes, then
+  stops hev; the Mac's own default route, never touched, takes every new connection), the service order back to the
+  "before", then the keeper and the server disabled and stopped (the server drains), ck-phone and our adb forwards
+  removed, the lease removed. The mode (aggregate / one connection) is kept for the next open.
+- **Update:** the updater's quit keeps everything; the lease says "updating" for 3 minutes, the new copy takes it over.
+- **Crash:** ck-aggregate checks the lease twice a second; a lease whose program is gone (and not updating) = the same
+  quit, from there (seen in CI: about 2 s).
+- **OFF** stays the explicit "stop everything, also at the next login".
+- `ck-bondcheck --clean-save` before opening, `ck-bondcheck --clean` after quitting: proxies, default/half routes,
+  service order, DNS resolvers, our processes and the tunnel flag compared (PASS = identical).
+- CI (`Tools/ci/session_test.sh`, the real tunnel helper on GitHub's runner): open → quit and open → crash with new
+  connections from three threads the whole time: 0 failed, the clean check PASS after each.
