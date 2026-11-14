@@ -1,0 +1,26 @@
+name: bench
+# The throughput question (14.11.2026): the same single-stream selftest, built from several tags, run interleaved on ONE
+# runner, three rounds; the medians separate noise from a regression. Started by hand (workflow_dispatch).
+on:
+  workflow_dispatch:
+    inputs:
+      refs:
+        description: "tags or commits to compare, separated by spaces"
+        default: "v71 v73 v74 v75 HEAD"
+      rounds:
+        description: "rounds"
+        default: "3"
+jobs:
+  bench:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Build each ref (ck-aggregate and the relay only)
+        run: ./Tools/ci/bench.sh build "${{ github.event.inputs.refs }}"
+      - name: Run interleaved
+        run: ./Tools/ci/bench.sh run "${{ github.event.inputs.refs }}" "${{ github.event.inputs.rounds }}"

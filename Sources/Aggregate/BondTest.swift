@@ -174,6 +174,26 @@ func bondSelftest(_ args: [String]) -> Never {
     guard client.legCount == 3 else { print("BOND SELFTEST FAIL: the legs did not come up"); exit(1) }
     sleep(2)                                                // a few PINGs: each leg knows its RTT
 
+    // v76 (the throughput question): only the UDP round trip on fresh legs, with each leg's own RTT beside it
+    if arg("--udp-rtt-only") != nil, let ue = arg("--udp-echo"), let ep = ue.split(separator: ":").last.flatMap({ UInt16($0) }) {
+        let ul = NSLock(); var got: [Int: Double] = [:], sentAt: [Int: Double] = [:]
+        guard let fid = client.openFlow(onReply: { body in
+            guard body.count > 7, let idx = Int(String(decoding: body[7...], as: UTF8.self).split(separator: "|").first ?? "") else { return }
+            ul.lock(); if got[idx] == nil { got[idx] = bnow() }; ul.unlock()
+        }) else { print("UDP RTT: no flow"); exit(1) }
+        for i in 0..<100 {
+            let msg = Array("\(i)|".utf8) + [UInt8](repeating: 46, count: 60)
+            ul.lock(); sentAt[i] = bnow(); ul.unlock()
+            client.sendDgram(fid, [1, 127, 0, 0, 1, UInt8(ep >> 8), UInt8(ep & 255)] + msg)
+            usleep(50_000)
+        }
+        sleep(1)
+        ul.lock(); let r = got.compactMap { k, v in sentAt[k].map { (v - $0) * 1000 } }.sorted(); ul.unlock()
+        let legs = (client.status()["legs"] as? [[String: Any]] ?? []).map { "\($0["line"] ?? "?") \($0["rttMs"] ?? "?") ms" }.joined(separator: ", ")
+        print(String(format: "UDP RTT: %d of 100 back, median %.1f ms, p10 %.1f, p90 %.1f (legs: %@)", r.count, r.isEmpty ? 0 : r[r.count / 2], r.isEmpty ? 0 : r[r.count / 10], r.isEmpty ? 0 : r[r.count * 9 / 10], legs))
+        exit(0)
+    }
+
     var failures: [String] = []
     // 1. one stream over three lines
     let before = client.legBytes()
