@@ -135,7 +135,9 @@ extension Server {
             lock.lock(); u.active += 1; u.pending += 1; lock.unlock()
             started += 1
             Thread.detachNewThread { [self] in
+                let t0 = Date()
                 let fd = faulted(u, timeout: 5) ? nil : u.phone.map { Phones.dial(host, port, via: $0.port, timeout: 8) } ?? dial(host, port, via: u.iface)
+                if fd != nil { noteRTT(u, Date().timeIntervalSince(t0) * 1000) }
                 r.lock.lock()
                 let won = fd != nil && r.winner == nil
                 if won { r.winner = (fd!, u) }
@@ -164,7 +166,14 @@ extension Server {
         return r.winner
     }
 
-    // Every 3 s every line at once; dead after two misses in a row, or at once when its device lost its address.
+    // v62 (QC fix 3): the connect time, smoothed; a far server's long connect is clipped so one slow site does not
+    // brand a line slow.
+    func noteRTT(_ u: Uplink, _ ms: Double) {
+        let m = min(ms, 600)
+        lock.lock(); u.rttMs = u.rttMs.map { $0 * 0.8 + m * 0.2 } ?? m; lock.unlock()
+    }
+
+    // Every second every line; dead after two misses in a row, or at once when its device lost its address.
     func checkLines() {
         lock.lock(); let ls = lines; lock.unlock()
         for u in ls { checkSoon(u) }
@@ -173,17 +182,26 @@ extension Server {
     func checkSoon(_ u: Uplink) {
         lock.lock()
         if u.probing { lock.unlock(); return }
-        let fresh = Date().timeIntervalSince(u.lastGood) < 3 && u.alive
-        u.probing = !fresh
+        // v62 (request 83, QC fix 4): the loop runs every second. A line that carried a real connection within 1.5 s needs
+        // no probe; a healthy idle line is probed every 3 s (as before, the same SIM cost); a line with one miss is probed
+        // again after 1 s, so a dead line is out after ~2-3 s instead of ~6.
+        let now = Date()
+        let fresh = now.timeIntervalSince(u.lastGood) < 1.5 && u.alive
+        let due = u.misses > 0 || !u.alive || now.timeIntervalSince(u.lastProbe) >= 3
+        u.probing = !fresh && due
+        if u.probing { u.lastProbe = now }
         lock.unlock()
-        if fresh { return }
+        if fresh || !due { return }
         Thread.detachNewThread { [self] in
             let gone = u.phone == nil && ipv4(of: u.iface) == nil
             var ok = false
             if !gone && !faulted(u, timeout: 2) {
                 for host in ["1.1.1.1", "8.8.8.8"] {
-                    if let fd = u.phone.map({ Phones.dial(host, 443, via: $0.port, timeout: 3) }) ?? dial(host, 443, via: u.iface, timeout: 2) {
-                        close(fd); ok = true; break
+                    let t0 = Date()
+                    if let fd = u.phone.map({ Phones.dial(host, 443, via: $0.port, timeout: 2) }) ?? dial(host, 443, via: u.iface, timeoutMs: 1500) {
+                        close(fd); ok = true
+                        noteRTT(u, Date().timeIntervalSince(t0) * 1000)
+                        break
                     }
                 }
             }

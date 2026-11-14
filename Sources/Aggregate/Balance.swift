@@ -34,8 +34,11 @@ extension Uplink {
 
 extension Server {
     // Lower is better. Dead lines last.
+    // v62 (request 83, QC fix 3): + the line's connect time (60 ms → 0.06, 5 ms → 0.005): with the lines idle a new
+    // connection (a page, an API call) takes the quick line; under load the throughput term (≥ 0.05 per busy
+    // connection on a 40 Mbit/s line) still spreads the work over every line.
     func load(_ u: Uplink, _ now: Date) -> Double {
-        (u.alive ? 0 : 1e9) + (u.meter.rate + 2 * Double(u.busy(now) + 1)) / u.capacity
+        (u.alive ? 0 : 1e9) + (u.meter.rate + 2 * Double(u.busy(now) + 1)) / u.capacity + (u.rttMs ?? 50) / 1000
     }
 
     func startBalance() {

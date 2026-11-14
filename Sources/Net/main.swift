@@ -456,11 +456,12 @@ func testSpeed(quick: Bool = false) {
 let downloads = support.appendingPathComponent("downloads")
 let pieceSize: Int64 = 8 * 1024 * 1024
 
-final class Piece { let s: Int64, e: Int64; var have: Int64; var busy = false
+final class Piece { let s: Int64; var e: Int64; var have: Int64; var busy = false; var by = ""   // v62: e shrinks when the end is split off
     init(_ s: Int64, _ e: Int64, _ h: Int64) { self.s = s; self.e = e; have = h }
     var len: Int64 { e - s + 1 }; var done: Bool { have >= len } }
 
-final class LineStat { var bytes: Int64 = 0, pieces = 0, fails = 0, active = 0, streak = 0; var restUntil = 0.0; var last = ""
+final class LineStat { var bytes: Int64 = 0, pieces = 0, fails = 0, active = 0, streak = 0, steals = 0; var restUntil = 0.0; var last = ""
+    var rate = 0.0                                   // v62: bytes/s over the last 5 s (saveJob)
     var window: [(Double, Int64)] = [] }
 
 final class Job {
@@ -517,8 +518,9 @@ func saveJob(_ j: Job) {
     for (n, s) in j.stats {
         s.window.append((t, s.bytes)); s.window = s.window.filter { t - $0.0 <= 5 }
         let lb = s.window.count > 1 ? Double(s.bytes - s.window.first!.1) / max(0.1, t - s.window.first!.0) : 0
+        s.rate = lb
         per[n] = ["mbps": r1(lb * 8 / 1e6), "mb": r1(Double(s.bytes) / 1e6), "pieces": s.pieces, "fails": s.fails, "active": s.active,
-                  "resting": s.restUntil > t, "last": s.last]
+                  "resting": s.restUntil > t, "last": s.last, "steals": s.steals]
     }
     let doc: [String: Any] = [
         "id": j.id, "name": j.name, "url": j.url, "dest": j.dest, "part": j.part, "size": j.size, "sha256": j.sha ?? NSNull(),
@@ -551,27 +553,39 @@ func worker(_ j: Job, _ l: NetLine) {
     while !j.stopping {
         if st.restUntil > now() { usleep(300_000); continue }
         j.lock.lock()
-        let p = j.pieces.first { !$0.done && !$0.busy }
-        p?.busy = true
-        if p != nil { st.active += 1 }
+        var found = j.pieces.first { !$0.done && !$0.busy }
+        var note: String?
+        if found == nil, let r = steal(j, st, l.name) { found = r.0; note = r.1 }   // v62: the end-game
+        let waiting = found == nil && j.pieces.contains { !$0.done }
+        found?.busy = true
+        found?.by = l.name
+        if found != nil { st.active += 1 }
         j.lock.unlock()
-        guard let p else { return }
+        if let note { j.event(note) }
+        if waiting { usleep(500_000); continue }                    // others still busy: a split may come up
+        guard let p = found else { return }
         let from = p.s + p.have
+        let startE = p.e
         let cancel = Cancel()
         var over = false
         let r = curlStream(l.curl + ["--connect-timeout", "8", "--speed-limit", "30000", "--speed-time", "8", "-m", "300",
                                      "-r", "\(from)-\(p.e)", j.url], cancel: cancel) { b in
             if j.stopping { return false }
-            let off = p.s + p.have
-            if off + Int64(b.count) > p.e + 1 { over = true; return false }
+            j.lock.lock(); let off = p.s + p.have, end = p.e; j.lock.unlock()
+            var count = b.count, cut = false
+            if off + Int64(count) > end + 1 {
+                // the end was given to a faster line (v62): stop exactly at the new end; otherwise the server sent more
+                // than the range asked for (it ignored it)
+                if end < startE { count = Int(max(0, end + 1 - off)); cut = true } else { over = true; return false }
+            }
             var w = 0
-            while w < b.count {
-                let n = pwrite(j.fd, b.baseAddress! + w, b.count - w, off_t(off + Int64(w)))
+            while w < count {
+                let n = pwrite(j.fd, b.baseAddress! + w, count - w, off_t(off + Int64(w)))
                 if n <= 0 { return false }
                 w += n
             }
-            j.lock.lock(); p.have += Int64(b.count); st.bytes += Int64(b.count); j.lock.unlock()
-            return true
+            j.lock.lock(); p.have += Int64(count); st.bytes += Int64(count); j.lock.unlock()
+            return !cut
         }
         j.lock.lock()
         p.busy = false; st.active -= 1
@@ -593,6 +607,35 @@ func worker(_ j: Job, _ l: NetLine) {
             st.restUntil = now() + rest
         }
     }
+}
+
+// THE END-GAME (v62, request 83, QC fix 1 + 2: "the last piece can sit on the slowest line, so the run ends at that line's
+// speed"). A free connection with no free piece left takes the END of a running piece: the remaining bytes are split by
+// the two connections' speeds (the faster gets the bigger share), so both finish together; pieces thereby shrink to fit
+// each line at the end. Only when it shortens that piece's finish by at least 20 % and the share is at least 1 MB.
+// Called with j.lock held.
+func steal(_ j: Job, _ st: LineStat, _ me: String) -> (Piece, String)? {
+    let mine = st.rate / Double(max(1, st.active + 1))          // this connection's expected bytes/s
+    guard mine > 64_000 else { return nil }                      // a line not yet measured, or too slow to help
+    var best: (p: Piece, cutAt: Int64, gain: Double)?
+    for p in j.pieces where p.busy && !p.done && p.by != me {
+        let rem = Double(p.e + 1 - (p.s + p.have))
+        guard rem >= 2 * 1048576, let h = j.stats[p.by] else { continue }
+        let theirs = max(h.rate / Double(max(1, h.active)), 1000)
+        let f = mine / (mine + theirs)                           // my share of the rest
+        let share = rem * f
+        guard share >= 1048576 else { continue }
+        let before = rem / theirs, after = rem * (1 - f) / theirs
+        guard after < before * 0.8 else { continue }
+        let gain = before - after
+        if best == nil || gain > best!.gain { best = (p, p.e + 1 - Int64(share), gain) }
+    }
+    guard let b = best else { return nil }
+    let piece = Piece(b.cutAt, b.p.e, 0)
+    b.p.e = b.cutAt - 1
+    j.pieces.append(piece)
+    st.steals += 1
+    return (piece, "\(me): took the last \(piece.len / 1048576) MB of the piece at \(b.p.s / 1048576) MB from \(b.p.by) (ends ~\(Int(b.gain)) s sooner)")
 }
 
 func runJob(_ j: Job) -> Int32 {

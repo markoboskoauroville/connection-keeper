@@ -38,6 +38,8 @@ final class Uplink {
     // the connections being dialled plus those that moved bytes in the last 5 s, by their client socket.
     var pending = 0, seen: [Int32: Date] = [:]
     var lastGood = Date.distantPast, probing = false     // v31: the last proof it carries; a check under way
+    var lastProbe = Date.distantPast                      // v62: an idle line is probed every 3 s, a doubtful one every 1 s
+    var rttMs: Double?                                    // v62: connect time, smoothed (the health dial and real connections)
     let meter = LineMeter()                               // v47: live rate, peak, probe (Balance.swift)
     func busy(_ now: Date) -> Int { pending + seen.values.filter { now.timeIntervalSince($0) < 5 }.count }
     init(iface: String, name: String, gateway: String?, gatewayMAC: String?, publicIP: String?) {
@@ -214,7 +216,7 @@ func ipv4(of iface: String) -> in_addr? {
 // A TCP connection to host:port that leaves through this one device, or nil after `timeout` seconds. The socket is
 // bound to the device (IP_BOUND_IF) AND to its address, as `curl --interface` does: with IP_BOUND_IF alone four of
 // six connections hung until the timeout on 18.10.2026.
-func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 5) -> Int32? {
+func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 5, timeoutMs: Int32? = nil) -> Int32? {
     // v31: the names through Resolver (kept 5 min, never a hang on a dead line's DNS); the port written into each address
     var addrs = Resolver.addresses(host).map { d -> Data in var d = d; d[2] = UInt8(port >> 8); d[3] = UInt8(port & 255); return d }
     func family(_ d: Data) -> Int32 { Int32(d[1]) }
@@ -235,7 +237,7 @@ func dial(_ host: String, _ port: UInt16, via iface: String, timeout: Int32 = 5)
         var ok = d.withUnsafeBytes { connect(fd, $0.baseAddress!.assumingMemoryBound(to: sockaddr.self), socklen_t(d.count)) } == 0
         if !ok && errno == EINPROGRESS {
             var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-            if poll(&pfd, 1, timeout * 1000) == 1 {
+            if poll(&pfd, 1, timeoutMs ?? timeout * 1000) == 1 {
                 var err: Int32 = 0; var len = socklen_t(MemoryLayout<Int32>.size)
                 getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len)
                 ok = err == 0
@@ -374,7 +376,7 @@ final class Server {
         Thread.detachNewThread { [self] in refresh() }
         // v31 (request 48): every line checked every 3 s (Failover.swift), not every 20 s
         Resolver.lines = { [self] in lock.lock(); defer { lock.unlock() }; return lines }
-        Thread.detachNewThread { [self] in while true { sleep(3); checkLines() } }
+        Thread.detachNewThread { [self] in while true { sleep(1); checkLines() } }   // v62: 1 s (was 3 s): failover ~2-3 s
         startBalance()                                   // v47: live rate, probes on 4G ↔ 5G (Balance.swift)
         // Again every minute (a Wi-Fi joined elsewhere, a cable pulled), and at once when the ticks change.
         // v32 (request 49): at once too when a device comes or goes (a phone plugged in, a cable), and when ⟳ is pressed.
