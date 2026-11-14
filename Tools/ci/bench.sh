@@ -46,7 +46,7 @@ PY
   for i in 1 2 3; do
     $B/bin/relay-HEAD -listen 127.0.0.1:18443 -token-file "$T/token" -allow-local 2>/dev/null &
     RP=$!; sleep 1
-    perl -e 'alarm 60; exec @ARGV' $B/bin/agg-HEAD bond-selftest --server 127.0.0.1:18443 --token-file "$T/token" --url http://127.0.0.1:18080/big.bin --sha "$SHA" --udp-echo 127.0.0.1:18053 --udp-rtt-only 2>/dev/null | grep "UDP RTT"
+    perl -e 'alarm 60; exec @ARGV' $B/bin/agg-HEAD bond-selftest --server 127.0.0.1:18443 --token-file "$T/token" --url http://127.0.0.1:18080/big.bin --sha "$SHA" --udp-echo 127.0.0.1:18053 --udp-rtt-only 2>&1 | grep -E "UDP RTT|FAIL|legs up|BOND leg" | tail -6
     kill $RP; wait $RP 2>/dev/null; sleep 1
   done ;;
 esac
