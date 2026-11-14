@@ -175,7 +175,7 @@ func bondSelftest(_ args: [String]) -> Never {
     sleep(2)                                                // a few PINGs: each leg knows its RTT
 
     // v76 (the throughput question): only the UDP round trip on fresh legs, with each leg's own RTT beside it
-    if arg("--udp-rtt-only") != nil, let ue = arg("--udp-echo"), let ep = ue.split(separator: ":").last.flatMap({ UInt16($0) }) {
+    if args.contains("--udp-rtt-only"), let ue = arg("--udp-echo"), let ep = ue.split(separator: ":").last.flatMap({ UInt16($0) }) {
         let ul = NSLock(); var got: [Int: Double] = [:], sentAt: [Int: Double] = [:]
         guard let fid = client.openFlow(onReply: { body in
             guard body.count > 7, let idx = Int(String(decoding: body[7...], as: UTF8.self).split(separator: "|").first ?? "") else { return }
