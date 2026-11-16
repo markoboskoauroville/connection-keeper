@@ -177,8 +177,9 @@ thread, the stripe says "WI-FI: …" / "CABLE: …" meanwhile and the menu pops 
 (3) Cmd-R reloads only the speed test (EdgelessWindow.onReload, set by SpeedBrowser; Help has none). (4) Memory: `leaks` found
 only 3 tiny one-time leaks (112 bytes, the press monitor); the footprint is 62 MB (RSS 90 MB); the growth was Hover.owners:
 entries of buttons that were gone were never dropped (and a reused address skipped the hover of a new button): pruned in
-Hover.add and every 60 s (Hover.prune). Honest note: the rest of the 93 -> 103 MB is malloc fragmentation (49 % of the
-zone) and WebKit caches; see the numbers in the v86 report.
+Hover.add and every 60 s (Hover.prune). Measured with MallocStackLogging + malloc_history: the rest of the growth (43 -> 62 MB in 48 switches, a plateau
+expected) is CoreGraphics' own glyph bitmap cache (CGGlyphBitmapCreate, text redrawn on the stripe), not ours; `leaks` 3 x 112 bytes.
+v86 installed 16.11.2026 12:26 (zip from release v86, 4.3 MB of SIM data, signed per helper, quit by SIGTERM because Macro lock was on).
 
 **v85, 16.11.2026 (request 94, stress pass; installed 09:40, CI run 43831168488 green, release v85 Latest):** fixes from a
 code review + live tests. Tailscale guard: a slow cycle no longer looks like a wake from sleep (lastTick after each cycle);

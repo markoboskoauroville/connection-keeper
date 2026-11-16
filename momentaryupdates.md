@@ -857,3 +857,5 @@ Aggregation verdict: not aggregating; NOTHING ONLY keeps the cable on STANDBY, a
 > finish all unfinished works. Now. Everything.
 
 Scope: the four open bugs of v85 (serial coalescing queue for the stripe's switch jobs; WI-FI/CABLE lists off the main thread with "…"; Cmd-R scoped to the speed-test window; stripe memory growth 93 -> 103 MB).
+
+**Status 16.11.2026 (v86 installed 12:26, CI run 43855683752 green, release v86 Latest):** all four fixed; live: a burst of 6 choices ended in cable, jobs serialized ("queued, the latest wins" in the log); left on CABLE / CROATIA (bond off, public 86.33.84.210), Tailscale up, relay health 200.
