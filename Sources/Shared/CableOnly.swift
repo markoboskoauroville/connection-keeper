@@ -3,7 +3,8 @@
 // only as an adb device whose transport is USB (`adb devices -l` with a "usb:" field; Phones.list() already asks for
 // it): never a wireless adb address (100.x Tailscale, ip:port, a 127.0.0.1 forward), and never its Wi-Fi hotspot.
 //   - phone hotspots (the SSIDs in phone-hotspots.txt, "Something" from the start, the Nothing's own SoftAp name learned
-//     over adb) are never a line of the aggregate, never joined by the keeper's ladder, greyed in the stripe's lists;
+//     over adb) are never joined by the keeper's ladder; v87 (request 94): joined by hand, the Mac's Wi-Fi on one is a
+//     line of the aggregate of its own (the phone's SIM), and in NOTHING ONLY it is the Nothing's line when no cable is;
 //   - ⟳ and a plug-in run `Phones.refreshAdb()` (adb start-server, reconnect offline, stale offline 127.0.0.1 Nothing
 //     entries dropped) and the stripe says what the cable does: `CableOnly.nothingStatus()`.
 // macOS has no RNDIS driver and the A142 refuses NCM (v17), so the cable line is ck-phone (SOCKS5) over `adb forward`.
@@ -25,7 +26,7 @@ enum CableOnly {
         let s = ssid.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty, !s.contains("\n"), !hotspots.contains(s) else { return }
         try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
-        let old = (try? String(contentsOf: file, encoding: .utf8)) ?? "# phone hotspots: never a line of Connection Keeper (v81)\n"
+        let old = (try? String(contentsOf: file, encoding: .utf8)) ?? "# phone hotspots: never joined by the keeper itself; joined by hand they are a line of their own (v87)\n"
         try? (old + (old.hasSuffix("\n") ? "" : "\n") + s + "\n").write(to: file, atomically: true, encoding: .utf8)
     }
 

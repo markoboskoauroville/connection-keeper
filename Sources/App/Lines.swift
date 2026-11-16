@@ -143,10 +143,9 @@ extension Stripe {
             for i in Net.activeInterfaces() {
                 let gw = shell("/usr/sbin/ipconfig", ["getoption", i, "router"], timeout: 5).out.trimmingCharacters(in: .whitespacesAndNewlines)
                 if gw.isEmpty { continue }
-                // v81 (request 89): a phone's hotspot is never a line (the Nothing only by its USB cable)
-                let hot = i == wifi && CableOnly.isPhoneHotspot(Net.currentSSID(i))
+                // v87 (request 94): a phone's hotspot is a line again (v81 had greyed it)
                 found.append(OtherLine(iface: i, name: Net.displayName(i), wifi: i == wifi, ms: Net.onlineVia(i),
-                                       sameAs: hot ? "PHONE HOTSPOT: not used" : st?.ignored.first { $0.device == i }?.sameLineAs))
+                                       sameAs: st?.ignored.first { $0.device == i }?.sameLineAs))
             }
             // v81 (request 89): adb looked at; a change (a phone plugged in or out) or every 30 s: the Nothing's cable said
             let adbNow = CableOnly.entries().map { "\($0.serial)=\($0.state)\($0.usb ? "u" : "")" }.sorted().joined(separator: " ")

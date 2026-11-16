@@ -96,15 +96,16 @@ enum Lines {
         let ticked = anyLine ? [] : Set(Aggregation.joinable)
         var found: [Uplink] = [], refused: [(Uplink, Uplink)] = []
         for i in Net.activeInterfaces() {
-            guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
-            // v81 (request 89): a phone's hotspot is never a line; the Nothing joins only by its USB cable (adb)
-            if i == wifi, let ssid = Net.currentSSID(i), CableOnly.isPhoneHotspot(ssid) {
-                if Uplink.reasons[i] != "PHONE HOTSPOT" { log("\(ssid) (\(i)) is not joined: PHONE HOTSPOT (the Nothing is a line only by its USB cable)"); Uplink.reasons[i] = "PHONE HOTSPOT" }
-                refused.append((Uplink(iface: i, name: ssid, gateway: nil, gatewayMAC: nil, publicIP: nil), Uplink(iface: "reason", name: "PHONE HOTSPOT", gateway: nil, gatewayMAC: nil, publicIP: nil)))
-                continue
-            }
-            if Uplink.reasons[i] == "PHONE HOTSPOT" { Uplink.reasons[i] = nil }
-            found.append(Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i]))
+            // v87 (request 94, Marko 16.11.2026: "when I add something, like for example, hotspot on my Nothing Phone, it's
+            // not registered and aggregated"): the Mac's Wi-Fi on a phone's hotspot is a line of its own (that phone's SIM,
+            // a different road from the cable's router), joined without a tick; v81 had refused it.
+            let hot = i == wifi && CableOnly.isPhoneHotspot(Net.currentSSID(i))
+            guard ticked.isEmpty || hot || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
+            if hot, Uplink.reasons[i] != "PHONE HOTSPOT JOINED" { log("\(Net.currentSSID(i) ?? "?") (\(i)): a phone hotspot, joined as a line of its own (its SIM)"); Uplink.reasons[i] = "PHONE HOTSPOT JOINED" }
+            if !hot, Uplink.reasons[i] == "PHONE HOTSPOT JOINED" { Uplink.reasons[i] = nil }
+            let u = Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i])
+            u.cellular = hot                                   // a phone's own radio: never "the same line" by carrier NAT
+            found.append(u)
         }
         // v17 (request 36): every phone on a USB cable with its server answering is a line of its own.
         for p in Phones.list() where ticked.isEmpty || ticked.contains(p.name) {
@@ -179,9 +180,15 @@ enum Lines {
             let u = Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: Phones.publicIP(p) ?? known[p.device])
             u.phone = p; u.cellular = true; lines.append(u)
         }
+        // v87 (request 94): no Nothing on the USB cable, but the Mac's Wi-Fi is on a phone's hotspot (the Nothing's
+        // "Something"): that is the Nothing's SIM too, so it is the line, not the standby.
+        let wifi = Net.wifiInterface()
+        if !lines.contains(where: { !$0.standby }), let w = wifi, CableOnly.isPhoneHotspot(Net.currentSSID(w)), let gw = gateway(w) {
+            let u = Uplink(iface: w, name: Net.displayName(w), gateway: gw, gatewayMAC: gatewayMAC(gw, w), publicIP: publicIP(w) ?? known[w])
+            u.cellular = true; lines.append(u)
+        }
         // the standby: every other line of the Mac (the cable first), never a phone hotspot; it carries only while the
         // Nothing does not answer (Server.usable), so the Mac is never left without internet
-        let wifi = Net.wifiInterface()
         var spare: [(String, String)] = []
         for i in Net.activeInterfaces() where i != Aggregation.tunnelDevice && !i.hasPrefix("utun") {
             guard let gw = gateway(i) else { continue }
@@ -196,7 +203,7 @@ enum Lines {
         }
         let mainNames: String = lines.filter { !$0.standby }.map { $0.name }.joined(separator: " + ")
         let spareNames: String = lines.filter { $0.standby }.map { $0.name }.joined(separator: ", ")
-        let said = "NOTHING ONLY lines: " + (mainNames.isEmpty ? "no Nothing on the cable" : mainNames) + "; standby: " + (spareNames.isEmpty ? "none" : spareNames)
+        let said = "NOTHING ONLY lines: " + (mainNames.isEmpty ? "no Nothing on the cable or its hotspot" : mainNames) + "; standby: " + (spareNames.isEmpty ? "none" : spareNames)
         if said != nothingOnlySaid { nothingOnlySaid = said; log(said) }
         let w = savedSpeeds()
         for u in lines { if let m = w[u.publicIP ?? u.iface] { u.mbps = max(m, 0.5) } }
@@ -576,6 +583,10 @@ final class Server {
                     if let p = Phones.list().first(where: { $0.serial == serial }) { names.append(p.name); break }
                     sleep(1)
                 }
+            } else if let at = e.firstIndex(of: "@") {
+                // v87: a Wi-Fi is never ticked this way, except a phone's hotspot (request 94): joining it is adding a line
+                let ssid = String(e[e.index(after: at)...])
+                if CableOnly.isPhoneHotspot(ssid) { names.append(ssid) }
             } else if e != wifi {
                 names.append(Net.displayName(e))
             }
@@ -592,6 +603,7 @@ final class Server {
 // cheap (no program but adb), so it is asked every second; a change means something was plugged in or pulled out.
 func deviceFingerprint() -> [String] {
     var out: [String] = []
+    let wifiNow = Net.wifiInterface()
     var ifap: UnsafeMutablePointer<ifaddrs>?
     if getifaddrs(&ifap) == 0, let first = ifap {
         var p: UnsafeMutablePointer<ifaddrs>? = first
@@ -599,7 +611,8 @@ func deviceFingerprint() -> [String] {
             let name = String(cString: a.pointee.ifa_name)
             if let addr = a.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET),
                !["lo", "utun", "awdl", "llw", "anpi", "ap", "bridge", "gif", "stf"].contains(where: { name.hasPrefix($0) }) {
-                out.append(name)
+                // v87 (request 94): the Wi-Fi with its network's name, so joining a hotspot (same en0) is seen at once
+                out.append(name == wifiNow ? "\(name)@\(Net.currentSSID(name) ?? "")" : name)
             }
             p = a.pointee.ifa_next
         }

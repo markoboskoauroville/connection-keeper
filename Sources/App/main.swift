@@ -1119,7 +1119,6 @@ final class Stripe: NSObject {
     @objc func pick(_ item: NSMenuItem) {
         guard let name = item.representedObject as? String else { return }
         if Config.load().dryRun { show("dry run: would join \(name)", Ink.amber, for: 20); return }
-        if CableOnly.isPhoneHotspot(name) { show("\(name) is a phone hotspot: not used (the Nothing only by its USB cable)", Ink.amber, for: 15); return }
         let iface = Net.wifiInterface() ?? "en0"
         Net.prefer(iface)                                   // v12: Wi-Fi above a cable, so the internet follows the pick
         if Net.currentSSID(iface) == name {

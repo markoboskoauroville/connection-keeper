@@ -178,17 +178,16 @@ extension Stripe {
         listHead(menu, "WI-FI networks in range: tick the one to use")
         let names = Set(wifiScan + (cur.map { [$0] } ?? [])).sorted()
         if names.isEmpty { listHead(menu, "  scanning… open this list again in a few seconds") }
-        // v81 (request 89): a phone's hotspot is never joined here (the Nothing only by its USB cable)
+        // v87 (request 94): a phone's hotspot can be joined again; in BOTH it is a line of its own (the phone's SIM)
         for n in names {
             let hot = CableOnly.isPhoneHotspot(n)
-            listItem(menu, hot ? n + "   (phone hotspot: not used, the Nothing only by cable)" : n, ticked: n == cur && !hot, enabled: !hot, id: n, action: #selector(pickWifiNetwork(_:)))
+            listItem(menu, hot ? n + "   (phone hotspot: its SIM, a line of its own in BOTH)" : n, ticked: n == cur, enabled: true, id: n, action: #selector(pickWifiNetwork(_:)))
         }
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: wifiLabel.bounds.height + 4), in: wifiLabel)
     }
 
     @objc func pickWifiNetwork(_ b: NSButton) {
         guard let ssid = b.identifier?.rawValue, let w = Net.wifiInterface() else { return }
-        if CableOnly.isPhoneHotspot(ssid) { show("\(ssid) is a phone hotspot: not used (the Nothing only by its USB cable)", Ink.amber, for: 15); return }
         appendLog("\(logStamp()) WI-FI network ticked on the stripe: \(ssid)")
         show("WI-FI: joining \(ssid)…", Ink.amber, for: 60)
         DispatchQueue.global().async {
