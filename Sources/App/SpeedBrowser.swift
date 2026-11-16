@@ -125,6 +125,20 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
         window.setContentSize(box.frame.size)
         window.contentView = box
         grip.onClose = { [weak self] in self?.window.close() }
+        // v84 (request 93, Marko 16.11.2026: "I need to have ability to reload this test, so if it's testing, just basically to
+        // restart in a mid execution"): RESTART on the grip bar, left of ✕: the running test is dropped (the page stopped and
+        // emptied, so its sockets close) and a fresh speedtest.net starts the test by itself. Idle: the same, a new test.
+        let restart = NSButton(title: "↻ RESTART", target: self, action: #selector(restartPressed))
+        restart.isBordered = false
+        restart.font = .monospacedSystemFont(ofSize: 10, weight: .bold)
+        restart.contentTintColor = NSColor(calibratedWhite: 0.8, alpha: 1)
+        restart.setAccessibilityLabel("RESTART")
+        restart.setAccessibilityIdentifier("speed-restart")
+        restart.toolTip = "Stop the test now and start a new one"
+        restart.sizeToFit()
+        restart.frame = NSRect(x: grip.bounds.maxX - 26 - restart.frame.width, y: 0, width: restart.frame.width, height: GripBar.height)
+        restart.autoresizingMask = [.minXMargin]
+        grip.addSubview(restart)
         web.navigationDelegate = self
         web.uiDelegate = self
         web.underPageBackgroundColor = .black
@@ -144,6 +158,40 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
         AdBlock.install(into: config.userContentController) { [weak self] on, rules in
             appendLog("\(logStamp()) ADBLOCK on: \(on.joined(separator: ", ")) (\(rules) rules)")
             self?.web.load(URLRequest(url: SpeedBrowser.home))
+        }
+    }
+
+    var startWhenLoaded = false
+
+    @objc func restartPressed() { restart() }
+
+    func restart() {
+        appendLog("\(logStamp()) SPEEDTEST restart: the running test dropped, a new one started")
+        startWhenLoaded = true
+        web.stopLoading()
+        web.loadHTMLString("", baseURL: nil)          // the old page and its test connections go away
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.web.load(URLRequest(url: SpeedBrowser.home, cachePolicy: .reloadIgnoringLocalCacheData))
+        }
+    }
+
+    static func restartOrOpen() {
+        if let b = shared { b.restart() } else { shared = SpeedBrowser(); shared?.startWhenLoaded = true }
+    }
+
+    // after a RESTART: press GO as soon as speedtest.net has it (tries for ~15 s)
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard startWhenLoaded, webView.url?.host?.contains("speedtest.net") == true else { return }
+        startWhenLoaded = false
+        pressGo(tries: 30)
+    }
+
+    func pressGo(tries: Int) {
+        let js = "(function(){var b=document.querySelector('.js-start-test, a[aria-label^=\"start speed test\"]');if(b){b.click();return true}return false})()"
+        web.evaluateJavaScript(js) { [weak self] r, _ in
+            if (r as? Bool) == true { appendLog("\(logStamp()) SPEEDTEST GO pressed after the restart"); return }
+            if tries > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.pressGo(tries: tries - 1) } }
+            else { appendLog("\(logStamp()) SPEEDTEST restart: GO not found on the page") }
         }
     }
 

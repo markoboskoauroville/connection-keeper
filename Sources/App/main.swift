@@ -163,6 +163,8 @@ final class Stripe: NSObject {
     lazy var bondWord = word("⇄ off", Ink.grey, #selector(bondPressed), id: "bond", tip: "The bond through the relay")   // v75 (BondItem.swift)
     var bondLast: (Date, Double)?
     lazy var cloudWord = word("", Ink.green, #selector(cloudPressed), id: "claude-cloud", tip: "Watches Claude Code's connection to Anthropic")
+    // v84 (request 93): PING VM opens iTerm2 pinging chromium-vm over Tailscale (PingVM.swift); right-click: tailscale ping
+    lazy var pingVMWord = makePingVMWord()
     lazy var tsWord = word("", Ink.grey, #selector(tsPressed), id: "tailscale", tip: "Tailscale")
     lazy var tabAll = word("ALL", Ink.grey, #selector(pickTabAll), id: "tab-all", tip: "Every connection the Mac can see: Wi-Fi networks in range, cables, phones, each with its state and signal")
     lazy var tabUse = word("IN USE", Ink.green, #selector(pickTabUse), id: "tab-inuse", tip: "Only the lines carrying traffic now, with their signal and live speed")
@@ -412,7 +414,7 @@ final class Stripe: NSObject {
         dlBox.alignment = .leading
         dlBox.spacing = 0
         dlBox.isHidden = true
-        let checkRow = NSStackView(views: [lights, wifiTick, wifiLabel, wifiNoData, pipe(), cableTick, cableLabel, cableNoData, pipe(), bothTick, bothLabel, pipe(), frankfurtWord, croatiaWord, bondWord, cloudWord, tsWord])
+        let checkRow = NSStackView(views: [lights, wifiTick, wifiLabel, wifiNoData, pipe(), cableTick, cableLabel, cableNoData, pipe(), bothTick, bothLabel, pipe(), frankfurtWord, croatiaWord, bondWord, cloudWord, tsWord, pingVMWord])
         checkRow.orientation = .horizontal
         checkRow.spacing = 3
         checkRow.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -507,6 +509,19 @@ final class Stripe: NSObject {
         // v81 (request 90): NOTHING ONLY from a terminal too: object "on" or "off" (the same checks as ⚙)
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperNothingOnly"), object: nil, queue: .main) { [weak self] n in
             self?.setNothingOnly((n.object as? String) == "on")
+        }
+        // v84 (request 93): WI-FI / CABLE / BOTH from outside (Queen, a terminal): object "wifi", "cable" or "both", the same as the tick
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperChoose"), object: nil, queue: .main) { [weak self] n in
+            switch (n.object as? String)?.lowercased() {
+            case "wifi"?: self?.setChoice(.wifi)
+            case "cable"?: self?.setChoice(.cable)
+            case "both"?: self?.setChoice(.both)
+            default: appendLog("\(logStamp()) CHOICE from outside ignored: \(n.object as? String ?? "nothing") (wifi, cable or both)")
+            }
+        }
+        // v84 (request 93): the speed test's RESTART from outside; opens the speed test when it is closed
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperSpeedRestart"), object: nil, queue: .main) { _ in
+            SpeedBrowser.restartOrOpen()
         }
     }
 

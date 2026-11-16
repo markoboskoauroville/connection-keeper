@@ -169,6 +169,21 @@ the routes "vanished" within 2.5 s in WIRES. Still to watch: that it stays up fo
 **Version v10** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `10-connection-keeper-v10.zip`, tag `v10`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
+**v84, 16.11.2026 (request 93; carries v83's Tailscale guard fix):** (1) the speed test window (speedtest.net) has
+**↻ RESTART** on its grip bar, left of ✕ (AX button "RESTART", id speed-restart): the page is stopped and emptied, so the
+running test's connections close, and a fresh speedtest.net presses GO by itself; idle it simply starts a new test. From
+outside: distributed notification `ConnectionKeeperSpeedRestart` (opens the window when closed). (2) **PING VM** on the top
+row (id ping-vm): a new iTerm2 window (Terminal.app if iTerm2 is missing) runs `ping 100.102.86.30` (chromium-vm over
+Tailscale) after the line "Pinging chromium-vm (Frankfurt) over Tailscale. Ctrl+C stops."; Tailscale off = it runs
+tailscale-ensure-up first and says so. Right-click: `tailscale ping chromium-vm` (direct vs DERP). Opened with `open -a` on a
+.command file in Application Support: no AppleEvents, no Automation prompt. The public 130.61.181.83 does not answer ICMP
+(Oracle security list + the VM's iptables); left closed. If ever wanted: an ICMP type 8 ingress rule in the VCN security list
+for Marko's address only, plus `iptables -I INPUT -p icmp --icmp-type echo-request -s <his IP> -j ACCEPT` on the VM.
+(3) WI-FI / CABLE / BOTH from outside: distributed notification `ConnectionKeeperChoose` with object wifi|cable|both (the
+CABLE word opens a list, so an AX press on it hangs in the menu: use the tick or this notification).
+Aggregation test 16.11.2026 (Marko: "is it aggregating this correctly"): see LESSONS (NOTHING ONLY keeps the AX88179B on
+STANDBY, so BOTH carries only the Nothing; the Wi-Fi "mantra" and the cable reach the SAME router 3c:78:95:d6:21:18).
+
 **v83, 16.11.2026 (request 92, "the TAILSCALE switch is always off when I start it"):** the Tailscale guard now runs the
 binary with TAILSCALE_BE_CLI=1 (in launchd it was the GUI and every check failed), stops/starts the real VPN service name
 from `scutil --nc list` ("Tailscale 2"), and within 10 minutes of its start brings a Stopped Tailscale up once
