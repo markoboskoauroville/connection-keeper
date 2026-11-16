@@ -437,3 +437,6 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   interface names only (en0 on mantra = en0 on Something). It now holds `en0@<SSID>`.
 - The Mac can be on ONE Wi-Fi at a time: the Nothing's hotspot and "mantra" can never both be legs; a hotspot leg pairs
   with the cable (AX88179B -> mantra router), and "mantra" Wi-Fi + the cable are the same router (SAME UPLINK).
+
+## Lesson: hover card (16.11.2026)
+The item is image-only, so the pipes are drawn into the image, with room (pad) on both sides; the mouse is polled by the kit (one copy of the item per display).

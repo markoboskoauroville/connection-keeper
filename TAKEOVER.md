@@ -1036,3 +1036,6 @@ on the desktop and display where it is; a click on its menu bar icon brings it t
 
 ## v54 (13.11.2026): two tabs
 - Under the second row, centred: ALL and IN USE (UserDefaults linesTab, default IN USE). IN USE = the old line rows (joined lines, or the one carrying the internet), meters and speed. ALL (Tabs.swift) = every `others` entry plus Wi-Fi networks in range, with a state word (IN USE / READY / NO DATA / AIRPLANE / VIA WI-FI / SAME UPLINK / NO NET) and meters. The ▸ expand button and the second total row are gone (the first row is the total).
+
+## Menu-bar hover card and pipes (v88, 16.11.2026)
+Marko: "with all my apps on the menu bar, make a comprehensive pop-up menu. When I hover over, I want to see what is it and what is it doing." and "for my apps always make a pipes before and after ...". Sources/App/HoverCard.swift is the shared kit file (MANTRA_MANIFEST kits/menubar-hover); Stripe.hoverContent() (MenuBar.swift) gives state ONLINE / FALLBACK / OFFLINE, mode and lines, interface, speeds, Nothing Only. Pipes are drawn in the menu-bar image (showMenuBarSpeed). Test: launch with --hovercard-shot.

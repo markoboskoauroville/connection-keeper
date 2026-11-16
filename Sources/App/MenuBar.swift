@@ -36,6 +36,7 @@ extension Stripe {
         let item = MenuBarPlace.make()
         configureStatusButton(item)
         menuItem = item
+        HoverCard.attach(to: item) { [weak self] in self?.hoverContent() ?? HoverCard.Content(name: "Network Aggregate Connection Keeper (Mantra)", what: "", state: "") }
         showMenuBarSpeed(nil, nil)
         led.translatesAutoresizingMaskIntoConstraints = false
         led.widthAnchor.constraint(equalToConstant: 12).isActive = true
@@ -47,6 +48,18 @@ extension Stripe {
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { self?.checkMenuPlace(tries: 2) }
         }
+    }
+
+    /// the hover card (kit menubar-hover): what it is and what it is doing now
+    func hoverContent() -> HoverCard.Content {
+        let up = internetUp()
+        let fallback = NothingOnly.state?.hasPrefix("standby") == true
+        let mode = Aggregation.on ? "Aggregating: " + String((agg?.lines.count ?? 0)) + " lines joined" : "Single line"
+        var lines = [mode, "Interface: " + (iface ?? "none"),
+                     "Speed: down " + istatRate(lastMenuSpeed.0) + " / up " + istatRate(lastMenuSpeed.1)]
+        if let n = NothingOnly.state { lines.append("Nothing Only: " + n) }
+        return HoverCard.Content(name: "Network Aggregate Connection Keeper (Mantra)", what: "Keeps the internet up and joins the Mac's lines into one",
+            state: up ? (fallback ? "FALLBACK" : "ONLINE") : "OFFLINE", stateColor: up ? (fallback ? Ink.amber : Ink.green) : Ink.red, lines: lines)
     }
 
     func configureStatusButton(_ item: NSStatusItem) {
@@ -82,9 +95,11 @@ extension Stripe {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular)
         let lines = [istatRate(up), istatRate(down)]
         let textW = ceil(("88.88 Mb/s" as NSString).size(withAttributes: [.font: font]).width)
-        let dot: CGFloat = 9, gap: CGFloat = 5, h: CGFloat = 22
-        let img = NSImage(size: NSSize(width: dot + gap + textW, height: h), flipped: false) { _ in
+        let dot: CGFloat = 9, gap: CGFloat = 5, h: CGFloat = 22, pad: CGFloat = 5    // pad: room for the pipes (kit menubar-hover)
+        let img = NSImage(size: NSSize(width: pad + dot + gap + textW + pad, height: h), flipped: false) { r in
             b.effectiveAppearance.performAsCurrentDrawingAppearance {
+                HoverCard.drawPipes(in: r)
+                NSGraphicsContext.current?.cgContext.translateBy(x: pad, y: 0)
                 // v82 (request 91): amber while NOTHING ONLY runs on its fallback line
                 let fallback = NothingOnly.state?.hasPrefix("standby") == true
                 (self.internetUp() ? (fallback ? Ink.amber : Ink.green) : Ink.red).withAlphaComponent(0.85).setFill()

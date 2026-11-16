@@ -868,3 +868,6 @@ Scope: the four open bugs of v85 (serial coalescing queue for the stripe's switc
 Nothing's cable gives power, no data, since 12:00:23 (and RNDIS-only, which macOS cannot use anyway). A phone hotspot joined
 by the Mac's Wi-Fi is now a line at once (fingerprint en0@SSID), also the Nothing's line in NOTHING ONLY. Not measured live:
 the AX88179B left USB at 14:19 and Marko pressed OFF at 14:22:57; left OFF.
+
+16.11.2026 (Marko, 16.11.2026): "Please with all my apps on the menu bar, make a comprehensive pop-up menu. When I hover over, I want to see what is it and what is it doing." and "for my apps always make a pipes before and after so I know where one app ends and other begins."
+**Status:** saved first; building in v88 (hover wiring only: HoverCard kit, pipes in the menu-bar image; no change to aggregation or tethering).
