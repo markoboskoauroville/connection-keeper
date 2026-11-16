@@ -429,3 +429,11 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 - A guard loop that measures sleep by the gap between its own ticks must reset the tick after slow work (a 35 s check
   looked like a wake from sleep and doubled the restarts).
 - swift -e takes ~3 s per call: a burst test of distributed notifications needs one swift process posting them all.
+- (16.11.2026, v87) **A greyed "USB tethering" switch on the Nothing = no USB data link**, not a carrier block: the phone
+  is a power sink with `dumpsys usb` kernel_state=DISCONNECTED and the Mac's `ioreg -p IOUSB` has no phone. Read it over
+  Tailscale adb (100.67.149.40:5555). And the A142 tethers by RNDIS only (`dumpsys tethering`: mUsbTetheringFunction RNDIS,
+  tetherableNcmRegexs []), which macOS cannot use, so a working switch would still give the Mac no interface.
+- (16.11.2026, v87) **A Wi-Fi change on the same interface was invisible for up to 60 s**: the device fingerprint held
+  interface names only (en0 on mantra = en0 on Something). It now holds `en0@<SSID>`.
+- The Mac can be on ONE Wi-Fi at a time: the Nothing's hotspot and "mantra" can never both be legs; a hotspot leg pairs
+  with the cable (AX88179B -> mantra router), and "mantra" Wi-Fi + the cable are the same router (SAME UPLINK).

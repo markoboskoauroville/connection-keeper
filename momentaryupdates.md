@@ -863,3 +863,8 @@ Scope: the four open bugs of v85 (serial coalescing queue for the stripe's switc
 ## 16.11.2026, request 96 (Nothing USB tethering; a hotspot joined is a line at once)
 
 > Please, through USB debugging, check why I cannot switch on my Nothing Phone USB tethering to share its internet connection with my laptop. And why, when I add something, like for example, hotspot on my Nothing Phone, it's not registered and aggregated. Please make this aggregation program work perfectly.
+
+**Status 16.11.2026 (v87 installed 14:17, CI run 43872784573 green, release v87 Latest):** USB tethering greyed = the
+Nothing's cable gives power, no data, since 12:00:23 (and RNDIS-only, which macOS cannot use anyway). A phone hotspot joined
+by the Mac's Wi-Fi is now a line at once (fingerprint en0@SSID), also the Nothing's line in NOTHING ONLY. Not measured live:
+the AX88179B left USB at 14:19 and Marko pressed OFF at 14:22:57; left OFF.

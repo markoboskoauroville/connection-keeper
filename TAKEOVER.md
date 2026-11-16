@@ -169,6 +169,22 @@ the routes "vanished" within 2.5 s in WIRES. Still to watch: that it stays up fo
 **Version v10** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `10-connection-keeper-v10.zip`, tag `v10`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
+**v87, 16.11.2026 (request 96: "why I cannot switch on my Nothing Phone USB tethering ... when I add ... hotspot on my
+Nothing Phone, it's not registered and aggregated"):** (1) the Mac's Wi-Fi on a phone hotspot (phone-hotspots.txt,
+"Something") is a line of the aggregate again, joined without a tick, marked cellular (never SAME UPLINK by carrier NAT);
+v81 had refused it as "PHONE HOTSPOT". In NOTHING ONLY it is the Nothing's line when its USB cable carries no data (the
+cable or another line stays the standby). (2) deviceFingerprint() carries the Wi-Fi as `en0@<SSID>`, so changing networks
+on the same en0 (mantra -> Something) is seen within a second (it waited for the 60 s refresh), and joinPlugged ticks a
+phone hotspot on appearing. (3) The stripe's WI-FI list and the menu pick no longer grey or refuse phone hotspots; the
+keeper's ladder still never joins one by itself (it would spend the phone's SIM). CI run 43872784573 green, release v87
+Latest; installed 14:17 (zip 4.3 MB, signed Mantra Apps per helper), log seen live: "devices changed (... en0@mantra ...)".
+NOT measured live: at 14:19 the AX88179B dongle left USB and at 14:22:57 Marko pressed OFF (keeper, server, tunnel
+stopped); with no cable only one road (one Wi-Fi) existed, so no two-leg test was possible. Left OFF as he set it.
+USB tethering finding (Nothing A142 over Tailscale adb): the switch is greyed (uiautomator: enabled=false) because the
+phone's USB has power but no data since 12:00:23 (dumpsys usb kernel_state=DISCONNECTED, host_connected=false, the Mac's
+ioreg lists no Nothing): cable or port. And even with data, the A142 tethers by RNDIS only (mUsbTetheringFunction RNDIS,
+tetherableNcmRegexs empty) which macOS cannot use: the Nothing's USB line is ck-phone over adb, not tethering.
+
 **v86, 16.11.2026 (request 95, the four open bugs of v85):** (1) every WI-FI/CABLE/BOTH job (stripe ticks and the outside
 notification) runs on ONE serial worker, latest wins (ChoiceQueue in Choose.swift: a tick during a running job only replaces
 what waits; the log says "CHOICE x queued"; switchMode has a `done:` so the worker waits for the mode change); the 1.5 s
