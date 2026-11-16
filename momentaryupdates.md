@@ -848,3 +848,6 @@ Aggregation verdict: not aggregating; NOTHING ONLY keeps the cable on STANDBY, a
 
 > Please do one more pass of connection keeper, do stress test and find the bugs.
 
+**Status 16.11.2026 (v85 installed 09:40, release v85 Latest):** bugs found and fixed listed in TAKEOVER v85; live: Tailscale down
+-> tailscale-ensure-up back in 0.7 s; rapid choice switching ends in the right state; bursts coalesced; no crash reports; daemon
+~10 MB steady, logs +2 KB in 10 min; bond token rotated and verified.

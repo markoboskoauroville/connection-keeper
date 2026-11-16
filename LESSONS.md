@@ -424,3 +424,8 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   NOTHING ONLY off + BOTH with the Nothing and the cable ticked (two different SIMs).
 - The CABLE word opens a list (an NSMenu): an AX press on it never returns (-25204) and leaves the menu open. Press the
   tick, or use the notification ConnectionKeeperChoose (v84).
+- (16.11.2026, v85) Fixing the guard's service name made its scutil stop/start REAL, and a stop can leave Tailscale switched
+  off (WantRunning false): a heal must check BackendState afterwards and bring it up, never count "Stopped" as healed.
+- A guard loop that measures sleep by the gap between its own ticks must reset the tick after slow work (a 35 s check
+  looked like a wake from sleep and doubled the restarts).
+- swift -e takes ~3 s per call: a burst test of distributed notifications needs one swift process posting them all.

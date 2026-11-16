@@ -169,6 +169,20 @@ the routes "vanished" within 2.5 s in WIRES. Still to watch: that it stays up fo
 **Version v10** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `10-connection-keeper-v10.zip`, tag `v10`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
+**v85, 16.11.2026 (request 94, stress pass; installed 09:40, CI run 43831168488 green, release v85 Latest):** fixes from a
+code review + live tests. Tailscale guard: a slow cycle no longer looks like a wake from sleep (lastTick after each cycle);
+heal() counts only Running as healed and brings a Stopped Tailscale up (with the correct service id, a scutil stop/start
+can switch it off); the start window is the Mac's uptime < 15 min (not the guard's own start), plus once per new
+Tailscale.app process; the VPN service by its id (the enabled "*" entry first), skipped when none; `tailscale up` that
+asks for every non-default flag runs the line the CLI suggests; utun route changes and the 90 s after our own restart do
+not trigger checks. shell(): SIGKILL 2 s after SIGTERM. appendLog: O_APPEND (two processes, many threads). Speed test
+RESTART: a generation number stops an older GO-retry chain; a failed load clears the pending start. Outside
+WI-FI/CABLE/BOTH (ConnectionKeeperChoose) coalesced: a burst within 1.5 s applies only the last (live: both, wifi, both,
+cable -> one "CHOICE cable"). Bond token rotated 16.11.2026 (Mac bond.json + VM /etc/ckbond/token, ckbond restarted; a leg
+joined with the new token at 09:35). Open, not fixed: rapid ticks on the stripe itself still run setChoice jobs without
+one serial queue (Choose.swift); Cmd-R in the Help window reloads the speed test; shell calls on the main thread in the
+WI-FI/CABLE lists; the stripe's memory rose 93 -> 103 MB in 10 min of switching (watch).
+
 **v84, 16.11.2026 (request 93; carries v83's Tailscale guard fix):** (1) the speed test window (speedtest.net) has
 **↻ RESTART** on its grip bar, left of ✕ (AX button "RESTART", id speed-restart): the page is stopped and emptied, so the
 running test's connections close, and a fresh speedtest.net presses GO by itself; idle it simply starts a new test. From
