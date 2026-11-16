@@ -843,3 +843,8 @@ PING VM on the top row (seen on the stripe; not clicked by Claude: it opens a te
 notification ConnectionKeeperChoose (Queen: "keeper cable" worked 09:07), v83's Tailscale guard: "running, 3 peers online".
 Aggregation verdict: not aggregating; NOTHING ONLY keeps the cable on STANDBY, and the cable + Wi-Fi "mantra" share one router
 (LESSONS 16.11.2026). Left on CABLE as found before the test.
+
+## 16.11.2026, request 94 (one more pass: stress test, find the bugs)
+
+> Please do one more pass of connection keeper, do stress test and find the bugs.
+
