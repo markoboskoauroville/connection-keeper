@@ -407,3 +407,11 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
   there; read latency against the legs' own measured RTT, not against the configured one.
 - A test flag at the end of the command line must be read as a flag, not as "the value after it" (the UDP probe ran the
   whole selftest instead and looked like dying legs).
+- (16.11.2026, v83) **Tailscale.app's binary is the GUI in launchd's empty environment**: it prints "The Tailscale GUI
+  failed to start" and exits 0, so the guard read every check as "did not answer" for two days. Always run it with
+  `TAILSCALE_BE_CLI=1`; test with `env -i PATH=/usr/bin:/bin <bin> status --json`, never from a Terminal (TERM hides it).
+- (16.11.2026) The VPN service name is not fixed ("Tailscale 2" after a reinstall); `scutil --nc stop "Tailscale"` said
+  "No service" and did nothing. Read the name from `scutil --nc list` (io.tailscale).
+- (16.11.2026) **Tailscale.app turns its connection off when it quits, and macOS quits it at every shut-down** (log:
+  loginwindow kAEShowShutdownDialog 19:41:37, NESMVPNSession "Stop command received" 19:41:42; next boot WantRunning false).
+  That is why the switch was off after every start. v83 brings a Stopped Tailscale up once in the guard's first 10 minutes.

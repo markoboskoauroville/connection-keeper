@@ -169,6 +169,12 @@ the routes "vanished" within 2.5 s in WIRES. Still to watch: that it stays up fo
 **Version v10** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `10-connection-keeper-v10.zip`, tag `v10`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
+**v83, 16.11.2026 (request 92, "the TAILSCALE switch is always off when I start it"):** the Tailscale guard now runs the
+binary with TAILSCALE_BE_CLI=1 (in launchd it was the GUI and every check failed), stops/starts the real VPN service name
+from `scutil --nc list` ("Tailscale 2"), and within 10 minutes of its start brings a Stopped Tailscale up once
+(`Tailscale up`; macOS quits Tailscale.app at a shut-down and the app turns its connection off as it quits). Built by
+GitHub only; NOT installed live yet (installing the keeper touches the bond and the tunnel: Marko's quiet moment).
+
 ## What it is
 
 Marko has two access points, `mantra` and `Something` (the SSIDs exactly as the Mac's preferred networks list

@@ -11,6 +11,14 @@
 // hour. Also checked 15 s after the default route changes (a NO DATA demotion, WI-FI / CABLE) and after a wake from sleep
 // (a gap in the 2 s loop), and then one failed check is enough. Every failure and restart is in the log; the state for
 // the stripe's icon is tailscale-state.json.
+// v83 (request 92, 16.11.2026: "the TAILSCALE switch is always off when I start it"). Three faults found:
+// (1) the guard ran Tailscale.app's binary from launchd's empty environment, where it is the GUI ("The Tailscale GUI failed
+// to start"), so every check said "did not answer" and the guard "restarted" a healthy Tailscale; now every call has
+// TAILSCALE_BE_CLI=1 (launchd gives stdin /dev/null). (2) It stopped/started the VPN service "Tailscale", but the service is named
+// "Tailscale 2" ("No service"); the name is now read from `scutil --nc list` (io.tailscale). (3) macOS quits every app at a
+// shut-down, and Tailscale.app turns its connection OFF when it quits (WantRunning false), so after each start the switch
+// is off. Within 10 minutes of the guard starting (login), a Stopped Tailscale is brought up once with `Tailscale up`
+// (same account, same settings, nothing else changed). Later a Stopped Tailscale is Marko's own choice and left alone.
 import Foundation
 
 final class TailscaleGuard {
@@ -26,7 +34,25 @@ final class TailscaleGuard {
     var lastRoute: String?
     var lastTick = Date()
 
+    let started = Date()
+    var bootUpDone = false
+
     init(dry: Bool) { self.dry = dry }
+
+    /// Tailscale.app's binary as the CLI (never the GUI)
+    func ts(_ args: [String], timeout: TimeInterval) -> (status: Int32, out: String) {
+        shell("/usr/bin/env", ["TAILSCALE_BE_CLI=1", TailscaleGuard.bin] + args, timeout: timeout)
+    }
+
+    /// the VPN service's real name ("Tailscale 2" on this Mac), from scutil --nc list
+    func serviceName() -> String {
+        let r = shell("/usr/sbin/scutil", ["--nc", "list"], timeout: 10)
+        for line in r.out.split(separator: "\n") where line.contains("io.tailscale") {
+            let parts = line.split(separator: "\"")
+            if parts.count >= 2 { return String(parts[1]) }
+        }
+        return "Tailscale"
+    }
 
     func log(_ s: String) { appendLog("\(logStamp()) TAILSCALE \(s)") }
 
@@ -59,7 +85,7 @@ final class TailscaleGuard {
     }
 
     func status() -> [String: Any]? {
-        let r = shell(TailscaleGuard.bin, ["status", "--json"], timeout: 15)
+        let r = ts(["status", "--json"], timeout: 15)
         guard r.status == 0, let d = r.out.data(using: .utf8) else { return nil }
         return (try? JSONSerialization.jsonObject(with: d)) as? [String: Any]
     }
@@ -81,7 +107,7 @@ final class TailscaleGuard {
         let peers = ((j["Peer"] as? [String: Any]) ?? [:]).values.compactMap { $0 as? [String: Any] }.filter { $0["Online"] as? Bool == true }
         if !peers.isEmpty, peers.allSatisfy({ ($0["RxBytes"] as? Int ?? 0) == 0 }),
            let ip = (peers.first?["TailscaleIPs"] as? [String])?.first {
-            if shell(TailscaleGuard.bin, ["ping", "-c", "1", "--timeout", "5s", ip], timeout: 12).status != 0 {
+            if ts(["ping", "-c", "1", "--timeout", "5s", ip], timeout: 12).status != 0 {
                 return .bad("every online peer has rx 0 and a ping to \(ip) fails")
             }
         }
@@ -91,7 +117,17 @@ final class TailscaleGuard {
     func cycle(triggered: Bool) {
         switch evaluate() {
         case .ok(let d): bad = 0; failedHeals = 0; write("ok", d)
-        case .off(let d): bad = 0; write("off", d)
+        case .off(let d):
+            bad = 0
+            if d.contains("Stopped"), !bootUpDone, Date().timeIntervalSince(started) < 600, !dry {
+                bootUpDone = true
+                log("Tailscale is off after the start (it turns itself off when macOS quits it at a shut-down): tailscale up")
+                let r = ts(["up"], timeout: 30)
+                log("tailscale up: exit \(r.status) \(r.out.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))")
+                sleep(5)
+                if case .ok(let d2) = evaluate() { write("ok", d2); return }
+            }
+            write("off", d)
         case .netDown: write("amber", "the internet itself is down; Tailscale left alone")
         case .bad(let d):
             bad += 1
@@ -110,9 +146,10 @@ final class TailscaleGuard {
         restarts.append(now); lastRestart = now
         log("RESTART the network extension (scutil --nc stop, 4 s, start): \(why)")
         write("amber", "restarting: " + why)
-        shell("/usr/sbin/scutil", ["--nc", "stop", "Tailscale"], timeout: 20)
+        let svc = serviceName()
+        shell("/usr/sbin/scutil", ["--nc", "stop", svc], timeout: 20)
         sleep(4)
-        shell("/usr/sbin/scutil", ["--nc", "start", "Tailscale"], timeout: 20)
+        shell("/usr/sbin/scutil", ["--nc", "start", svc], timeout: 20)
         sleep(15)
         switch evaluate() {
         case .ok(let d), .off(let d):
