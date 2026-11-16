@@ -827,3 +827,12 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > For some reason, the TAILSCALE switch is always off when I start it. Connection is off. I don't understand this part. Can you debug this TAILSCALE application and also make our macro recorder check for its settings and change them if it's not connecting?
 
+
+## 16.11.2026, request 93 (is it aggregating USB + Wi-Fi; RESTART for the speed test; Queen does the tasks)
+
+> Now I have two connections connected, one is over USB, which is a normal wire connection, and one is over Wi-Fi ... So please test my connection keeper, is it aggregating this correctly.
+
+> please update my speed test in Connection Keeper. I need to have ability to reload this test, so if it's testing, just basically to restart in a mid execution.
+
+> Please use my queen to do the tasks from now on
+
