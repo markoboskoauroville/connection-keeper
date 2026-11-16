@@ -143,7 +143,7 @@ extension Stripe {
             for i in Net.activeInterfaces() {
                 let gw = shell("/usr/sbin/ipconfig", ["getoption", i, "router"], timeout: 5).out.trimmingCharacters(in: .whitespacesAndNewlines)
                 if gw.isEmpty { continue }
-                // v87 (request 94): a phone's hotspot is a line again (v81 had greyed it)
+                // v87 (request 96): a phone's hotspot is a line again (v81 had greyed it)
                 found.append(OtherLine(iface: i, name: Net.displayName(i), wifi: i == wifi, ms: Net.onlineVia(i),
                                        sameAs: st?.ignored.first { $0.device == i }?.sameLineAs))
             }

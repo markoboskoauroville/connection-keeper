@@ -860,6 +860,6 @@ Scope: the four open bugs of v85 (serial coalescing queue for the stripe's switc
 
 **Status 16.11.2026 (v86 installed 12:26, CI run 43855683752 green, release v86 Latest):** all four fixed; live: a burst of 6 choices ended in cable, jobs serialized ("queued, the latest wins" in the log); left on CABLE / CROATIA (bond off, public 86.33.84.210), Tailscale up, relay health 200.
 
-## 16.11.2026, request 94 (Nothing USB tethering; a hotspot joined is a line at once)
+## 16.11.2026, request 96 (Nothing USB tethering; a hotspot joined is a line at once)
 
 > Please, through USB debugging, check why I cannot switch on my Nothing Phone USB tethering to share its internet connection with my laptop. And why, when I add something, like for example, hotspot on my Nothing Phone, it's not registered and aggregated. Please make this aggregation program work perfectly.

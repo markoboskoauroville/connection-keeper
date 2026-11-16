@@ -178,7 +178,7 @@ extension Stripe {
         listHead(menu, "WI-FI networks in range: tick the one to use")
         let names = Set(wifiScan + (cur.map { [$0] } ?? [])).sorted()
         if names.isEmpty { listHead(menu, "  scanning… open this list again in a few seconds") }
-        // v87 (request 94): a phone's hotspot can be joined again; in BOTH it is a line of its own (the phone's SIM)
+        // v87 (request 96): a phone's hotspot can be joined again; in BOTH it is a line of its own (the phone's SIM)
         for n in names {
             let hot = CableOnly.isPhoneHotspot(n)
             listItem(menu, hot ? n + "   (phone hotspot: its SIM, a line of its own in BOTH)" : n, ticked: n == cur, enabled: true, id: n, action: #selector(pickWifiNetwork(_:)))

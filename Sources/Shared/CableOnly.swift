@@ -3,7 +3,7 @@
 // only as an adb device whose transport is USB (`adb devices -l` with a "usb:" field; Phones.list() already asks for
 // it): never a wireless adb address (100.x Tailscale, ip:port, a 127.0.0.1 forward), and never its Wi-Fi hotspot.
 //   - phone hotspots (the SSIDs in phone-hotspots.txt, "Something" from the start, the Nothing's own SoftAp name learned
-//     over adb) are never joined by the keeper's ladder; v87 (request 94): joined by hand, the Mac's Wi-Fi on one is a
+//     over adb) are never joined by the keeper's ladder; v87 (request 96): joined by hand, the Mac's Wi-Fi on one is a
 //     line of the aggregate of its own (the phone's SIM), and in NOTHING ONLY it is the Nothing's line when no cable is;
 //   - ⟳ and a plug-in run `Phones.refreshAdb()` (adb start-server, reconnect offline, stale offline 127.0.0.1 Nothing
 //     entries dropped) and the stripe says what the cable does: `CableOnly.nothingStatus()`.

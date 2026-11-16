@@ -96,7 +96,7 @@ enum Lines {
         let ticked = anyLine ? [] : Set(Aggregation.joinable)
         var found: [Uplink] = [], refused: [(Uplink, Uplink)] = []
         for i in Net.activeInterfaces() {
-            // v87 (request 94, Marko 16.11.2026: "when I add something, like for example, hotspot on my Nothing Phone, it's
+            // v87 (request 96, Marko 16.11.2026: "when I add something, like for example, hotspot on my Nothing Phone, it's
             // not registered and aggregated"): the Mac's Wi-Fi on a phone's hotspot is a line of its own (that phone's SIM,
             // a different road from the cable's router), joined without a tick; v81 had refused it.
             let hot = i == wifi && CableOnly.isPhoneHotspot(Net.currentSSID(i))
@@ -180,7 +180,7 @@ enum Lines {
             let u = Uplink(iface: p.device, name: p.name, gateway: nil, gatewayMAC: nil, publicIP: Phones.publicIP(p) ?? known[p.device])
             u.phone = p; u.cellular = true; lines.append(u)
         }
-        // v87 (request 94): no Nothing on the USB cable, but the Mac's Wi-Fi is on a phone's hotspot (the Nothing's
+        // v87 (request 96): no Nothing on the USB cable, but the Mac's Wi-Fi is on a phone's hotspot (the Nothing's
         // "Something"): that is the Nothing's SIM too, so it is the line, not the standby.
         let wifi = Net.wifiInterface()
         if !lines.contains(where: { !$0.standby }), let w = wifi, CableOnly.isPhoneHotspot(Net.currentSSID(w)), let gw = gateway(w) {
@@ -584,7 +584,7 @@ final class Server {
                     sleep(1)
                 }
             } else if let at = e.firstIndex(of: "@") {
-                // v87: a Wi-Fi is never ticked this way, except a phone's hotspot (request 94): joining it is adding a line
+                // v87: a Wi-Fi is never ticked this way, except a phone's hotspot (request 96): joining it is adding a line
                 let ssid = String(e[e.index(after: at)...])
                 if CableOnly.isPhoneHotspot(ssid) { names.append(ssid) }
             } else if e != wifi {
@@ -611,7 +611,7 @@ func deviceFingerprint() -> [String] {
             let name = String(cString: a.pointee.ifa_name)
             if let addr = a.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_INET),
                !["lo", "utun", "awdl", "llw", "anpi", "ap", "bridge", "gif", "stf"].contains(where: { name.hasPrefix($0) }) {
-                // v87 (request 94): the Wi-Fi with its network's name, so joining a hotspot (same en0) is seen at once
+                // v87 (request 96): the Wi-Fi with its network's name, so joining a hotspot (same en0) is seen at once
                 out.append(name == wifiNow ? "\(name)@\(Net.currentSSID(name) ?? "")" : name)
             }
             p = a.pointee.ifa_next
