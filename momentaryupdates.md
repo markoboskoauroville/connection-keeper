@@ -836,3 +836,5 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > Please use my queen to do the tasks from now on
 
+> can I get in Connection Keeper this kind of ping Marko virtual machine button then it opens the terminal and I watch it pinging of my machine
+
