@@ -169,6 +169,17 @@ the routes "vanished" within 2.5 s in WIRES. Still to watch: that it stays up fo
 **Version v10** (14.10.2026) · repository markoboskoauroville/connection-keeper (private) · artefact `10-connection-keeper-v10.zip`, tag `v10`
 The reasons behind the choices are in [LESSONS.md](LESSONS.md).
 
+**v86, 16.11.2026 (request 95, the four open bugs of v85):** (1) every WI-FI/CABLE/BOTH job (stripe ticks and the outside
+notification) runs on ONE serial worker, latest wins (ChoiceQueue in Choose.swift: a tick during a running job only replaces
+what waits; the log says "CHOICE x queued"; switchMode has a `done:` so the worker waits for the mode change); the 1.5 s
+outside merge stays. (2) The WI-FI/CABLE lists gather their shell data (networksetup, system_profiler, ioreg) off the main
+thread, the stripe says "WI-FI: …" / "CABLE: …" meanwhile and the menu pops when ready; pickCable also off main.
+(3) Cmd-R reloads only the speed test (EdgelessWindow.onReload, set by SpeedBrowser; Help has none). (4) Memory: `leaks` found
+only 3 tiny one-time leaks (112 bytes, the press monitor); the footprint is 62 MB (RSS 90 MB); the growth was Hover.owners:
+entries of buttons that were gone were never dropped (and a reused address skipped the hover of a new button): pruned in
+Hover.add and every 60 s (Hover.prune). Honest note: the rest of the 93 -> 103 MB is malloc fragmentation (49 % of the
+zone) and WebKit caches; see the numbers in the v86 report.
+
 **v85, 16.11.2026 (request 94, stress pass; installed 09:40, CI run 43831168488 green, release v85 Latest):** fixes from a
 code review + live tests. Tailscale guard: a slow cycle no longer looks like a wake from sleep (lastTick after each cycle);
 heal() counts only Running as healed and brings a Stopped Tailscale up (with the correct service id, a scutil stop/start
