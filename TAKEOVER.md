@@ -188,7 +188,7 @@ STANDBY, so BOTH carries only the Nothing; the Wi-Fi "mantra" and the cable reac
 binary with TAILSCALE_BE_CLI=1 (in launchd it was the GUI and every check failed), stops/starts the real VPN service name
 from `scutil --nc list` ("Tailscale 2"), and within 10 minutes of its start brings a Stopped Tailscale up once
 (`Tailscale up`; macOS quits Tailscale.app at a shut-down and the app turns its connection off as it quits). Built by
-GitHub only; NOT installed live yet (installing the keeper touches the bond and the tunnel: Marko's quiet moment).
+GitHub only; installed live with v84 on 16.11.2026 09:05.
 
 ## What it is
 

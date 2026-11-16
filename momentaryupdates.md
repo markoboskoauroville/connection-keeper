@@ -838,3 +838,8 @@ aside once for nothing (13:33, the Pixel's cable dropping mid-check), fixed in v
 
 > can I get in Connection Keeper this kind of ping Marko virtual machine button then it opens the terminal and I watch it pinging of my machine
 
+**Status 16.11.2026 (v84 installed 09:05, CI run 43827250707 green, release v84 Latest):** RESTART on the speed test's grip bar,
+PING VM on the top row (seen on the stripe; not clicked by Claude: it opens a terminal on Marko's screen), WI-FI/CABLE/BOTH by the
+notification ConnectionKeeperChoose (Queen: "keeper cable" worked 09:07), v83's Tailscale guard: "running, 3 peers online".
+Aggregation verdict: not aggregating; NOTHING ONLY keeps the cable on STANDBY, and the cable + Wi-Fi "mantra" share one router
+(LESSONS 16.11.2026). Left on CABLE as found before the test.
