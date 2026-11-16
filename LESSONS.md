@@ -415,3 +415,12 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 - (16.11.2026) **Tailscale.app turns its connection off when it quits, and macOS quits it at every shut-down** (log:
   loginwindow kAEShowShutdownDialog 19:41:37, NESMVPNSession "Stop command received" 19:41:42; next boot WantRunning false).
   That is why the switch was off after every start. v83 brings a Stopped Tailscale up once in the guard's first 10 minutes.
+- (16.11.2026, aggregation test, request 93) **Marko's "two connections" were the cable AX88179B (en17) and the Wi-Fi
+  "mantra" (en0), and both go to the SAME router** (192.168.1.1, MAC 3c:78:95:d6:21:18, one SIM upstream): aggregating them
+  can never add speed, only a spare path. The keeper did not join them anyway: "mantra" is not a line (not joined), and with
+  NOTHING ONLY on, BOTH carries only the Nothing A142 (USB adb, its own SIM, -107 dBm that morning) while AX88179B waits on
+  STANDBY. Measured with 4 x 5 MB from speed.cloudflare.com: CABLE 21.3 MB on en17, 0.1 on en0, 28.5 Mbit/s; BOTH (system
+  path and SOCKS 127.0.0.1:8857) nothing on en0/en17, all of it through the Nothing (~9.5 Mbit/s). Real aggregation =
+  NOTHING ONLY off + BOTH with the Nothing and the cable ticked (two different SIMs).
+- The CABLE word opens a list (an NSMenu): an AX press on it never returns (-25204) and leaves the menu open. Press the
+  tick, or use the notification ConnectionKeeperChoose (v84).
