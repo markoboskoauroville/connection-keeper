@@ -851,3 +851,9 @@ Aggregation verdict: not aggregating; NOTHING ONLY keeps the cable on STANDBY, a
 **Status 16.11.2026 (v85 installed 09:40, release v85 Latest):** bugs found and fixed listed in TAKEOVER v85; live: Tailscale down
 -> tailscale-ensure-up back in 0.7 s; rapid choice switching ends in the right state; bursts coalesced; no crash reports; daemon
 ~10 MB steady, logs +2 KB in 10 min; bond token rotated and verified.
+
+## 16.11.2026, request 95 (finish all unfinished works)
+
+> finish all unfinished works. Now. Everything.
+
+Scope: the four open bugs of v85 (serial coalescing queue for the stripe's switch jobs; WI-FI/CABLE lists off the main thread with "…"; Cmd-R scoped to the speed-test window; stripe memory growth 93 -> 103 MB).
