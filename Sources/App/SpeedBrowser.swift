@@ -162,16 +162,20 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
     }
 
     var startWhenLoaded = false
+    var restartGen = 0              // v85: a GO-retry chain of an older RESTART stops when a newer one comes
 
     @objc func restartPressed() { restart() }
 
     func restart() {
         appendLog("\(logStamp()) SPEEDTEST restart: the running test dropped, a new one started")
         startWhenLoaded = true
+        restartGen += 1
         web.stopLoading()
         web.loadHTMLString("", baseURL: nil)          // the old page and its test connections go away
+        let g = restartGen
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            self?.web.load(URLRequest(url: SpeedBrowser.home, cachePolicy: .reloadIgnoringLocalCacheData))
+            guard let self, SpeedBrowser.shared === self, g == self.restartGen else { return }   // closed or restarted again meanwhile
+            self.web.load(URLRequest(url: SpeedBrowser.home, cachePolicy: .reloadIgnoringLocalCacheData))
         }
     }
 
@@ -183,14 +187,19 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         guard startWhenLoaded, webView.url?.host?.contains("speedtest.net") == true else { return }
         startWhenLoaded = false
-        pressGo(tries: 30)
+        pressGo(tries: 30, gen: restartGen)
     }
 
-    func pressGo(tries: Int) {
+    // v85: a failed load clears the pending start, so a later reload never starts a test by itself
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { startWhenLoaded = false }
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { startWhenLoaded = false }
+
+    func pressGo(tries: Int, gen: Int) {
+        guard gen == restartGen, SpeedBrowser.shared === self else { return }
         let js = "(function(){var b=document.querySelector('.js-start-test, a[aria-label^=\"start speed test\"]');if(b){b.click();return true}return false})()"
         web.evaluateJavaScript(js) { [weak self] r, _ in
             if (r as? Bool) == true { appendLog("\(logStamp()) SPEEDTEST GO pressed after the restart"); return }
-            if tries > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.pressGo(tries: tries - 1) } }
+            if tries > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.pressGo(tries: tries - 1, gen: gen) } }
             else { appendLog("\(logStamp()) SPEEDTEST restart: GO not found on the page") }
         }
     }

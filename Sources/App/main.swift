@@ -165,6 +165,8 @@ final class Stripe: NSObject {
     lazy var cloudWord = word("", Ink.green, #selector(cloudPressed), id: "claude-cloud", tip: "Watches Claude Code's connection to Anthropic")
     // v84 (request 93): PING VM opens iTerm2 pinging chromium-vm over Tailscale (PingVM.swift); right-click: tailscale ping
     lazy var pingVMWord = makePingVMWord()
+    var outsideChoice: LinkChoice?          // v85: the last WI-FI/CABLE/BOTH asked from outside, applied after 1.5 s quiet
+    var outsideChoiceGen = 0
     lazy var tsWord = word("", Ink.grey, #selector(tsPressed), id: "tailscale", tip: "Tailscale")
     lazy var tabAll = word("ALL", Ink.grey, #selector(pickTabAll), id: "tab-all", tip: "Every connection the Mac can see: Wi-Fi networks in range, cables, phones, each with its state and signal")
     lazy var tabUse = word("IN USE", Ink.green, #selector(pickTabUse), id: "tab-inuse", tip: "Only the lines carrying traffic now, with their signal and live speed")
@@ -511,12 +513,20 @@ final class Stripe: NSObject {
             self?.setNothingOnly((n.object as? String) == "on")
         }
         // v84 (request 93): WI-FI / CABLE / BOTH from outside (Queen, a terminal): object "wifi", "cable" or "both", the same as the tick
+        // v85: coalesced: requests within 1.5 s collapse into the last one (a burst never runs overlapping mode switches)
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperChoose"), object: nil, queue: .main) { [weak self] n in
-            switch (n.object as? String)?.lowercased() {
-            case "wifi"?: self?.setChoice(.wifi)
-            case "cable"?: self?.setChoice(.cable)
-            case "both"?: self?.setChoice(.both)
-            default: appendLog("\(logStamp()) CHOICE from outside ignored: \(n.object as? String ?? "nothing") (wifi, cable or both)")
+            guard let self else { return }
+            let want = (n.object as? String)?.lowercased()
+            guard let c = want.flatMap({ LinkChoice(rawValue: $0) }) else {
+                appendLog("\(logStamp()) CHOICE from outside ignored: \(want ?? "nothing") (wifi, cable or both)"); return
+            }
+            self.outsideChoice = c
+            self.outsideChoiceGen += 1
+            let g = self.outsideChoiceGen
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self, g == self.outsideChoiceGen, let c = self.outsideChoice else { return }
+                self.outsideChoice = nil
+                self.setChoice(c)
             }
         }
         // v84 (request 93): the speed test's RESTART from outside; opens the speed test when it is closed

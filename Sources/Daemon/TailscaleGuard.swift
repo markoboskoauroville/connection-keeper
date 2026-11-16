@@ -19,6 +19,11 @@
 // shut-down, and Tailscale.app turns its connection OFF when it quits (WantRunning false), so after each start the switch
 // is off. Within 10 minutes of the guard starting (login), a Stopped Tailscale is brought up once with `Tailscale up`
 // (same account, same settings, nothing else changed). Later a Stopped Tailscale is Marko's own choice and left alone.
+// v85 (request 94, the stress pass): a slow cycle is no longer taken for a sleep; heal() counts only Running as healed and
+// brings a Stopped Tailscale back up (a scutil stop/start can switch it off); the start window is the Mac's uptime (15 min),
+// plus once per new Tailscale.app process; the service is addressed by its id (the enabled entry first); `tailscale up`
+// that wants every flag named runs the line the CLI suggests; utun route changes and the 90 s after our own restart do
+// not trigger checks.
 import Foundation
 
 final class TailscaleGuard {
@@ -34,8 +39,10 @@ final class TailscaleGuard {
     var lastRoute: String?
     var lastTick = Date()
 
-    let started = Date()
     var bootUpDone = false
+    var lastAppPid: String?          // v85: Tailscale.app's pid; a new one = the app was (re)started
+    var upForPid: String?            // the pid already brought up once
+    var healStopped = false          // v85: our own scutil stop/start left Tailscale Stopped: bring it back
 
     init(dry: Bool) { self.dry = dry }
 
@@ -44,14 +51,35 @@ final class TailscaleGuard {
         shell("/usr/bin/env", ["TAILSCALE_BE_CLI=1", TailscaleGuard.bin] + args, timeout: timeout)
     }
 
-    /// the VPN service's real name ("Tailscale 2" on this Mac), from scutil --nc list
-    func serviceName() -> String {
+    /// v85: the VPN service's id (unambiguous for scutil), the enabled ("*") io.tailscale entry first; nil = none found
+    func serviceID() -> String? {
         let r = shell("/usr/sbin/scutil", ["--nc", "list"], timeout: 10)
-        for line in r.out.split(separator: "\n") where line.contains("io.tailscale") {
-            let parts = line.split(separator: "\"")
-            if parts.count >= 2 { return String(parts[1]) }
+        let lines = r.out.split(separator: "\n").filter { $0.contains("io.tailscale") }
+        let pick = lines.first { $0.trimmingCharacters(in: .whitespaces).hasPrefix("*") } ?? lines.first
+        guard let l = pick else { return nil }
+        return l.split(separator: " ").map(String.init).first { $0.count == 36 && $0.filter { $0 == "-" }.count == 4 }
+    }
+
+    func appPid() -> String? {
+        let r = shell("/usr/bin/pgrep", ["-x", "Tailscale"], timeout: 5)
+        return r.out.split(separator: "\n").first.map(String.init)
+    }
+
+    /// v85: `tailscale up`; when the CLI wants every non-default flag named, the exact line it suggests is run instead
+    @discardableResult
+    func bringUp(_ why: String) -> Bool {
+        log("Tailscale is Stopped (\(why)): tailscale up")
+        var r = ts(["up"], timeout: 30)
+        if r.status != 0, let range = r.out.range(of: "tailscale up ") {
+            let line = r.out[range.upperBound...].split(separator: "\n").first.map(String.init) ?? ""
+            let args = line.split(separator: " ").map(String.init).filter { $0.hasPrefix("--") }
+            log("tailscale up wants every flag: tailscale up \(args.joined(separator: " "))")
+            r = ts(["up"] + args, timeout: 30)
         }
-        return "Tailscale"
+        log("tailscale up: exit \(r.status) \(r.out.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))")
+        sleep(5)
+        if case .ok = evaluate() { return true }
+        return false
     }
 
     func log(_ s: String) { appendLog("\(logStamp()) TAILSCALE \(s)") }
@@ -74,13 +102,18 @@ final class TailscaleGuard {
             n += 1
             if n % 3 == 0 {
                 let r = Net.defaultRouteInterface()
+                // v85: a utun default route is a VPN's own (an exit node, the keeper's tunnel), and a route change within 90 s of
+                // our own restart is that restart: neither triggers a check (no self-feeding heal)
+                let recentHeal = lastRestart.map { now.timeIntervalSince($0) < 90 } ?? false
                 if r != lastRoute {
-                    if let was = lastRoute { log("default route \(was) → \(r ?? "none"): checked in 15 s"); trigger = now.addingTimeInterval(15) }
+                    let vpn = (r ?? "").hasPrefix("utun") || (lastRoute ?? "").hasPrefix("utun")
+                    if let was = lastRoute, !recentHeal, !vpn { log("default route \(was) → \(r ?? "none"): checked in 15 s"); trigger = now.addingTimeInterval(15) }
                     lastRoute = r
                 }
             }
-            if let t = trigger, now >= t { trigger = nil; cycle(triggered: true); nextCheck = Date().addingTimeInterval(60); continue }
-            if now >= nextCheck { cycle(triggered: false); nextCheck = Date().addingTimeInterval(60) }
+            // v85: lastTick after every cycle (a slow cycle or heal is not a sleep)
+            if let t = trigger, now >= t { trigger = nil; cycle(triggered: true); lastTick = Date(); nextCheck = Date().addingTimeInterval(60); continue }
+            if now >= nextCheck { cycle(triggered: false); lastTick = Date(); nextCheck = Date().addingTimeInterval(60) }
         }
     }
 
@@ -119,13 +152,17 @@ final class TailscaleGuard {
         case .ok(let d): bad = 0; failedHeals = 0; write("ok", d)
         case .off(let d):
             bad = 0
-            if d.contains("Stopped"), !bootUpDone, Date().timeIntervalSince(started) < 600, !dry {
-                bootUpDone = true
-                log("Tailscale is off after the start (it turns itself off when macOS quits it at a shut-down): tailscale up")
-                let r = ts(["up"], timeout: 30)
-                log("tailscale up: exit \(r.status) \(r.out.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200))")
-                sleep(5)
-                if case .ok(let d2) = evaluate() { write("ok", d2); return }
+            // v85: Stopped is brought up once (a) in the first 15 minutes after the Mac starts, (b) once per new Tailscale.app
+            // process (the app turns its connection off when it quits: a restart or an update leaves it off), (c) when our own
+            // heal left it Stopped. Any other Stopped is Marko's switch and is left alone.
+            let pid = appPid()
+            let newApp = pid != nil && lastAppPid != nil && pid != lastAppPid && upForPid != pid
+            if lastAppPid == nil || pid != nil { lastAppPid = pid }
+            let boot = !bootUpDone && ProcessInfo.processInfo.systemUptime < 900
+            if d.contains("Stopped"), !dry, boot || newApp || healStopped {
+                let why = healStopped ? "after our own restart of the extension" : boot ? "after the Mac started" : "Tailscale.app was restarted"
+                bootUpDone = bootUpDone || boot; upForPid = pid; healStopped = false
+                if bringUp(why), case .ok(let d2) = evaluate() { write("ok", d2); return }
             }
             write("off", d)
         case .netDown: write("amber", "the internet itself is down; Tailscale left alone")
@@ -146,15 +183,21 @@ final class TailscaleGuard {
         restarts.append(now); lastRestart = now
         log("RESTART the network extension (scutil --nc stop, 4 s, start): \(why)")
         write("amber", "restarting: " + why)
-        let svc = serviceName()
+        guard let svc = serviceID() else { log("no io.tailscale VPN service in scutil --nc list: restart skipped"); write("red", why + " (no VPN service found)"); return }
         shell("/usr/sbin/scutil", ["--nc", "stop", svc], timeout: 20)
         sleep(4)
         shell("/usr/sbin/scutil", ["--nc", "start", svc], timeout: 20)
         sleep(15)
-        switch evaluate() {
-        case .ok(let d), .off(let d):
+        var v = evaluate()
+        // v85: a stop/start can leave Tailscale switched off (Stopped): that is not healed, bring it up
+        if case .off(let d) = v, d.contains("Stopped") { _ = bringUp("after our own restart of the extension"); v = evaluate() }
+        switch v {
+        case .ok(let d):
             bad = 0; failedHeals = 0
             log("healed: \(d)"); write("ok", d)
+        case .off(let d):
+            bad = 0; healStopped = true
+            log("after the restart: \(d)"); write("off", d)
         default:
             failedHeals += 1
             let wait = [2.0, 5.0, 15.0][min(failedHeals - 1, 2)]

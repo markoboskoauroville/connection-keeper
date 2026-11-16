@@ -28,6 +28,10 @@ func shell(_ path: String, _ args: [String], timeout: TimeInterval = 20) -> (sta
         DispatchQueue.global().async { out.data = reading.readDataToEndOfFile(); done.signal() }
         while p.isRunning && Date() < deadline { usleep(50_000) }
         if p.isRunning { p.terminate() }
+        // v85: a child that ignores SIGTERM is killed 2 s later, so a caller never waits forever
+        let killAt = Date().addingTimeInterval(2)
+        while p.isRunning && Date() < killAt { usleep(50_000) }
+        if p.isRunning { kill(p.processIdentifier, SIGKILL) }
         _ = done.wait(timeout: .now() + 2)
         p.waitUntilExit()
         return (p.terminationStatus, String(decoding: out.data, as: UTF8.self))

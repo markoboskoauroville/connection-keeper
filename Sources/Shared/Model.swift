@@ -2,7 +2,7 @@
 import Foundation
 
 // v38 (30.10.2026, Marko: "If permissions are not set, it needs to have text in the top right"): PERMISSIONS
-let CKVersion = 84
+let CKVersion = 85
 
 // The phase the keeper writes when the current connection is dead and no other one works (v5).
 let noOtherPrefix = "NO OTHER CONNECTION"
@@ -154,12 +154,13 @@ func logStamp() -> String {
 }
 
 // One line in the keeper's log, from either program.
+// v85: O_APPEND, so lines from the stripe, the keeper and their threads never overwrite each other
 func appendLog(_ line: String) {
-    if let h = try? FileHandle(forWritingTo: Paths.log) {
-        h.seekToEndOfFile(); h.write((line + "\n").data(using: .utf8)!); try? h.close()
-    } else {
-        try? (line + "\n").write(to: Paths.log, atomically: true, encoding: .utf8)
-    }
+    let fd = Darwin.open(Paths.log.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+    guard fd >= 0 else { return }
+    let d = Array((line + "\n").utf8)
+    _ = d.withUnsafeBufferPointer { Darwin.write(fd, $0.baseAddress, $0.count) }
+    Darwin.close(fd)
 }
 
 // What the stripe asks of the keeper. The keeper reads it and deletes it.
