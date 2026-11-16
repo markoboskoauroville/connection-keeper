@@ -16,6 +16,7 @@ final class Hover: NSObject {
 
     static func add(_ b: NSButton) {
         let id = ObjectIdentifier(b)
+        if let o = owners[id], o.button == nil { owners[id] = nil }   // v86: a dead button's address may be reused
         guard owners[id] == nil else { return }
         let h = Hover(); h.button = b
         owners[id] = h
@@ -30,6 +31,9 @@ final class Hover: NSObject {
         let hgt = b.heightAnchor.constraint(greaterThanOrEqualToConstant: 22); hgt.priority = .defaultHigh; hgt.isActive = true
         b.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: h, userInfo: nil))
     }
+
+    // v86 (memory 93 -> 103 MB): owners of buttons that are gone (closed windows, removed rows, list menus) are dropped
+    static func prune() { owners = owners.filter { $0.value.button != nil } }
 
     static func walk(_ v: NSView) {
         if v is TrafficLights { return }

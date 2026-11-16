@@ -14,18 +14,19 @@ import WebKit
 // speeds, the line, Telemach) and posts its size; the window takes exactly that size plus a 12 pt edge and the page is
 // scrolled so the frame sits in it. Esc closes, Cmd-drag moves, Cmd-R reloads, a second press on the speedometer closes.
 final class EdgelessWindow: NSWindow {
+    var onReload: (() -> Void)?   // v86: Cmd-R only where it is set (the speed test); the Help window ignores it
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
     override func cancelOperation(_ sender: Any?) { close() }
     override func keyDown(with e: NSEvent) {
         if e.keyCode == 53 { close(); return }
-        if e.modifierFlags.contains(.command), e.charactersIgnoringModifiers == "r" { SpeedBrowser.shared?.web.reload(); return }
+        if e.modifierFlags.contains(.command), e.charactersIgnoringModifiers == "r" { onReload?(); return }
         super.keyDown(with: e)
     }
     override func sendEvent(_ e: NSEvent) {
         if e.type == .leftMouseDown, e.modifierFlags.contains(.command) { performDrag(with: e); return }
         if e.type == .keyDown, e.keyCode == 53 { close(); return }
-        if e.type == .keyDown, e.modifierFlags.contains(.command), e.charactersIgnoringModifiers == "r" { SpeedBrowser.shared?.web.reload(); return }
+        if e.type == .keyDown, e.modifierFlags.contains(.command), e.charactersIgnoringModifiers == "r" { onReload?(); return }
         super.sendEvent(e)
     }
 }
@@ -104,6 +105,7 @@ final class SpeedBrowser: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUI
         window = EdgelessWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 520), styleMask: [.borderless], backing: .buffered, defer: false)
         super.init()
         config.userContentController.add(self, name: "ckFrame")
+        window.onReload = { [weak self] in self?.web.reload() }
         window.title = "speedtest.net"
         window.isReleasedWhenClosed = false
         window.delegate = self

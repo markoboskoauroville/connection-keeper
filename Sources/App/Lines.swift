@@ -404,7 +404,7 @@ extension Stripe {
     @objc func pickOne() { switchMode(false) }
     @objc func pickAggregate() { switchMode(true) }
 
-    func switchMode(_ aggregate: Bool) {
+    func switchMode(_ aggregate: Bool, done: (() -> Void)? = nil) {
         if aggregate && Aggregation.selected.isEmpty {
             // nothing ticked yet: every usable line that is its own line
             var s: [String] = []
@@ -418,6 +418,7 @@ extension Stripe {
             let said = Aggregation.setMode(aggregate)
             appendLog("\(logStamp()) MODE \(aggregate ? "aggregate" : "one connection"): " + said.joined(separator: "; "))
             DispatchQueue.main.async { self.layoutLines(); self.scanLines() }
+            done?()
         }
         show(aggregate ? "aggregate connection: joining the lines…" : "one connection: aggregation off", aggregate ? Ink.amber : Ink.green, for: 8)
         layoutLines()

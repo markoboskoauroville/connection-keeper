@@ -480,7 +480,7 @@ final class Stripe: NSObject {
             let hide = Permissions.missing.isEmpty
             if hide != self.permissions.isHidden { self.permissions.isHidden = hide; self.fit() }
         }
-        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.autoData(); self?.newDay(); loadAgents(); if Wires.on { DispatchQueue.global().async { Wires.refreshShares() } } }
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in Hover.prune(); self?.autoData(); self?.newDay(); loadAgents(); if Wires.on { DispatchQueue.global().async { Wires.refreshShares() } } }
         loadAgents()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.scanLines() }
         Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.readRadios() }

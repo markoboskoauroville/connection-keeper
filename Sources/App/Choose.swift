@@ -48,6 +48,8 @@ enum ServiceOrder {
     }
 }
 
+enum ChoiceQueue { static let lock = NSLock(); static var pending: LinkChoice?; static var running = false }
+
 extension Stripe {
     static let cableKey = "cableTicks"
     // nil = every cable (nothing chosen yet)
@@ -98,20 +100,39 @@ extension Stripe {
         appendLog("\(logStamp()) CHOICE \(was.rawValue) → \(c.rawValue) (ticked on the stripe)")
         showChoice()
         show(c == .wifi ? "WI-FI: the Mac on Wi-Fi, the cable second" : c == .cable ? "CABLE: the ticked cables first" : "BOTH: aggregation over the ticked lines", Ink.green, for: 8)
-        let dead = deadIfaces
+        // v86: ONE serial queue, latest wins: a tick during a running job only replaces what waits; the job loops until
+        // nothing waits, so two switch jobs never overlap (stripe ticks and the outside notification both come here).
+        ChoiceQueue.lock.lock()
+        ChoiceQueue.pending = c
+        let start = !ChoiceQueue.running
+        if start { ChoiceQueue.running = true }
+        ChoiceQueue.lock.unlock()
+        guard start else { appendLog("\(logStamp()) CHOICE \(c.rawValue) queued (a switch is running; the latest wins)"); return }
         DispatchQueue.global().async {
-            if c == .both {
-                var names: [String] = []
-                if let w = Net.wifiInterface(), Net.ipAddress(w) != nil { names.append(Net.displayName(w)) }
-                let ticks = Stripe.cableTicks()
-                for s in Net.lanServices() where Net.ipAddress(s.device) != nil && (ticks == nil || ticks!.contains(s.name)) { names.append(s.name) }
-                if names.isEmpty { names = Aggregation.selected }
-                Aggregation.selected = names
-                DispatchQueue.main.async { self.switchMode(true) }
-            } else if Aggregation.on {
-                DispatchQueue.main.async { self.switchMode(false) }
+            while true {
+                ChoiceQueue.lock.lock()
+                let next = ChoiceQueue.pending
+                ChoiceQueue.pending = nil
+                if next == nil { ChoiceQueue.running = false }
+                ChoiceQueue.lock.unlock()
+                guard let c = next else { return }
+                let dead = DispatchQueue.main.sync { self.deadIfaces }
+                let sem = DispatchSemaphore(value: 0)
+                if c == .both {
+                    var names: [String] = []
+                    if let w = Net.wifiInterface(), Net.ipAddress(w) != nil { names.append(Net.displayName(w)) }
+                    let ticks = Stripe.cableTicks()
+                    for s in Net.lanServices() where Net.ipAddress(s.device) != nil && (ticks == nil || ticks!.contains(s.name)) { names.append(s.name) }
+                    if names.isEmpty { names = Aggregation.selected }
+                    Aggregation.selected = names
+                    DispatchQueue.main.async { self.switchMode(true) { sem.signal() } }
+                    _ = sem.wait(timeout: .now() + 90)
+                } else if Aggregation.on {
+                    DispatchQueue.main.async { self.switchMode(false) { sem.signal() } }
+                    _ = sem.wait(timeout: .now() + 90)
+                }
+                if let said = ServiceOrder.apply(c, cable: Stripe.cableTicks(), dead: dead) { appendLog("\(logStamp()) ORDER (\(c.rawValue)): \(said)") }
             }
-            if let said = ServiceOrder.apply(c, cable: Stripe.cableTicks(), dead: dead) { appendLog("\(logStamp()) ORDER (\(c.rawValue)): \(said)") }
         }
     }
 
@@ -145,9 +166,16 @@ extension Stripe {
 
     @objc func openWifiList() {
         refreshWifiScan()
+        show("WI-FI: …", Ink.amber, for: 6)   // v86: the shell calls run off the main thread; the list opens when they are done
+        DispatchQueue.global().async {
+            let cur = Net.wifiInterface().flatMap { Net.currentSSID($0) }
+            DispatchQueue.main.async { self.popWifiList(cur) }
+        }
+    }
+
+    func popWifiList(_ cur: String?) {
         let menu = NSMenu(); menu.autoenablesItems = false
         listHead(menu, "WI-FI networks in range: tick the one to use")
-        let cur = Net.wifiInterface().flatMap { Net.currentSSID($0) }
         let names = Set(wifiScan + (cur.map { [$0] } ?? [])).sorted()
         if names.isEmpty { listHead(menu, "  scanning… open this list again in a few seconds") }
         // v81 (request 89): a phone's hotspot is never joined here (the Nothing only by its USB cable)
@@ -175,14 +203,21 @@ extension Stripe {
     }
 
     @objc func openCableList() {
+        show("CABLE: …", Ink.amber, for: 6)   // v86: the shell calls run off the main thread
+        DispatchQueue.global().async {
+            let svcs = Net.lanServices().map { (s: $0, up: Net.ipAddress($0.device) != nil, shown: Net.shown($0.name, $0.device)) }
+            DispatchQueue.main.async { self.popCableList(svcs) }
+        }
+    }
+
+    func popCableList(_ svcs: [(s: (name: String, device: String), up: Bool, shown: String)]) {
         let menu = NSMenu(); menu.autoenablesItems = false
         listHead(menu, "CABLE: wired interfaces and phones, tick the ones to use")
         let ticks = Stripe.cableTicks()
         var any = false
-        for s in Net.lanServices() {
-            let up = Net.ipAddress(s.device) != nil
-            let dead = deadIfaces.contains(s.device)
-            listItem(menu, Net.shown(s.name, s.device) + (dead ? "   NO DATA" : up ? "" : "   (no address)") + (roleWord(s.device).map { "   \($0)" } ?? ""), ticked: ticks == nil || ticks!.contains(s.name), id: s.name, action: #selector(pickCable(_:)))
+        for x in svcs {
+            let dead = deadIfaces.contains(x.s.device)
+            listItem(menu, x.shown + (dead ? "   NO DATA" : x.up ? "" : "   (no address)") + (roleWord(x.s.device).map { "   \($0)" } ?? ""), ticked: ticks == nil || ticks!.contains(x.s.name), id: x.s.name, action: #selector(pickCable(_:)))
             any = true
         }
         for o in others where Phones.isPhone(o.iface) {
@@ -195,12 +230,17 @@ extension Stripe {
 
     @objc func pickCable(_ b: NSButton) {
         guard let name = b.identifier?.rawValue else { return }
-        var all = Net.lanServices().map(\.name) + others.filter { Phones.isPhone($0.iface) }.map(\.name)
-        all = Array(Set(all))
-        var s = Stripe.cableTicks() ?? Set(all)
-        if b.state == .on { s.insert(name) } else { s.remove(name) }
-        UserDefaults.standard.set(Array(s).sorted(), forKey: Stripe.cableKey)
-        appendLog("\(logStamp()) CABLE ticks: \(s.isEmpty ? "none" : s.sorted().joined(separator: " + "))")
-        if choice != .wifi { setChoice(choice) }
+        let on = b.state == .on
+        let phones = others.filter { Phones.isPhone($0.iface) }.map(\.name)
+        DispatchQueue.global().async {
+            let all = Array(Set(Net.lanServices().map(\.name) + phones))
+            DispatchQueue.main.async {
+                var s = Stripe.cableTicks() ?? Set(all)
+                if on { s.insert(name) } else { s.remove(name) }
+                UserDefaults.standard.set(Array(s).sorted(), forKey: Stripe.cableKey)
+                appendLog("\(logStamp()) CABLE ticks: \(s.isEmpty ? "none" : s.sorted().joined(separator: " + "))")
+                if self.choice != .wifi { self.setChoice(self.choice) }
+            }
+        }
     }
 }
