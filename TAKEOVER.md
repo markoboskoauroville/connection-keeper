@@ -24,6 +24,48 @@ cable is kept, the hotspot listed SAME UPLINK. The ONLY PHONES TICKED UDP road u
 hotspot still carries UDP beside its phone. v89 had made the same exclusion in the ticks only (CableOnly owners), not in
 sameLine. CI "Same-line rule" (`ck-aggregate sameline-selftest`, 8 cases). build.yml: the Release step runs only on main
 (a run started by hand on another ref checks and never releases).
+**23.11.2026, v89–v90 (requests 97–100): one tick per connection; the same road cancels; TEST per row; families; the window no longer climbs.**
+The window: under the first row, ONE list of every connection the app knows (lines here now, Wi-Fi networks in range, lines
+seen this week, ticked lines that are away), one tick each (Sources/App/Ticks.swift, Lines.swift layoutLines). Gone: the
+top row's WI-FI · CABLE · BOTH ticks and their lists (Choose.swift keeps only ServiceOrder and the Wi-Fi scan), the ALL /
+IN USE tabs and LAN / Wi-Fi filters (Tabs.swift deleted, View menu items too), the ▾ menu's ONE / AGGREGATE section and JOIN
+ticks (the connection menu keeps Check now, the log, Quit), NOTHING ONLY in ⚙ (switched off at the first start of v89 and
+logged: it overruled every tick in ck-aggregate; tick only the Nothing for the same, without the standby). Kept: WIRES / WI-FI
+in ⚙ (radios, untouched), FRANKFURT / CROATIA, PING VM, Tailscale, speed and health tests, help, TOP, ON / OFF, menu-bar item,
+updater, 4G / 5G and the Wi-Fi share icon on rows. Ticks → aggregate-selection.json: none = mode one (the Mac straight on its
+own line, the row says MAC'S OWN), one or more = mode aggregate over exactly those; a ticked Wi-Fi network is joined; the ticked
+devices go first in the service order. One serial worker, latest wins (TickQueue). From outside: distributed notification
+`ConnectionKeeperTicks` (object "AX88179B,Something", "" = none); `ConnectionKeeperChoose` wifi|cable|both and
+`ConnectionKeeperNothingOnly` on are mapped onto ticks. Server change (Sources/Aggregate/main.swift discover, one line): a phone
+hotspot is a line only when ticked (v87 joined it without a tick). Exclusion ("same road"), in the App only: radio:wifi (one
+Wi-Fi network at a time), sim:<serial> (a phone and its own hotspot: CableOnly.learnHotspot reads the SoftAp name AND
+ro.serialno, phone-hotspot-owners.json: Something → 0005534BC000140), router:<mac> (line-memory.json, learned from arp on each
+scan; mantra and AX88179B both 3c:78:95:d6:21:18, seeded 23.11 from the 16.11 measurement), ip:<public> (not for phones or
+hotspots). Ticking a row unticks its clashes (⇄ ONE WI-FI / SAME PHONE / SAME ROUTER on the row for 8 s, a status line, the log);
+ticks from elsewhere are cleaned with the line that is HERE first (v89 kept an absent mantra and dropped the cable: fixed in v90).
+v90 families (request 100): the same groups minus radio:wifi make families; the list is ordered by family (wired first, Wi-Fi
+under it), a grey rail joins a family's rows with a tick to each row, green on the ticked one; 4 pt between families.
+TEST (request 99, LineTest.swift): speedtest.net in a hidden WKWebView (alpha 0, non-persistent store, uBlock rules), the words
+read by Resources/speedtest/reader.js (the same words as speedtest-firefox), pinned by WKWebsiteDataStore.proxyConfigurations
+(macOS 14+): a Mac device → LineProxy, a SOCKS5 on 127.0.0.1:<free> whose sockets are IP_BOUND_IF + bound to the device's
+address; a phone → its ck-phone forward (127.0.0.1:886x); ALL TICKED (last row) → the Mac's route. One at a time.
+Window (request 98): fit() set the origin to top − CONTENT height after setContentSize; since v73 the window has a 28 pt title
+bar, so every size change put the top 28 pt higher (main.swift fit(), v88 line 794). Now frameRect(forContentRect:) and one
+setFrame with the same top-left; a WINDOW line is logged if a refresh ever moves the top-left.
+Live 23.11.2026: CI v89 run 45274907578 green, v90 run 45278643741 green, both Latest; v89 installed 23:08, v90 23:30 (zip,
+"Mantra Apps" per helper; the old app quit by SIGTERM). Ticks read back from /status: AX88179B + Something → both lines; untick
+Something → gone from /status in ~10 s ("left the lines: not ticked any more"); tick mantra (Wi-Fi) → AX88179B ⇄ SAME ROUTER and
+Something ⇄ ONE WI-FI unticked, the Mac joined mantra (put back to Something by ticking it). Window: frame logged every second
+23:31–23:41: top-left fixed at (2562, 496) while the height went 304 → 315 → 324 (the moves 23:30:51–23:31:03 were a hand drag).
+TEST pinning, AX88179B 23:11: en17 +49.0 MB in / +51.9 MB out, en0 +0.3 / +0.3, utun99 0; the proxy carried ↓42.7 ↑47.6 MB in
+29 connections; speedtest.net saw 86.33.92.240 (Telemach); ↓ 22.48 ↑ 23.02 Mbit/s, ping 19 ms. NOT DONE: the hidden run is not
+reliable: 1 of 6 runs finished; the others (Something, Nothing USB, ALL TICKED unpinned, AX88179B again) stalled after ~2 MB and
+the page went back to GO (v90 logs the page text at a failure). The pinning is not the cause (the unpinned ALL TICKED run stalls
+too). Suspects: WebKit throttling the alpha-0 window, or speedtest.net aborting; next: log the page every 10 s during a run.
+Found live: en0 lost its scoped default route after the v89 → v90 restart (NO DATA on Something): ck-tunnel (root, v43) adds
+`-ifscope <main line> default` when it comes up and deletes it when it goes down, even when macOS has since made that route its
+own (the order changed from Wi-Fi first to AX88179B first in between). Put back by moving Wi-Fi first in the service order.
+The helper fix needs Marko's password (sudo ./tunnel.sh install) and is not made yet.
 
 **14.11.2026, v82 (request 91): STANDBY badge; the speed test window draggable; no speed test over the Nothing's SIM.**
 ck-aggregate's /status gives each line a "role" (active / standby / fallback, from Server.usable). In NOTHING ONLY the

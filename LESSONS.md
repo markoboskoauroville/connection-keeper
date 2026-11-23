@@ -453,3 +453,22 @@ The item is image-only, so the pipes are drawn into the image, with room (pad) o
 - Never `git reset --soft origin/main` after a fetch that brought someone else's commits: the next commit carries your
   old tree and silently reverts theirs (23.11.2026: caught at once, the build cancelled after 7 s, fixed by applying the
   own diff onto their head). Rebase, or apply `git diff <own base> <own tip>` onto the new head.
+## 23.11.2026 (v89–v90): ticks, the same road, the climbing window, a pinned web view
+- **A titled window's frame is taller than its content.** fit() kept "top" and then set the origin to top − content height:
+  the frame grew upward by the title bar (28 pt) at every size change, until the display's top stopped it. Compute the frame
+  with frameRect(forContentRect:) and set it once with the same top-left.
+- **Two mode files.** `mode` (Aggregation) and `session-mode` (Session, written only by a clean quit) can disagree: a WI-FI tick
+  had written `mode` one, an install that quit the old app by SIGTERM skipped Session.close, and the new app opened the session
+  as aggregate. The ticks now decide; still, quit the old app by its menu (or the updater) when possible.
+- **Cleaning clashing ticks must prefer a line that is here.** v89 kept "mantra" (absent, first in the file) and dropped
+  AX88179B (present): the server then ran on "no ticked line is here" fallback. v90 puts present lines first.
+- **sameLine() in ck-aggregate is no exclusion rule.** It returns false for any cellular line, so the Nothing on USB and its own
+  hotspot "Something" (both 31.217.5.94) were two lines. The App's rule pairs them by the hotspot's owner (ro.serialno);
+  v91 (the fixes worker) made sameLine() use the same owner file, so the server and the ticks agree.
+- **A web view can be pinned to one line**: WKWebsiteDataStore.proxyConfigurations with a SOCKS5 whose sockets are bound to
+  the device (IP_BOUND_IF + the device's address). Measured: see TAKEOVER v89.
+- **Never press a Wi-Fi row's tick in a test**: it joins that network (it moved the Mac from Something to mantra for a minute on
+  23.11 during a frame test; put back by ticking Something). Use ConnectionKeeperTicks with the names that are already in use.
+- **ck-tunnel deletes a scoped default route it no longer owns.** It adds `-ifscope <main line> default` at up and deletes its
+  list at down; if the service order changed meanwhile, macOS owns that route by then and the line is left with no scoped
+  default ("No route to host" with ping -b en0, NO DATA on the stripe). Remedy without root: put that service first again.
