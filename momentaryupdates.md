@@ -883,3 +883,11 @@ the AX88179B left USB at 14:19 and Marko pressed OFF at 14:22:57; left OFF.
 > notice the bug in UI that its interface, with every refresh, is moving up through the screen by itself. It's just the thing is moving uncontrollably through the screen. Why?
 
 **Status:** saved first; cause and fix in v89 (rule: a refresh never changes the window's top-left corner; only Marko moves it).
+
+## 23.11.2026, request 99 (a TEST button on every connection: speedtest.net over that line only, no window)
+
+> Next to each connection, just put a test action button, and that one is using algorithms from something we already have built in. That's the web page with speed test, without bringing user interface. Use only that connection and give the results as a test.
+
+> now all combinations are possible for aggregation. We have two wired connections and two Wi-Fi, so any combination should work and should be tested for the speed.
+
+**Status:** saved first; building in v89 together with requests 97 and 98.
