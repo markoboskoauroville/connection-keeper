@@ -919,3 +919,9 @@ The four, approved together (assessment of 23.11.2026, building in v91; v90 was 
 > Add a tick or check mark for line to be as default download line, which means in practice if I download bigger files, they're automatically going to my cheaper line which I am going to select.
 
 **Status:** saved first; building in the next free version.
+
+## 24.11.2026, request 106 (the menu-bar item opens a drop-down controller, iStat Menus style)
+
+> There is a menu bar item I want, when I press on it to have something similar as iSTAT drop-down menu, so not opening the interface itself, opening the controller as a drop-down menu. There must be also options to start the interface from the top, first option, and then quick options.
+
+**Status:** saved first; building in the next free version (v93 carries request 105).
