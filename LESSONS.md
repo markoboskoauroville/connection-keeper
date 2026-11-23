@@ -474,3 +474,11 @@ The item is image-only, so the pipes are drawn into the image, with room (pad) o
   default ("No route to host" with ping -b en0, NO DATA on the stripe). Remedy without root: put that service first again.
 - `pgrep -f "<path with (Mantra)>"` treats the parentheses as a regex group and finds nothing: the first install attempt
   replaced the bundle under the still-running app. Use the pid from `pgrep -fl 'Connection Keeper$'` or escape the path.
+
+## 24.11.2026 (v92): a page that shows GO is not a page that is ready
+- speedtest.net draws its GO button before its own script is ready; a click then is lost without a word. Wait for the
+  navigation's didFinish plus a few seconds, and check the click took (GO gone) before counting the test's time; press
+  again when it did not. The first v89 run only worked because compiling the uBlock rules made it wait 4 s.
+- On this Mac macOS gave the cable (secondary) its scoped default route but not the phone hotspot as secondary; the hotspot
+  has a scoped route only while it is first and the tunnel helper adds one. Keep Wi-Fi first while Something is a line, and
+  remember that the v49 rule "dead lines last" can move it down and so keep it dead (not changed yet).

@@ -892,6 +892,10 @@ the AX88179B left USB at 14:19 and Marko pressed OFF at 14:22:57; left OFF.
 
 **Status:** saved first; building in v89 together with requests 97 and 98.
 
+**Status 24.11.2026 (v92 installed 00:09, CI run 45284338473 green):** TEST on every row and on ALL TICKED, speedtest.net in a
+hidden web view pinned to the line; 12 of 12 runs finished (AX88179B ~20-29 ↓, Something ~93 ↓, Nothing USB ~103-112 ↓, the
+ticked pair through Frankfurt ~46 ↓). v89-v90 had finished 1 in 6: GO was clicked before the page's script was ready.
+
 ## 23.11.2026, request 100 (rows of the same device together, joined by a line: one family)
 
 > in user interface group the connections from the same device because now they are not grouped, so the same connections come next to each other. One is wired. One is Wi-Fi. And there should be some kind of a line connecting the two, so I know they are part of the same family.

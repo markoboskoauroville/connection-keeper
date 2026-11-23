@@ -1,3 +1,25 @@
+**24.11.2026, v92 (request 99 finished): TEST is reliable; the bond word holds still.**
+Cause of v89-v90's 1-in-6: GO was clicked about 1 s after the hidden page started, before speedtest.net's own script was
+ready; the click was ignored and the run waited on the start page until its 120 s timeout (the one run that finished had
+pressed GO at 4 s, while the uBlock rules were still compiling; every failure carried only the page itself, ~2 MB). Now
+(LineTest.swift tick): GO only 3 s after didFinish, then GOVISIBLE (reader.js) is checked; if GO is still there 8 s later it is
+pressed again (at most 4), "the test runs" is logged when GO is gone, the 120 s count starts then, progress is logged every 15 s;
+WKPreferences.inactiveSchedulingPolicy = .none (macOS 14+). The bond word (⇄ FRA n · m↓) has a fixed slot (main.swift): its
+number changing every second moved ☁, TS and PING VM by 8 pt. CI run 45284338473 green, v92 Latest, installed 00:09.
+12 runs, 24.11.2026 00:14-00:24 (one press of GO each, every one "the test runs" within 1 s):
+| Row | ↓ / ↑ Mbit/s (ping ms) | address |
+|---|---|---|
+| AX88179B | 21.6/14.1 (22) · 29.4/24.6 (19) · 19.5/24.9 (26) | 86.33.92.240 Telemach |
+| Something | 90.5/29.2 (32) · 93.1/29.8 (34) · 93.1/29.1 (28) | 31.217.5.94 HT |
+| Nothing A142 (USB) | 102.7/20.8 (33) · 104.9/29.7 (35) · 112.1/32.4 (34) | 31.217.5.94 HT |
+| ALL TICKED (AX + Something, via Frankfurt) | 45.4/27.6 (108) · 45.9/33.2 (56) · 47.6/35.9 (43) | 130.61.181.83 Oracle |
+Pinning, Something #1: en0 +187.4 MB in / +72.5 out, en17 +0.3 / +0.1; the proxy carried ↓166.9 ↑60.4 MB in 39 connections.
+Nothing #1: en0 +0.7, en17 +0.4 (its bytes go over USB through adb). Other runs show other traffic of the Mac on the lines at
+the same time (e.g. en0 +61-93 MB during cable runs), the proxy's own count is the run's. ALL TICKED is about half of
+Something alone: it goes through the relay in Frankfurt (ping 43-108 ms); CROATIA would test the lines without the relay.
+Found again at the v92 install: ck-tunnel's route bookkeeping (LESSONS 23.11) left en17 without its scoped default route;
+put right by tunnel down, Wi-Fi first, tunnel up (the helper adds the main line's scoped route; macOS gives en17 its own).
+
 **23.11.2026, v91 (requests 101-104, the four weak points of the read-only assessment; no interface change).**
 (1) Relay (Sources/Bond/server/group.go): an idle bonded stream is no longer reset after 10 minutes (SSH, websockets, Claude
 Code died only when bonded); the safety net is 24 h (`streamIdle`, env CK_BOND_IDLE shortens it for tests), the relay's own
