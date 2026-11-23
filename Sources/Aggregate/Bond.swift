@@ -205,6 +205,7 @@ final class BondClient {
     // second in manage(), named in `bypass` and in the path log, so a line that never gets a leg is never a mystery
     var excluded: () -> [String] = { [] }
     var excludedNow: [String] = [], pathsSaid = ""
+    var lastKeys: Set<String> = []                       // v90: the paths of the last manage(); a change resets the backoff
     // v79 (Marko's priority is privacy: "acting as my VPN, hiding my real IP behind Frankfurt"): ONE live leg is enough;
     // only with none do new connections go direct (or are refused under STRICT). bond.json "speedOnly": true brings back
     // v67's rule (fewer than two lines: step aside, one line gains no speed).
@@ -251,6 +252,12 @@ final class BondClient {
         excludedNow = out
         if said != pathsSaid { pathsSaid = said; log("BOND paths: \(said)") }
         let keys = Set(want.map(\.key))
+        // v90 (assessment 23.11.2026): a device came, went or came back (a line alive again): the redial waits start over,
+        // so a leg is tried at once instead of after up to 30 s of backoff learned on the old road
+        if keys != lastKeys {
+            if !retryAt.isEmpty { log("BOND paths changed: redial backoff reset for \(retryAt.keys.sorted().joined(separator: ", "))") }
+            retryAt.removeAll(); fails.removeAll(); lastKeys = keys
+        }
         for l in legs where l.gen == gen && !keys.contains(l.key) { kill(l, "its line is gone") }
         let now = bnow(), g = gen, cid = clientID
         var go: [BondPath] = []

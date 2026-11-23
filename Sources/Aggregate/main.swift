@@ -53,15 +53,63 @@ final class Uplink {
     static var reasons: [String: String] = [:]           // v53: the phones kept out of the pool, and why
     var cellular = false                                 // a phone whose internet is its mobile data, not a Wi-Fi
     var standby = false                                  // v81 NOTHING ONLY: used only while no other line answers
-    func sameLine(_ o: Uplink) -> Bool {
+    var ssid: String?                                    // v90: the Mac's Wi-Fi on a phone hotspot: that hotspot's name
+    // `twins` false: the rule before v90 (the UDP road of ONLY PHONES TICKED keeps a phone's hotspot beside the phone)
+    func sameLine(_ o: Uplink, twins: Bool = true) -> Bool {
         // Two 4G lines of the same operator can leave through the same public address (carrier NAT): at 09:06 on
         // 31.10.2026 the Nothing (LTE, Telemach) read the TP-Link's 86.33.92.213 and was dropped as "the same line" for
         // three minutes. A phone on its own mobile data is its own radio, so its own line.
-        if cellular || o.cellular { return false }
+        // v90 (assessment 23.11.2026): except a phone and its OWN hotspot, the same SIM twice: the Nothing by USB and
+        // "Something" were joined as two lines (both 31.217.5.94, +6 % down and -22 % up together). Both cellular and
+        // the hotspot's learned owner (phone-hotspot-owners.json, v89) is that phone, or both leave by the same public
+        // address; two different phones (two serials, or a hotspot owned by another phone) stay two lines.
+        if cellular || o.cellular { return twins && cellular && o.cellular && simTwin(o) }
         if let a = publicIP, a == o.publicIP { return true }
         if let a = gatewayMAC, a == o.gatewayMAC { return true }
         return false
     }
+    func simTwin(_ o: Uplink, owners: [String: String] = CableOnly.owners) -> Bool {
+        if let a = phone?.serial, let b = o.phone?.serial { return a == b }              // two phones on cables: one each
+        let serial = phone?.serial ?? o.phone?.serial, hotspot = ssid ?? o.ssid
+        if let serial, let hotspot, let owner = owners[hotspot] { return owner == serial } // the owner is known: it decides
+        if let a = publicIP, a == o.publicIP { return true }
+        return false
+    }
+}
+
+// `ck-aggregate sameline-selftest` (v90, CI): the same-line rule on fake lines, no network.
+func sameLineSelftest() -> Never {
+    func phone(_ serial: String, ip: String?) -> Uplink {
+        let u = Uplink(iface: "phone-\(serial)", name: "Nothing", gateway: nil, gatewayMAC: nil, publicIP: ip)
+        u.phone = Phone(serial: serial, name: "Nothing", port: 1080); u.cellular = true; return u
+    }
+    func hotspot(_ ssid: String, ip: String?) -> Uplink {
+        let u = Uplink(iface: "en0", name: ssid, gateway: "172.20.10.1", gatewayMAC: "aa:bb:cc:dd:ee:ff", publicIP: ip)
+        u.ssid = ssid; u.cellular = true; return u
+    }
+    let cable = Uplink(iface: "en17", name: "AX88179B", gateway: "192.168.0.1", gatewayMAC: "11:22:33:44:55:66", publicIP: "86.33.84.210")
+    let cases: [(String, Bool, Bool)] = [
+        ("two cellular lines sharing 31.217.5.94 (the Nothing by USB, its hotspot): one line",
+         phone("A142X", ip: "31.217.5.94").sameLine(hotspot("Something", ip: "31.217.5.94")), true),
+        ("the same, asked the other way round", hotspot("Something", ip: "31.217.5.94").sameLine(phone("A142X", ip: "31.217.5.94")), true),
+        ("the hotspot's learned owner is that phone, different addresses: one line",
+         phone("A142X", ip: "31.217.5.94").simTwin(hotspot("Something", ip: "31.217.9.9"), owners: ["Something": "A142X"]), true),
+        ("the hotspot belongs to another phone, same carrier address: two lines",
+         phone("A142X", ip: "31.217.5.94").simTwin(hotspot("Pixel", ip: "31.217.5.94"), owners: ["Pixel": "PIXEL7"]), false),
+        ("two different phones on cables, same carrier address: two lines", phone("A142X", ip: "31.217.5.94").sameLine(phone("PIXEL7", ip: "31.217.5.94")), false),
+        ("a phone and the cable through the same router address: two lines (31.10.2026 carrier NAT rule)",
+         phone("A142X", ip: "86.33.84.210").sameLine(cable), false),
+        ("cellular twins with no address known and no owner: two lines", phone("A142X", ip: nil).simTwin(hotspot("Something", ip: nil), owners: [:]), false),
+        ("the UDP road (twins off): the phone's hotspot stays beside the phone",
+         phone("A142X", ip: "31.217.5.94").sameLine(hotspot("Something", ip: "31.217.5.94"), twins: false), false),
+    ]
+    var bad = 0
+    for (what, got, want) in cases {
+        print("\(got == want ? "PASS" : "FAIL") \(what): \(got ? "same line" : "two lines")")
+        if got != want { bad += 1 }
+    }
+    print(bad == 0 ? "SAME-LINE SELFTEST PASS (\(cases.count) cases)" : "SAME-LINE SELFTEST FAIL: \(bad) of \(cases.count)")
+    exit(bad == 0 ? 0 : 1)
 }
 
 enum Lines {
@@ -106,6 +154,7 @@ enum Lines {
             if !hot, Uplink.reasons[i] == "PHONE HOTSPOT JOINED" { Uplink.reasons[i] = nil }
             let u = Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i])
             u.cellular = hot                                   // a phone's own radio: never "the same line" by carrier NAT
+            if hot { u.ssid = Net.currentSSID(i) }             // v90: matched to the phone that owns it (sameLine)
             found.append(u)
         }
         // v17 (request 36): every phone on a USB cable with its server answering is a line of its own.
@@ -152,7 +201,7 @@ enum Lines {
         // ONLY PHONES TICKED (31.10.2026): a phone carries TCP only, so calls, QUIC and other UDP had no road at all;
         // the Mac's own lines (Wi-Fi, cable) join so UDP has one.
         if !anyLine && !lines.isEmpty && lines.allSatisfy({ $0.phone != nil }) {
-            let mac = discover(known: known, anyLine: true).lines.filter { $0.phone == nil && !lines.contains(where: $0.sameLine) }
+            let mac = discover(known: known, anyLine: true).lines.filter { m in m.phone == nil && !lines.contains { m.sameLine($0, twins: false) } }
             if !mac.isEmpty { log("only phones ticked: \(mac.map(\.name).joined(separator: " + ")) joins for UDP"); return (lines + mac, ignored) }
         }
         return (lines, ignored)
@@ -186,7 +235,7 @@ enum Lines {
         let wifi = Net.wifiInterface()
         if !lines.contains(where: { !$0.standby }), let w = wifi, CableOnly.isPhoneHotspot(Net.currentSSID(w)), let gw = gateway(w) {
             let u = Uplink(iface: w, name: Net.displayName(w), gateway: gw, gatewayMAC: gatewayMAC(gw, w), publicIP: publicIP(w) ?? known[w])
-            u.cellular = true; lines.append(u)
+            u.cellular = true; u.ssid = Net.currentSSID(w); lines.append(u)
         }
         // the standby: every other line of the Mac (the cable first), never a phone hotspot; it carries only while the
         // Nothing does not answer (Server.usable), so the Mac is never left without internet
@@ -1063,5 +1112,6 @@ case "session" where argv.count > 1:                // v73: what the app does at
     else { print("usage: ck-aggregate session open [--app-pid N] | close"); exit(2) }
 case "bond-init": print(BondConfigFile.initFile())
 case "bond-selftest": bondSelftest(Array(argv.dropFirst()))
+case "sameline-selftest": sameLineSelftest()
 default: print("usage: ck-aggregate serve | uplinks | test [seconds] | test-line <name> [seconds] | on | off | bond-init | bond-selftest"); exit(2)
 }

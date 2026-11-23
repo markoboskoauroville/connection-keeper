@@ -10,6 +10,13 @@ import Foundation
 import Darwin
 import CryptoKit
 
+// v90 (request 101): the bond selftest's speed floors, as fractions of the best emulated line (80 Mbit/s); measured first
+// (CI history and the bench run of 23.11.2026, see TAKEOVER v90), set under the lowest good run, above a broken scheduler.
+enum BondFloors {
+    static let fetch1 = 0.50      // one stream over 80 + 80 + 16: 40 Mbit/s (lowest good run 49.7; the v65 spiral 36.7)
+    static let fetch2 = 0.25      // lineA silenced at 24 MB, the 3 s to notice included: 20 Mbit/s (lowest good 25.8; v65 10.0)
+}
+
 final class ThrottleProxy {
     let name: String, mbps: Double, delay: Double, target: UInt16
     var port: UInt16 = 0
@@ -94,6 +101,33 @@ func loopbackConnect(_ port: UInt16) -> Int32? {
     return fd
 }
 
+// v90: a TCP echo on 127.0.0.1 (the idle test's destination); its port, or nil.
+func tcpEcho() -> UInt16? {
+    let s = socket(AF_INET, SOCK_STREAM, 0)
+    guard s >= 0 else { return nil }
+    var a = sockaddr_in(); a.sin_family = sa_family_t(AF_INET); a.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    a.sin_port = 0; a.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let size = socklen_t(MemoryLayout<sockaddr_in>.size)
+    guard withUnsafePointer(to: &a, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, size) } }) == 0, listen(s, 4) == 0 else { close(s); return nil }
+    var len = size
+    _ = withUnsafeMutablePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(s, $0, &len) } }
+    Thread.detachNewThread {
+        while true {
+            let c = accept(s, nil, nil)
+            if c < 0 { usleep(10_000); continue }
+            Thread.detachNewThread {
+                var buf = [UInt8](repeating: 0, count: 4096)
+                while true {
+                    let n = buf.withUnsafeMutableBytes { recv(c, $0.baseAddress, 4096, 0) }
+                    if n <= 0 || !sendAll(c, Array(buf[0..<n])) { break }
+                }
+                close(c)
+            }
+        }
+    }
+    return UInt16(bigEndian: a.sin_port)
+}
+
 struct BondFetch { var ok = false, bytes = 0, length = -1, sha = "", secs = 0.0, why = "" }
 
 // One HTTP/1.0 GET through ONE bond stream: a socket pair, one end bridged into the stream exactly as a SOCKS client is.
@@ -174,6 +208,39 @@ func bondSelftest(_ args: [String]) -> Never {
     guard client.legCount == 3 else { print("BOND SELFTEST FAIL: the legs did not come up"); exit(1) }
     sleep(2)                                                // a few PINGs: each leg knows its RTT
 
+    // v90 (assessment 23.11.2026): an idle bonded stream is not reset. This stream to a local echo stays silent for
+    // --idle-only seconds. `--idle-expect kept` (the relay as deployed, 24 h safety net): it must still echo afterwards.
+    // `--idle-expect ended` (the control: the relay with CK_BOND_IDLE=4s, the pre-v90 rule shrunk from 10 min): it must
+    // be gone, so the test is known to see a reset when there is one.
+    if let idleText = arg("--idle-only"), let idle = UInt32(idleText) {
+        guard let echo = tcpEcho() else { print("BOND IDLE TEST FAIL: no local echo"); exit(1) }
+        guard let s = client.open("127.0.0.1", echo, timeout: 3) else { print("BOND IDLE TEST FAIL: the stream did not open"); exit(1) }
+        var sv: [Int32] = [0, 0]
+        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &sv) == 0 else { print("BOND IDLE TEST FAIL: socketpair"); exit(1) }
+        Thread.detachNewThread { client.bridge(sv[0], s) }
+        let outer = sv[1]
+        deadline(outer, 5)
+        func roundTrip(_ word: String) -> Bool {
+            guard sendAll(outer, Array(word.utf8)) else { return false }
+            var got = [UInt8](), buf = [UInt8](repeating: 0, count: 256)
+            while got.count < word.utf8.count {
+                let n = buf.withUnsafeMutableBytes { recv(outer, $0.baseAddress, 256, 0) }
+                if n <= 0 { return false }
+                got += buf[0..<n]
+            }
+            return String(decoding: got, as: UTF8.self) == word
+        }
+        let first = roundTrip("before the silence\n")
+        print("idle test: first echo \(first ? "back" : "MISSING"); now \(idle) s of silence on the stream (the legs keep pinging)")
+        sleep(idle)
+        let second = roundTrip("after the silence\n")
+        print("idle test: echo after \(idle) s idle \(second ? "back: the stream was kept" : "MISSING: the stream was ended")")
+        close(outer)
+        let wantKept = arg("--idle-expect") != "ended"
+        if first && second == wantKept { print("BOND IDLE TEST PASS: a bonded stream idle for \(idle) s was \(second ? "kept" : "ended, as this relay's short limit says")"); exit(0) }
+        print("BOND IDLE TEST FAIL (expected the stream \(wantKept ? "kept" : "ended"))"); exit(1)
+    }
+
     // v76 (the throughput question): only the UDP round trip on fresh legs, with each leg's own RTT beside it
     if args.contains("--udp-rtt-only"), let ue = arg("--udp-echo"), let ep = ue.split(separator: ":").last.flatMap({ UInt16($0) }) {
         let ul = NSLock(); var got: [Int: Double] = [:], sentAt: [Int: Double] = [:]
@@ -234,6 +301,17 @@ func bondSelftest(_ args: [String]) -> Never {
     let mbps2 = Double(f2.bytes) * 8 / max(f2.secs, 0.001) / 1e6
     print(String(format: "fetch 2 (lineA silenced mid-way): %d bytes in %.2f s = %.1f Mbit/s; sha %@ (%@); legs left %d",
                  f2.bytes, f2.secs, mbps2, f2.sha, f2.sha == want ? "matches" : "DIFFERENT", client.legCount))
+    // v90 (assessment 23.11.2026, request 101): speed floors. The goal is fetch 1 at 1.1x the best line (88 Mbit/s) and
+    // fetch 2 at 0.7x of 80 (56) after a line died; today's scheduler does not reach that every run, and GitHub's runner
+    // varies up to 2x run to run (TAKEOVER v76-v78), so the floors fail a real regression (one line carrying it all, the
+    // v65 estimator spiral at 36.7 / 10.0) but not the runner's noise. The gap to the goal is printed every run.
+    let best = 80.0, goal1 = 1.1, goal2 = 0.7, floor1 = BondFloors.fetch1, floor2 = BondFloors.fetch2
+    print(String(format: "SPEED fetch 1: %.2fx the best line (goal %.1fx = %.0f Mbit/s, floor %.2fx = %.0f)%@", mbps1 / best, goal1, goal1 * best, floor1, floor1 * best,
+                 mbps1 / best >= goal1 ? "" : String(format: "  KNOWN SHORTFALL: %.0f%% of the goal", mbps1 / (goal1 * best) * 100)))
+    print(String(format: "SPEED fetch 2: %.2fx of 80 after lineA died (goal %.1fx = %.0f Mbit/s, floor %.2fx = %.0f)%@", mbps2 / best, goal2, goal2 * best, floor2, floor2 * best,
+                 mbps2 / best >= goal2 ? "" : String(format: "  KNOWN SHORTFALL: %.0f%% of the goal", mbps2 / (goal2 * best) * 100)))
+    if f1.ok && mbps1 < floor1 * best { failures.append(String(format: "fetch 1: %.1f Mbit/s, under the floor of %.0f (%.2fx the best line)", mbps1, floor1 * best, floor1)) }
+    if f2.ok && mbps2 < floor2 * best { failures.append(String(format: "fetch 2: %.1f Mbit/s, under the floor of %.0f (%.2fx of 80)", mbps2, floor2 * best, floor2)) }
     if killedAt < 0 { failures.append("fetch 2: lineA was never silenced") }
     if !f2.ok { failures.append("fetch 2: \(f2.why)") }
     if f2.sha != want { failures.append("fetch 2: SHA-256 differs") }

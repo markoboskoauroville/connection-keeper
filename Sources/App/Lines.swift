@@ -14,37 +14,11 @@ struct OtherLine {
     let iface: String, name: String, wifi: Bool, ms: Double?, sameAs: String?
 }
 
-// v90 (request 100, Marko 23.11.2026: "group the connections from the same device ... some kind of a line connecting the
-// two, so I know they are part of the same family"): a rail at the left edge of a family's rows, a vertical line through
-// them with a short tick to each row; the tick to the ticked row is lit green (only one row of a family can be ticked).
-// A row alone has none. Fixed width in every row, so the columns never move.
-final class Rail: NSView {
-    enum Pos { case none, first, middle, last }
-    var pos: Pos = .none { didSet { if pos != oldValue { needsDisplay = true } } }
-    var lit = false { didSet { if lit != oldValue { needsDisplay = true } } }
-    static let width: CGFloat = 12
-    override var isFlipped: Bool { true }
-    override func draw(_ r: NSRect) {
-        guard pos != .none else { return }
-        let x = floor(bounds.width * 0.4) + 0.5, mid = floor(bounds.midY) + 0.5
-        let top: CGFloat = pos == .first ? mid : 0, bottom: CGFloat = pos == .last ? mid : bounds.height
-        let line = NSBezierPath()
-        line.move(to: NSPoint(x: x, y: top)); line.line(to: NSPoint(x: x, y: bottom))
-        line.lineWidth = 1.5
-        Ink.grey.setStroke(); line.stroke()
-        let tick = NSBezierPath()
-        tick.move(to: NSPoint(x: x, y: mid)); tick.line(to: NSPoint(x: bounds.width, y: mid))
-        tick.lineWidth = lit ? 2.5 : 1.5
-        (lit ? Ink.green : Ink.grey).setStroke(); tick.stroke()
-    }
-}
-
 final class LineRow {
     let view: NSStackView
     let dot = Dot()
     // v89 (request 97): the tick: this line is part of the aggregate connection (Ticks.swift)
     let tick = NSButton(checkboxWithTitle: "", target: nil, action: nil)
-    let rail = Rail()                                    // v90 (request 100): the family's line
     let lead = NSView()
     let wifi = NSButton()           // v34 (request 51): in WIRES, this line shared over Wi-Fi to the house, in the lead's space
     let name: NSTextField
@@ -99,15 +73,12 @@ final class LineRow {
         // lead they stood partly outside it and a click could miss them; now they are items of the row, first in it,
         // and the lead is narrower by their width so nothing else moves.
         for b in [g4, g5] { b.setContentHuggingPriority(.required, for: .horizontal) }
-        lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - tick.fittingSize.width - Rail.width - 6)).isActive = true
+        lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - tick.fittingSize.width - 6)).isActive = true
         func mini(_ t: NSTextField, _ m: VUMeter, _ s: NSTextField) -> NSStackView {
             let r = NSStackView(views: [t, m, s]); r.orientation = .horizontal; r.spacing = 3; r.alignment = .centerY; return r
         }
         sigBox = NSStackView(views: [mini(tag1, meter, sig), mini(tag2, meter2, sig2)])
         sigBox.orientation = .vertical; sigBox.spacing = 0; sigBox.alignment = .leading
-        rail.translatesAutoresizingMaskIntoConstraints = false
-        rail.widthAnchor.constraint(equalToConstant: Rail.width).isActive = true
-        rail.heightAnchor.constraint(equalToConstant: 24).isActive = true
         tick.appearance = NSAppearance(named: .darkAqua)
         tick.setContentHuggingPriority(.required, for: .horizontal)
         testButton.isBordered = false
@@ -115,11 +86,10 @@ final class LineRow {
         testButton.contentTintColor = Ink.text
         testButton.setContentHuggingPriority(.required, for: .horizontal)
         result.textColor = Ink.dim
-        view = NSStackView(views: [rail, tick, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), sigBox, linePipe(), info, linePipe(), testButton, result])
+        view = NSStackView(views: [tick, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), sigBox, linePipe(), info, linePipe(), testButton, result])
         view.orientation = .horizontal
         view.spacing = 3
-        view.edgeInsets = NSEdgeInsets(top: 0, left: 2, bottom: 0, right: 6)
-        view.setCustomSpacing(0, after: rail)
+        view.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         view.translatesAutoresizingMaskIntoConstraints = false
         view.heightAnchor.constraint(equalToConstant: 24).isActive = true
     }
@@ -285,17 +255,6 @@ extension Stripe {
         }
         let ticked = Set(tickedNames)
         let tests = WebSpeedByConnection.all(), aggTest = AggTest.load()
-        // v90 (request 100): the families' rails, and a little more room between two families than inside one
-        let fam = families(names)
-        for (i, e) in entries.enumerated() {
-            guard let r = lineRows[e.name] else { continue }
-            let f = fam[e.name] ?? [e.name]
-            let prevSame = i > 0 && f.contains(entries[i - 1].name), nextSame = i + 1 < entries.count && f.contains(entries[i + 1].name)
-            r.rail.pos = f.count < 2 ? .none : !prevSame ? .first : nextSame ? .middle : .last
-            r.rail.lit = ticked.contains(e.name)
-            let gapAfter: CGFloat = nextSame ? 0 : 4
-            if column.customSpacing(after: r.view) != gapAfter { column.setCustomSpacing(gapAfter, after: r.view) }
-        }
         for e in entries {
             guard let r = lineRows[e.name] else { continue }
             let on = ticked.contains(e.name)
@@ -363,7 +322,7 @@ extension Stripe {
         // TEST runs speedtest.net over the Mac's route, to compare a combination with its single lines
         if let a = aggRow {
             if a.view.isHidden { a.view.isHidden = false; changed = true }
-            a.tick.alphaValue = 0; a.tick.isEnabled = false      // v90: alpha, not hidden, so its column stays (hidden collapsed it)
+            a.tick.isHidden = true
             a.name.stringValue = tickedNames.isEmpty ? "NO TICK: THE MAC" : "ALL TICKED"
             a.name.textColor = tickedNames.isEmpty ? Ink.text : Ink.green
             a.name.toolTip = tickedNames.isEmpty ? "No line ticked: the Mac straight on its own connection" : "The ticked lines together: " + tickedNames.joined(separator: " + ")

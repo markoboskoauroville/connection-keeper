@@ -892,8 +892,14 @@ the AX88179B left USB at 14:19 and Marko pressed OFF at 14:22:57; left OFF.
 
 **Status:** saved first; building in v89 together with requests 97 and 98.
 
-## 23.11.2026, request 100 (rows of the same device together, joined by a line: one family)
+## 23.11.2026, requests 100-103 (four weak points from the read-only assessment; Marko: "Yes, please start")
 
-> in user interface group the connections from the same device because now they are not grouped, so the same connections come next to each other. One is wired. One is Wi-Fi. And there should be some kind of a line connecting the two, so I know they are part of the same family.
+> Yes, please start
 
-**Status:** saved first; building in v90 (v89 already released).
+The four, approved together (assessment of 23.11.2026, building in v90):
+- **Request 100:** an idle bonded connection (SSH, a websocket, a Claude Code session) is not reset after 10 minutes by the relay; a dead destination is still found by TCP keepalive.
+- **Request 101:** the bond selftest gets speed thresholds that fail a real regression, and prints the gap to the 1.1x target.
+- **Request 102:** the keeper never power-cycles the Wi-Fi while another line carries or while the Wi-Fi is on a phone hotspot; it looks every 30 s on a hotspot; a dead default device with a second live line is not "the Mac is offline"; the bond's redial backoff starts over when a line comes back.
+- **Request 103:** a phone on its USB cable and its own hotspot are one line (the same SIM), in the server's sameLine rule.
+
+**Status 23.11.2026:** built in v90; branch check run 45278594513 green (idle kept 15 s, 4 s control ended; floors 0.50x / 0.25x with the goal printed; keeper ladder 4 cases; same-line 8 cases). Release and install: see TAKEOVER v90.

@@ -30,24 +30,23 @@ kbd{background:#333;border:1px solid #555;border-radius:4px;padding:0 5px;font:1
 <div class="stripe">
   <span class="grip mono">||<span class="n">14</span></span>
   <div class="row"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span class="n">1</span>
-    <span class="mono g">FRANKFURT</span> <span class="mono d">CROATIA</span><span class="n">W</span>
+    <span class="mono">☐ WI-FI</span> <span class="mono g">☑ CABLE</span> <span class="mono">☐ BOTH</span><span class="n">2</span>
     <span class="g">☁</span><span class="n">3</span> <span class="a">⋔</span><span class="n">4</span></div>
   <div class="row"><span class="mono g">ON</span> <span class="mono d">OFF</span><span class="n">5</span> ⚙<span class="n">6</span> ⟳<span class="n">7</span>
     <span class="mono g">AX88179B (USB)</span><span class="n">8</span>
     <span class="mono g">↓ 821 kbit/s</span> <span class="mono r">↑ 75 kbit/s</span><span class="n">9</span>
     <span class="mono y">ping 37 ms</span><span class="n">10</span> <span class="mono">99.4 GB</span><span class="n">11</span>
     <span style="margin-left:auto">⏲<span class="n">12</span> 〜<span class="n">13</span> <b>?</b><span class="n">H</span> <span class="mono d">TOP</span><span class="n">T</span></span></div>
-  <div class="row"><span class="mono g">☑</span><span class="n">2</span> <span class="mono g">AX88179B (USB)</span> <span class="d">│ LAN ▮▯▯ 100 Mb/s │</span> <span class="mono g">IN USE</span><span class="n">L</span> <span class="mono">TEST</span><span class="n">X</span> <span class="d">↓30.1 ↑40.2 23:10</span></div>
-  <div class="row"><span class="mono">☐</span> <span class="mono w">Nothing A142 (USB)</span> <span class="d">│ 4G ▮▮▯ −106 · −1 │</span> <span class="mono">READY</span> <span class="mono">TEST</span></div>
-  <div class="row"><span class="mono">☐</span> <span class="mono d">mantra</span> <span class="d">│ │</span> <span class="mono a">⇄ SAME ROUTER</span><span class="n">J</span> <span class="mono d">TEST</span></div>
-  <div class="row"><span class="mono g">ALL TICKED</span><span class="n">A</span> <span class="d">│ │</span> <span class="mono">2 LINES</span> <span class="mono">TEST</span></div>
+  <div class="row" style="justify-content:center"><span class="d">🔌</span><span class="d">📶</span><span class="n">F</span> <span class="mono g">ALL</span> <span class="mono d">IN USE</span><span class="n">A</span></div>
+  <div class="row"><span class="mono g">AX88179B (USB)</span> <span class="d">│ LAN ▮▯▯ 100 Mb/s │</span> <span class="mono g">IN USE</span><span class="n">L</span></div>
+  <div class="row"><span class="mono w">Nothing A142 (USB)</span><span class="n">J</span> <span class="d">│ 4G ▮▮▯ −106 · −1 │</span> <span class="mono">READY</span></div>
   <div class="row"><span class="mono g">⇅ SPEED</span> <span class="mono">↓ 12.1 ↑ 6.5 Mbit/s all lines together</span><span class="n">S</span></div>
 </div>
 
 <div class="legend">
  <div class="card"><b><span class="n">1</span> The window</b><p>A normal Mac window (v73): red hides it (the Dock icon or the menu bar icon brings it back), yellow minimises it to the Dock, drag the title bar to move it, an edge to make it wider. Settings: <kbd>⌘,</kbd>.</p></div>
  <div class="card"><b><span class="n">Q</span> Open · Quit</b><p>Open = the Mac goes out through Frankfurt (bonded). <kbd>⌘Q</kbd> = back to the Mac's normal connection, nothing of the app left (new connections never fail; the same if the app crashes). OFF = stop everything, also at the next login.</p></div>
- <div class="card"><b><span class="n">2</span> One tick per connection</b><p>Every connection the app knows is listed (cables, phones on USB, Wi-Fi networks in range, lines seen this week). Ticked = part of the aggregate connection. No tick = the Mac straight on its own connection. One tick = everything through that line. A ticked Wi-Fi network is joined.</p></div>
+ <div class="card"><b><span class="n">2</span> WI-FI · CABLE · BOTH</b><p>Which lines the Mac uses: only Wi-Fi, only cables and phones, or BOTH joined together (aggregation). A click on the word lists the networks or cables to tick.</p></div>
  <div class="card"><b><span class="n">W</span> FRANKFURT · CROATIA</b><p>Two buttons, the chosen one green. <b>FRANKFURT</b>: all traffic through the relay in Frankfurt; sites see Frankfurt, not your home address (one line is enough). <b>CROATIA</b>: straight over your own lines; sites see your home address. The switch is seamless: open connections finish the old way, new ones take the new way at once. Also in View (⇧⌘F, ⇧⌘C) and on a right click of the menu bar icon. Remembered.</p></div>
  <div class="card"><b><span class="n">B</span> ⇄ BOND</b><p><span class="g">⇄ FRA 2 · 48↓</span>: every connection through the relay in Frankfurt, bonded over 2 lines, 48 Mbit/s coming in. <span class="g">⇄ FRA 1</span>: one line: still through Frankfurt (the home address hidden, like a VPN), no speed gain. <span class="w">⇄ ASIDE</span> (amber): switched off, draining, or one line with "Bond only when it adds speed" (⚙): new connections go direct. <span class="r">⇄ DOWN</span>: no leg to the relay. STRICT: with no leg, nothing goes over the home line. A click runs the full check (Frankfurt, legs, DNS leaks, IPv6). Domains in the Direct list (⚙) skip Frankfurt and show the home address.</p></div>
  <div class="card"><b><span class="n">3</span> Cloud</b><p>Claude Code's connection to its server: green when it answers, red when calls drop.</p></div>
@@ -63,9 +62,9 @@ kbd{background:#333;border:1px solid #555;border-radius:4px;padding:0 5px;font:1
  <div class="card"><b><span class="n">13</span> Health</b><p>Every line at once: ping, jitter, loss, HTTPS times. Almost no data.</p></div>
  <div class="card"><b><span class="n">H</span> Help</b><p>This page. H again or <kbd>Esc</kbd> closes it.</p></div>
  <div class="card"><b><span class="n">T</span> TOP</b><p>Green: the stripe stays above every window.</p></div>
- <div class="card"><b><span class="n">A</span> ALL TICKED</b><p>The ticked lines together. Its TEST measures the combination, to compare with each line alone.</p></div>
- <div class="card"><b><span class="n">X</span> TEST</b><p>speedtest.net over this line only, in the background (about 40 s); the result and its time stay on the row. One test at a time.</p></div>
- <div class="card"><b><span class="n">J</span> The same road cancels</b><p>Two rows that are the same road out cannot both be ticked: one Wi-Fi at a time, a phone and its own hotspot (one SIM), two lines behind one router. Ticking one unticks the other, which says why for a few seconds (⇄ SAME PHONE, ⇄ SAME ROUTER, ⇄ ONE WI-FI).</p></div>
+ <div class="card"><b><span class="n">A</span> ALL · IN USE</b><p>ALL: every connection the Mac can see. IN USE: only the lines carrying traffic now.</p></div>
+ <div class="card"><b><span class="n">F</span> Filters (in ALL)</b><p>🔌 LAN: only wired lines (cables and phones over USB). 📶 Wi-Fi: only Wi-Fi networks. Green = on; press again for everything.</p></div>
+ <div class="card"><b><span class="n">J</span> Click a name to join</b><p><span class="w">White</span> = not in use. Click → <span class="g">green</span> = it joins the aggregated connection. Click again → it leaves.</p></div>
  <div class="card"><b><span class="n">L</span> Meters and state</b><p>The signal (cable speed, Wi-Fi or 4G/5G strength) and one word: IN USE, READY, NO DATA, AIRPLANE, VIA WI-FI, SAME UPLINK, NO NET.</p></div>
  <div class="card"><b><span class="n">S</span> Status line</b><p>All lines together and the downloads running; ✕ hides a line.</p></div>
  <div class="card"><b><span class="n">14</span> Grip</b><p>Drag the right edge: first the gaps close, then the letters shrink. Wider: gaps first, then bigger letters.</p></div>
@@ -83,8 +82,8 @@ kbd{background:#333;border:1px solid #555;border-radius:4px;padding:0 5px;font:1
 <h2>Faster internet in four steps</h2>
 <div class="steps">
  <div class="step">Plug in the phones by USB (data on, not on Wi-Fi), press ⟳.</div>
- <div class="step">Tick the lines you want joined (one of each road).</div>
- <div class="step">TEST each line, then TEST on ALL TICKED.</div>
+ <div class="step">Open <b>ALL</b>, press 🔌 to see the wired lines.</div>
+ <div class="step">Click each name until it is <span class="g">green</span>.</div>
  <div class="step">Press ⏲ and GO to check the speed.</div>
 </div>
 

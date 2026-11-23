@@ -50,6 +50,30 @@ jobs:
           python3 Tools/ci/handover_test.py "build/$APP.app/Contents/MacOS/ck-aggregate" "$T/agg" 18080 "$SHA" || ok=$?
           echo "--- aggregate log"; grep -E "HANDOVER|ck-aggregate v|taken" "$T/agg/aggregate.log" | tail -30
           exit $ok
+      - name: Bond idle test (v90; a stream silent longer than the relay's idle limit still echoes)
+        run: |
+          T=$(mktemp -d)
+          head -c 1024 /dev/urandom > "$T/x.bin"; SHA=$(shasum -a 256 "$T/x.bin" | cut -d' ' -f1)
+          openssl rand -hex 32 > "$T/token"
+          ok=0
+          # the relay as deployed (24 h): a stream silent for 15 s must still echo
+          build/ck-bond-server-darwin -listen 127.0.0.1:18445 -token-file "$T/token" -allow-local 2> "$T/relay.log" &
+          sleep 1
+          perl -e 'alarm 90; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" bond-selftest \
+            --server 127.0.0.1:18445 --token-file "$T/token" --url http://127.0.0.1:18080/x.bin --sha "$SHA" --idle-only 15 --idle-expect kept || ok=1
+          echo "--- relay log"; grep -E "idle stream|ends" "$T/relay.log" | head -3
+          pkill -f ck-bond-server-darwin || true; sleep 1
+          # the control: the old rule shrunk to 4 s must end the same stream (the test sees a reset when there is one)
+          CK_BOND_IDLE=4s build/ck-bond-server-darwin -listen 127.0.0.1:18446 -token-file "$T/token" -allow-local 2> "$T/relay2.log" &
+          sleep 1
+          perl -e 'alarm 90; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" bond-selftest \
+            --server 127.0.0.1:18446 --token-file "$T/token" --url http://127.0.0.1:18080/x.bin --sha "$SHA" --idle-only 10 --idle-expect ended || ok=1
+          pkill -f ck-bond-server-darwin || true
+          exit $ok
+      - name: Keeper ladder test (v90; no Wi-Fi power cycle while a second line carries or on a phone hotspot)
+        run: ./Tools/ci/keeper_test.sh "build/$APP.app/Contents/MacOS/connection-keeperd"
+      - name: Same-line rule (v90; a phone and its own hotspot are one line)
+        run: perl -e 'alarm 30; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" sameline-selftest
       - name: Way test (FRANKFURT → CROATIA → FRANKFURT under load; request 88)
         run: |
           T=$(mktemp -d); mkdir -p "$T/st"
@@ -74,6 +98,7 @@ jobs:
       - name: Pack
         run: cd build && cp "$(ls *-connection-keeper-v*.zip | head -1)" app.zip
       - name: Release (Latest)
+        if: github.ref == 'refs/heads/main'      # v90: a run started by hand on another ref checks, never releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

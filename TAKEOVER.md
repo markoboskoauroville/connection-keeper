@@ -1,3 +1,30 @@
+**23.11.2026, v90 (requests 100-103, the four weak points of the read-only assessment; no interface change).**
+(1) Relay (Sources/Bond/server/group.go): an idle bonded stream is no longer reset after 10 minutes (SSH, websockets, Claude
+Code died only when bonded); the safety net is 24 h (`streamIdle`, env CK_BOND_IDLE shortens it for tests), the relay's own
+outbound socket has TCP keepalive 30 s (`dialKeepAlive`; Linux gives up after 9 probes, ~5 min) so a dead destination is
+still reaped; relayVersion "v90", its start line says the idle limit. The Mac side never had an idle timer (bridge: deadline 0).
+CI "Bond idle test": a stream to a local echo silent 15 s on the relay as deployed is kept; the control (CK_BOND_IDLE=4s, the
+old rule shrunk) ends it. (2) Bond selftest speed floors (BondTest.swift `BondFloors`): fetch 1 >= 0.50x the best line (40
+Mbit/s), fetch 2 >= 0.25x of 80 (20 Mbit/s); every run prints "SPEED fetch 1/2: N x ... KNOWN SHORTFALL" against the goals
+1.1x and 0.7x. Measured before setting them: bench run 45274793701 (v89 HEAD, 6 rounds): fetch 1 117.2 / 77.4 / 99.7 / 73.6 /
+86.5 / 86.7 (median 86.6 = 1.08x), fetch 2 69.3 / 56.9 / 63.3 / 39.3 / 65.8 / 42.6 (median 60.1 = 0.75x); v80 in the same
+runner 58.5-114.1 / 29.1-68.1; build-run history v66-v88: fetch 1 49.7-105.6, fetch 2 25.8-67.0. So the goal 1.1x is met
+about half the time, not reliably: the scheduler is a separate, later job. (3) Keeper (Sources/Daemon/main.swift
+checkAndHeal): `liveElsewhere()` = a line ck-aggregate's /status calls alive on another device than the default route, else
+a cable of the list answering a ping through itself. With the aggregation on and such a line: "NOT OFFLINE ... no ladder"
+(next look 30 s). The Wi-Fi power cycle is skipped while such a line exists or while en0 is on a phone hotspot
+(phone-hotspots.txt) - "Wi-Fi power cycle skipped (en0): ..."; on a hotspot the next look is 30 s, not 300. Bond.swift
+manage(): a change of the path set (a device came, went or came back) resets the redial backoff (3/6/12/24/30 s), logged
+"BOND paths changed: redial backoff reset". CI "Keeper ladder test" (Tools/ci/keeper_test.sh, new flags --simulate-wifi,
+--simulate-ssid, --simulate-other-line, --simulate-aggregate with --simulate-offline): the cycle appears only when the Wi-Fi
+is alone and not a hotspot. (4) ck-aggregate sameLine(): a phone on its cable and its own hotspot are one line (the same
+SIM): both cellular and the hotspot's learned owner (phone-hotspot-owners.json, v89) is that phone, or (owner unknown) the
+same public address; two phones with two serials, or a hotspot owned by another phone, stay two lines; the phone on the
+cable is kept, the hotspot listed SAME UPLINK. The ONLY PHONES TICKED UDP road uses the old rule (twins: false) so a
+hotspot still carries UDP beside its phone. v89 had made the same exclusion in the ticks only (CableOnly owners), not in
+sameLine. CI "Same-line rule" (`ck-aggregate sameline-selftest`, 8 cases). build.yml: the Release step runs only on main
+(a run started by hand on another ref checks and never releases).
+
 **14.11.2026, v82 (request 91): STANDBY badge; the speed test window draggable; no speed test over the Nothing's SIM.**
 ck-aggregate's /status gives each line a "role" (active / standby / fallback, from Server.usable). In NOTHING ONLY the
 stripe's rows, the ALL tab and the ▾ lists show the Nothing "ACTIVE" (green) and AX88179B "STANDBY" (dim name, grey word, no

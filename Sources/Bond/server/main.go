@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-const relayVersion = "v80"
+const relayVersion = "v90"
 
 const (
 	maxGroups      = 64
@@ -75,7 +75,7 @@ func main() {
 	if inherited {
 		how = "the socket handed over by the old process"
 	}
-	log.Printf("BOND ckbond v1 (%s) pid %d on %s, %s (local destinations %s)", relayVersion, os.Getpid(), *listen, how, map[bool]string{true: "allowed", false: "refused"}[*allowLocal])
+	log.Printf("BOND ckbond v1 (%s) pid %d on %s, %s (local destinations %s; an idle stream ends after %s)", relayVersion, os.Getpid(), *listen, how, map[bool]string{true: "allowed", false: "refused"}[*allowLocal], streamIdle)
 	readyForParent()
 	sdNotify(fmt.Sprintf("MAINPID=%d\nREADY=1", os.Getpid()))
 	go s.signals(ln, *drainFor)

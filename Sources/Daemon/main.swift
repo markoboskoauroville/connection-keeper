@@ -14,6 +14,19 @@ let simulateOffline = args.contains("--simulate-offline")
 let dryRunFlag = args.contains("--dry-run") || simulateOffline
 let once = args.contains("--once")
 let fast = args.contains("--fast")
+// v90 (assessment 23.11.2026), CI only, together with --simulate-offline: what the ladder sees around it.
+//   --simulate-wifi en0          the Wi-Fi device (a runner has none)
+//   --simulate-ssid Something    the network it is on (a phone hotspot when the name is one)
+//   --simulate-other-line NAME   another line carries while the default device does not
+//   --simulate-aggregate         the aggregation is on (traffic rides ck-aggregate's lines)
+func argValue(_ k: String) -> String? {
+    let a = CommandLine.arguments
+    return a.firstIndex(of: k).flatMap { $0 + 1 < a.count ? a[$0 + 1] : nil }
+}
+let simWifi = simulateOffline ? argValue("--simulate-wifi") : nil
+let simSSID = simulateOffline ? argValue("--simulate-ssid") : nil
+let simOtherLine = simulateOffline ? argValue("--simulate-other-line") : nil
+let simAggregate = simulateOffline && args.contains("--simulate-aggregate")
 
 // connection-keeperd --simulate-failover [FROM TO]
 //   writes the red alert as if FROM had died and the keeper had moved to TO, and exits. It touches no
@@ -79,7 +92,26 @@ final class Keeper {
     var failures = 0
     var diedAt: Date?                       // when the current trouble began
     var manual = false                      // a switch Marko asked for: no red alert
-    var wifiIface: String? { Net.wifiInterface() }   // asked every time (v12: a lazy answer stuck empty since a login)
+    var wifiIface: String? { simWifi ?? Net.wifiInterface() }   // asked every time (v12: a lazy answer stuck empty since a login)
+    func ssid(_ iface: String) -> String? { simSSID ?? Net.currentSSID(iface) }
+    // v90: the Mac's Wi-Fi is on a phone's hotspot (phone-hotspots.txt): its SIM decides; a power cycle cannot help it
+    var onPhoneHotspot: Bool { wifiIface.flatMap { ssid($0) }.map { CableOnly.isPhoneHotspot($0) } ?? false }
+    var aggregating: Bool { simAggregate || (!simulateOffline && Aggregation.aggregateMode) }
+
+    // v90 (assessment 23.11.2026): the probe is pinned to the default-route device, so a dead default device is not "the
+    // Mac is offline" while another line carries. ck-aggregate's own health check first (every line it holds, also
+    // NOTHING ONLY's standby), else a cable of the list that answers a ping through itself. The line's name, or nil.
+    func liveElsewhere() -> String? {
+        if simulateOffline { return simOtherLine }
+        let dead = Net.defaultRouteInterface()
+        if let st = Aggregation.status(), let l = st.lines.first(where: { $0.alive && $0.device != dead }) { return "\(l.name) (\(l.device), ck-aggregate)" }
+        for c in cfg.connections where c.enabled && c.kind == "lan" {
+            if let d = Net.lanDevice(c), d != dead, Net.ipAddress(d) != nil, Net.onlineVia(d, host: cfg.pingHost) != nil { return "\(c.name) (\(d))" }
+        }
+        return nil
+    }
+    // v90: the next look; 30 s while the Wi-Fi is on a phone's hotspot (a SIM that runs out of data shows quickly)
+    func nextLook() -> Double { onPhoneHotspot ? Double(min(30, cfg.intervalSeconds)) : Double(cfg.intervalSeconds) }
 
     init() {
         dryRun = dryRunFlag || cfg.dryRun
@@ -182,7 +214,7 @@ final class Keeper {
             clearAlertIfHome()
             log("online via \(state.current ?? "?") (\(how)\(ms.map { String(format: ", %.0f ms", $0) } ?? ""))")
         }
-        state.nextCheck = Date().addingTimeInterval(Double(cfg.intervalSeconds))
+        state.nextCheck = Date().addingTimeInterval(nextLook())
     }
 
     // The ladder: retry, rejoin, the others in order, Wi-Fi power off and on, then back off.
@@ -190,6 +222,14 @@ final class Keeper {
         setPhase("checking", healthy: state.healthy)
         var p = probe(); record(p)
         if p.isOnline { online(p); return }
+        // v90: with the aggregation on, the traffic rides ck-aggregate's lines; one of them alive is not an outage of the Mac
+        if aggregating, let other = liveElsewhere() {
+            failures = 0
+            setPhase("ok: \(state.current ?? "the default device") has no internet, \(other) carries", healthy: true)
+            log("NOT OFFLINE: \(state.current ?? "the default device") does not answer (\(state.lastCheck?.how ?? "?")), but \(other) carries the aggregation: no ladder")
+            state.nextCheck = Date().addingTimeInterval(30)
+            return
+        }
         diedAt = Date()
         log("OFFLINE: \(state.lastCheck?.how ?? "?") on \(state.current ?? "no network")")
 
@@ -207,7 +247,7 @@ final class Keeper {
         if !skipped.isEmpty { log("ladder: \(skipped.map { "\"\($0.name)\"" }.joined(separator: ", ")) skipped: a phone hotspot (joined only by hand)") }
         let enabled = cfg.connections.filter { $0.enabled && !($0.kind == "wifi" && CableOnly.isPhoneHotspot($0.name)) }
         let wifi = wifiIface
-        let here = wifi.flatMap { Net.currentSSID($0) }
+        let here = wifi.flatMap { ssid($0) }
 
         if let here, let c = enabled.first(where: { $0.kind == "wifi" && $0.name == here }) {
             if attempt("rejoin \"\(here)\"", { WifiDriver().activate(c, keeper: self) }) { online(probe()); return }
@@ -215,7 +255,12 @@ final class Keeper {
         for c in enabled where !(c.kind == "wifi" && c.name == here) {
             if bringUp(c) { online(probe()); return }
         }
-        if let wifi {
+        // v90 (23.11.2026: the hotspot's SIM had no data; the cycle added about two minutes and the Claude API was gone for
+        // 212 s): the Wi-Fi is never power-cycled while another line carries, nor when it is on a phone's hotspot
+        let other = liveElsewhere()
+        if let wifi, other != nil || onPhoneHotspot {
+            log("Wi-Fi power cycle skipped (\(wifi)): " + (other.map { "\($0) still carries" } ?? "on the phone hotspot \"\(here ?? "?")\" (its SIM decides, a power cycle cannot help)"))
+        } else if let wifi {
             let cycled = attempt("Wi-Fi power off and on (\(wifi))") {
                 if dryRun { log("WOULD switch Wi-Fi power off, wait 5 s, on"); return false }
                 _ = Net.setWifiPower(wifi, false); pause(5); _ = Net.setWifiPower(wifi, true); pause(20)
@@ -228,7 +273,7 @@ final class Keeper {
         }
 
         failures += 1
-        let delay = min(60 * pow(2, Double(failures - 1)), Double(cfg.intervalSeconds))
+        let delay = min(60 * pow(2, Double(failures - 1)), nextLook())
         state.nextCheck = Date().addingTimeInterval(delay)
         let others = enabled.filter { !($0.kind == "wifi" && $0.name == here) }.map { $0.name }
         setPhase("\(noOtherPrefix) — \(here ?? "the Wi-Fi") dead, \(others.isEmpty ? "none in the list" : others.joined(separator: ", ") + " not working") · next try \(Int(delay)) s", healthy: false)

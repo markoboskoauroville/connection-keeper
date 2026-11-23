@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"sort"
 	"sync"
 	"syscall"
@@ -22,7 +23,6 @@ const (
 	legAckEvery    = 32 << 10  // a leg ACK at least every 32 KB received (else on the 50 ms tick)
 	tick           = 50 * time.Millisecond
 	legSilence     = 3.0 // seconds without a record: the leg is dead
-	streamIdle     = 10 * time.Minute
 	groupLinger    = 60 * time.Second
 	maxStreams     = 1024
 	maxLegs        = 64
@@ -31,6 +31,19 @@ const (
 )
 
 var epoch = time.Now()
+
+// v90 (assessment 23.11.2026): a bonded stream that says nothing (an SSH session, a websocket, Claude Code waiting) is
+// no longer reset after 10 minutes; a direct connection had no such limit. The safety net is 24 hours (env CK_BOND_IDLE,
+// a Go duration, shortens it for the selftest); a dead destination is found by TCP keepalive on the relay's own socket
+// (dialKeepAlive), a dead Mac by its legs going silent (the group ends 60 s after its last leg).
+var streamIdle = func() time.Duration {
+	if d, err := time.ParseDuration(os.Getenv("CK_BOND_IDLE")); err == nil && d > 0 {
+		return d
+	}
+	return 24 * time.Hour
+}()
+
+const dialKeepAlive = 30 * time.Second // idle 30 s, then a probe every 30 s; Linux gives up after 9 unanswered (~5 min)
 
 func mono() float64 { return time.Since(epoch).Seconds() }
 
@@ -594,7 +607,7 @@ func refuseLocal(network, address string, _ syscall.RawConn) error {
 
 func (s *stream) dial(target string) {
 	g := s.g
-	d := net.Dialer{Timeout: dialTimeout}
+	d := net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
 	if g.srv.dialFrom != nil {
 		d.LocalAddr = &net.TCPAddr{IP: g.srv.dialFrom} // CI: the relay's connections come from another address
 	}

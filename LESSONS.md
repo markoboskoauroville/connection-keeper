@@ -440,3 +440,13 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 
 ## Lesson: hover card (16.11.2026)
 The item is image-only, so the pipes are drawn into the image, with room (pad) on both sides; the mouse is polled by the kit (one copy of the item per display).
+
+## Lessons: v90 (23.11.2026)
+- A test that shortens a limit to prove the limit is gone proves nothing: with CK_BOND_IDLE=4s the stream was (rightly)
+  ended. Test the deployed default (a stream silent longer than the test, kept) AND a control with the short limit (ended),
+  so the test is known to see a reset when there is one.
+- Speed floors on GitHub's runner: measure first. The same code read fetch 1 from 49.7 to 117.2 Mbit/s across runs; a floor
+  near the goal (1.1x) would have turned main red about half the time. Floors sit under the lowest good run, the goal is
+  printed as a KNOWN SHORTFALL line instead.
+- A build check of a branch needs the Release step guarded (`if: github.ref == 'refs/heads/main'`), else a dispatch on a
+  branch publishes vN ahead of main.
