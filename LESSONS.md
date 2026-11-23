@@ -472,3 +472,5 @@ The item is image-only, so the pipes are drawn into the image, with room (pad) o
 - **ck-tunnel deletes a scoped default route it no longer owns.** It adds `-ifscope <main line> default` at up and deletes its
   list at down; if the service order changed meanwhile, macOS owns that route by then and the line is left with no scoped
   default ("No route to host" with ping -b en0, NO DATA on the stripe). Remedy without root: put that service first again.
+- `pgrep -f "<path with (Mantra)>"` treats the parentheses as a regex group and finds nothing: the first install attempt
+  replaced the bundle under the still-running app. Use the pid from `pgrep -fl 'Connection Keeper$'` or escape the path.

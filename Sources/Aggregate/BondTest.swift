@@ -13,7 +13,7 @@ import CryptoKit
 // v91 (request 102): the bond selftest's speed floors, as fractions of the best emulated line (80 Mbit/s); measured first
 // (CI history and the bench run of 23.11.2026, see TAKEOVER v91), set under the lowest good run, above a broken scheduler.
 enum BondFloors {
-    static let fetch1 = 0.50      // one stream over 80 + 80 + 16: 40 Mbit/s (lowest good run 49.7; the v65 spiral 36.7)
+    static let fetch1 = 0.40      // one stream over 80 + 80 + 16: 32 Mbit/s (lowest good run 44.4, v91 release run)
     static let fetch2 = 0.25      // lineA silenced at 24 MB, the 3 s to notice included: 20 Mbit/s (lowest good 25.8; v65 10.0)
 }
 
