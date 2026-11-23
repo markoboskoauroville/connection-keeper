@@ -27,3 +27,7 @@
   return {down: after("DOWNLOAD MBPS"), up: after("UPLOAD MBPS"), ping: after("PING MS"), unit: "Mbps",
           ip: ip, isp: ipAt > 0 ? lines[ipAt - 1] : "", url: location.href, done: /\/result\//.test(location.href)};
 })()
+//== TEXT
+(function () {
+  return location.href + " | " + (document.querySelector("main") || document.body).innerText.split("\n").map(t => t.trim()).filter(t => t).slice(0, 40).join(" / ");
+})()
