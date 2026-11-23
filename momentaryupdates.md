@@ -913,3 +913,9 @@ The four, approved together (assessment of 23.11.2026, building in v91; v90 was 
 - **Request 104:** a phone on its USB cable and its own hotspot are one line (the same SIM), in the server's sameLine rule.
 
 **Status 23.11.2026:** built in v91; branch check run 45278594513 green (idle kept 15 s, 4 s control ended; floors 0.50x / 0.25x with the goal printed; keeper ladder 4 cases; same-line 8 cases). Release and install: see TAKEOVER v90.
+
+## 24.11.2026, request 105 (a DEFAULT DOWNLOAD LINE mark on the rows: big downloads go to the cheaper line)
+
+> Add a tick or check mark for line to be as default download line, which means in practice if I download bigger files, they're automatically going to my cheaper line which I am going to select.
+
+**Status:** saved first; building in the next free version.
