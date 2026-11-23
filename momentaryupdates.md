@@ -871,3 +871,15 @@ the AX88179B left USB at 14:19 and Marko pressed OFF at 14:22:57; left OFF.
 
 16.11.2026 (Marko, 16.11.2026): "Please with all my apps on the menu bar, make a comprehensive pop-up menu. When I hover over, I want to see what is it and what is it doing." and "for my apps always make a pipes before and after so I know where one app ends and other begins."
 **Status:** saved first; building in v88 (hover wiring only: HoverCard kit, pipes in the menu-bar image; no change to aggregation or tethering).
+
+## 23.11.2026, request 97 (all connections always listed, a tick each; WIRES / WI-FI out; same connection cancels)
+
+> I want you to simplify it maximum by changing the user interface in the way that always all connections are listed and I have check marks for each connection. This Wi-Fi cable, both these things go out, and whatever I check mark becomes part of the aggregate connection. Of course, if I'm checking 2 things from the same connection, they are canceling each other. For example, I have Something Wi-Fi and I have Nothing USB. Only 1 can be active at a time.
+
+**Status:** saved first; building in v89.
+
+## 23.11.2026, request 98 (the window climbs up the screen by itself at every refresh)
+
+> notice the bug in UI that its interface, with every refresh, is moving up through the screen by itself. It's just the thing is moving uncontrollably through the screen. Why?
+
+**Status:** saved first; cause and fix in v89 (rule: a refresh never changes the window's top-left corner; only Marko moves it).
