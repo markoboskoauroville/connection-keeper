@@ -127,11 +127,6 @@ final class AppShell: NSObject, NSApplicationDelegate, NSWindowDelegate {
         add(appMenu, to: main)
 
         let view = NSMenu(title: "View")
-        view.addItem(item("All Lines", #selector(Stripe.pickTabAll), "1", target: stripe))
-        view.addItem(item("Lines in Use", #selector(Stripe.pickTabUse), "2", target: stripe))
-        view.addItem(item("LAN Only", #selector(Stripe.pickLanFilter), "3", target: stripe))
-        view.addItem(item("Wi-Fi Only", #selector(Stripe.pickWifiFilter), "4", target: stripe))
-        view.addItem(.separator())
         view.addItem(item("Frankfurt (through the relay)", #selector(Stripe.pickFrankfurt), "f", target: stripe, mods: [.command, .shift]))
         view.addItem(item("Croatia (straight)", #selector(Stripe.pickCroatia), "c", target: stripe, mods: [.command, .shift]))
         view.addItem(.separator())
