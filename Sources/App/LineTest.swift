@@ -182,6 +182,13 @@ final class LineSpeedTest: NSObject, WKNavigationDelegate {
     let started = Date()
     var phase = "load"
     var goAt: Date?
+    // v92: GO is pressed only 3 s after the page has finished loading, and pressed again while it is still on the page
+    // (v89-v90: GO clicked ~1 s after the start, before speedtest.net's own script was ready, was ignored: 5 of 6 runs
+    // sat on the start page until the 120 s timeout; the one run that finished had pressed GO at 4 s)
+    var loadedAt: Date?
+    var running: Date?
+    var presses = 0
+    var lastProgress = Date.distantPast
     var finished = false
     var failLogged = false
     var last: [String: Any] = [:]
@@ -215,6 +222,7 @@ final class LineSpeedTest: NSObject, WKNavigationDelegate {
             }
         }
         config.websiteDataStore = store
+        if #available(macOS 14.0, *) { config.preferences.inactiveSchedulingPolicy = .none }   // v92: never throttled while unseen
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1000, height: 800), configuration: config)
         // a window nobody sees (alpha 0, no mouse, no Dock, no ⌘-Tab): WebKit runs a page that is in a window at full speed
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 800), styleMask: [.borderless], backing: .buffered, defer: false)
@@ -248,28 +256,50 @@ final class LineSpeedTest: NSObject, WKNavigationDelegate {
         web.evaluateJavaScript(s) { r, _ in then(r) }
     }
 
-    // once a second: the banner declined, GO pressed (within 30 s of the start), then the numbers read until the result page
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if loadedAt == nil, webView.url?.host?.contains("speedtest.net") == true { loadedAt = Date() }
+    }
+
+    // once a second: the banner declined; GO pressed 3 s after the page loaded; pressed again (up to 4 times) while GO is
+    // still there 8 s later; then the numbers read until the result page
     func tick() {
         guard !finished else { return }
         let age = Date().timeIntervalSince(started)
-        if goAt == nil {
-            if age > 40 { finish(nil, "speedtest.net showed no GO within 40 s"); return }
+        if running == nil {
+            if age > 60 { finish(nil, presses == 0 ? "speedtest.net did not load within 60 s" : "the test did not start after \(presses) presses of GO"); return }
             js("DECLINE") { _ in }
-            js("GO") { [weak self] r in
-                guard let self, (r as? String) == "go" else { return }
-                if self.goAt == nil { self.goAt = Date(); appendLog("\(logStamp()) LINE TEST \(self.name): GO pressed") }
+            if let l = loadedAt, Date().timeIntervalSince(l) >= 3 {
+                if let g = goAt, Date().timeIntervalSince(g) < 8 {
+                    js("GOVISIBLE") { [weak self] r in
+                        guard let self, self.running == nil, (r as? Bool) == false else { return }
+                        self.running = Date()
+                        appendLog("\(logStamp()) LINE TEST \(self.name): the test runs (GO gone after \(self.presses) press\(self.presses == 1 ? "" : "es"))")
+                    }
+                } else if presses < 4 {
+                    js("GO") { [weak self] r in
+                        guard let self, (r as? String) == "go" else { return }
+                        self.presses += 1; self.goAt = Date()
+                        appendLog("\(logStamp()) LINE TEST \(self.name): GO pressed (\(self.presses))")
+                    }
+                } else if let g = goAt, Date().timeIntervalSince(g) >= 8 {
+                    finish(nil, "the test did not start after 4 presses of GO"); return
+                }
             }
         } else {
-            if Date().timeIntervalSince(goAt!) > 120 { finish(nil, "no result within 120 s"); return }
+            if Date().timeIntervalSince(running!) > 120 { finish(nil, "no result within 120 s"); return }
             js("RESULT") { [weak self] r in
                 guard let self, let d = r as? [String: Any] else { return }
                 self.last = d
+                if Date().timeIntervalSince(self.lastProgress) >= 15 {
+                    self.lastProgress = Date()
+                    appendLog("\(logStamp()) LINE TEST \(self.name): so far ↓ \(d["down"] as? String ?? "") ↑ \(d["up"] as? String ?? "")")
+                }
                 let down = Double(d["down"] as? String ?? ""), up = Double(d["up"] as? String ?? "")
                 if (d["done"] as? Bool) == true, let down, let up {
                     let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm"
                     let t = DateFormatter(); t.dateFormat = "HH:mm"
                     let s = WebSpeed(down_mbps: down, up_mbps: up, ping_ms: Double(d["ping"] as? String ?? ""), url: d["url"] as? String,
-                                     at: f.string(from: Date()), time: t.string(from: Date()), seconds: Date().timeIntervalSince(self.goAt!))
+                                     at: f.string(from: Date()), time: t.string(from: Date()), seconds: Date().timeIntervalSince(self.running ?? self.started))
                     self.finish(s, nil)
                 }
             }

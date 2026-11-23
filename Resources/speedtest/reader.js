@@ -31,3 +31,10 @@
 (function () {
   return location.href + " | " + (document.querySelector("main") || document.body).innerText.split("\n").map(t => t.trim()).filter(t => t).slice(0, 40).join(" / ");
 })()
+//== GOVISIBLE
+(function () {
+  const vis = e => !!(e && e.offsetParent);
+  const go = [...document.querySelectorAll("button, a")].find(e => vis(e) && e.innerText && e.innerText.trim() === "GO")
+          || document.querySelector('.js-start-test, a[aria-label^="start speed test"]');
+  return !!(go && vis(go));
+})()

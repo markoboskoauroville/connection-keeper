@@ -401,6 +401,10 @@ final class Stripe: NSObject {
         dlBox.alignment = .leading
         dlBox.spacing = 0
         dlBox.isHidden = true
+        // v92: the bond word in a fixed slot for its widest words (v29's digital display); its number changing every second
+        // moved ☁, TS and PING VM by 8 pt under the mouse
+        _ = fixWidth(bondWord, textWidth("⇄ FRA 8 · 888↓ STRICT", .monospacedSystemFont(ofSize: 12, weight: .bold)))
+        bondWord.alignment = .left
         let checkRow = NSStackView(views: [lights, frankfurtWord, croatiaWord, bondWord, cloudWord, tsWord, pingVMWord])
         checkRow.orientation = .horizontal
         checkRow.spacing = 3
