@@ -891,3 +891,9 @@ the AX88179B left USB at 14:19 and Marko pressed OFF at 14:22:57; left OFF.
 > now all combinations are possible for aggregation. We have two wired connections and two Wi-Fi, so any combination should work and should be tested for the speed.
 
 **Status:** saved first; building in v89 together with requests 97 and 98.
+
+## 23.11.2026, request 100 (rows of the same device together, joined by a line: one family)
+
+> in user interface group the connections from the same device because now they are not grouped, so the same connections come next to each other. One is wired. One is Wi-Fi. And there should be some kind of a line connecting the two, so I know they are part of the same family.
+
+**Status:** saved first; building in v90 (v89 already released).
