@@ -80,6 +80,14 @@ func currentLines() -> [NetLine] {
     return out
 }
 
+// request 105: a download uses only the DEFAULT DOWNLOAD LINE when one is marked on the stripe and it is here and alive;
+// otherwise every line, as before (a download never waits for a line that is not there).
+func downloadLines() -> [NetLine] {
+    let all = currentLines()
+    guard let name = DownloadLine.line, let l = all.first(where: { $0.name == name }) else { return all }
+    return [l]
+}
+
 // MARK: - curl as a byte stream
 
 // Runs curl with its body on stdout, handing each block to `onData` as it comes; returns curl's exit status, the HTTP
@@ -658,7 +666,7 @@ func runJob(_ j: Job) -> Int32 {
     let perLine = 3
     let g = DispatchGroup()
     func spawn() {
-        for l in currentLines() where (running[l.name] ?? 0) < perLine {
+        for l in downloadLines() where (running[l.name] ?? 0) < perLine {     // request 105
             if (running[l.name] ?? 0) == 0 && !(j.stats[l.name].map { $0.restUntil > now() } ?? false) { j.event("\(l.name): \(perLine) connections on this line") }
             for _ in (running[l.name] ?? 0)..<perLine {
                 running[l.name, default: 0] += 1
@@ -742,8 +750,10 @@ func get(_ args: [String]) -> Int32 {
     if let old = loadJob(id), old.url == url, FileManager.default.fileExists(atPath: old.part) {
         say("\(id) is already started: resuming it"); return resume(id)
     }
-    let lines = currentLines()
-    say("lines: \(lines.map(\.name).joined(separator: ", "))")
+    let lines = downloadLines()
+    var dlWords = ""
+    if let d = DownloadLine.line { dlWords = lines.count == 1 && lines[0].name == d ? " (the download line \(d))" : " (the download line \(d) is not here: every line)" }
+    say("lines: \(lines.map(\.name).joined(separator: ", "))" + dlWords)
     guard let (size, sha) = probe(url, lines: lines) else { say("the size could not be read (no line answered, or the server gives none)"); return 1 }
     let j = Job(id: id, url: url, dest: dest, name: opt("--name") ?? file)
     j.size = size; j.sha = sha

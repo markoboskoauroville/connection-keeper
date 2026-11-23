@@ -74,6 +74,8 @@ jobs:
         run: ./Tools/ci/keeper_test.sh "build/$APP.app/Contents/MacOS/connection-keeperd"
       - name: Same-line rule (v91; a phone and its own hotspot are one line)
         run: perl -e 'alarm 30; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" sameline-selftest
+      - name: Download line rule (request 105; a big transfer to a host sends its new connections to the download line)
+        run: CK_DL_FILE="$(mktemp)" perl -e 'alarm 30; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" download-selftest
       - name: Way test (FRANKFURT → CROATIA → FRANKFURT under load; request 88)
         run: |
           T=$(mktemp -d); mkdir -p "$T/st"

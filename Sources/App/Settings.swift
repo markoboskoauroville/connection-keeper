@@ -21,6 +21,7 @@ final class SettingsWindow: NSObject {
     let dataAuto = NSButton(checkboxWithTitle: "Check the data balance by itself every", target: nil, action: nil)
     let dataHours = NSTextField(string: "")
     let unitPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    let dlPopup = NSPopUpButton(frame: .zero, pullsDown: false)       // request 105: from how many MB a transfer is a big download
     let strictBox = NSButton(checkboxWithTitle: "PRIVACY: STRICT (no bond leg up = new connections refused, never over the home line)", target: nil, action: nil)   // v75
     let speedOnlyBox = NSButton(checkboxWithTitle: "Bond only when it adds speed (2+ lines); off: one line also goes through Frankfurt (privacy)", target: nil, action: nil)   // v79
     let directButton = NSButton(title: "Direct list… (domains that skip Frankfurt and show the home address)", target: nil, action: nil)
@@ -93,12 +94,17 @@ final class SettingsWindow: NSObject {
         unitPopup.target = self
         unitPopup.action = #selector(unitChanged)
         let unitRow = NSStackView(views: [NSTextField(labelWithString: "Speed unit"), unitPopup])
+        for mb in [10, 25, 50, 100, 250, 500] { dlPopup.addItem(withTitle: "\(mb) MB"); dlPopup.lastItem?.representedObject = mb }
+        dlPopup.selectItem(at: [10, 25, 50, 100, 250, 500].firstIndex(of: Int(DownloadLine.thresholdMB)) ?? 2)
+        dlPopup.target = self
+        dlPopup.action = #selector(dlChanged)
+        let dlRow = NSStackView(views: [NSTextField(labelWithString: "A big download (to the ↓ line) from"), dlPopup])
 
         alertLine.lineBreakMode = .byWordWrapping
         alertLine.maximumNumberOfLines = 0
         alertLine.preferredMaxLayoutWidth = 560
 
-        let stack = NSStackView(views: [alertLine, title, rows, speedRow, NSStackView(views: [addPopup, addLanPopup]), intervalRow, unitRow, dataRow, dataAutoRow, claudeProbe, onTop, strictBox, speedOnlyBox, directButton, dry, version])
+        let stack = NSStackView(views: [alertLine, title, rows, speedRow, NSStackView(views: [addPopup, addLanPopup]), intervalRow, unitRow, dlRow, dataRow, dataAutoRow, claudeProbe, onTop, strictBox, speedOnlyBox, directButton, dry, version])
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
@@ -195,6 +201,12 @@ final class SettingsWindow: NSObject {
         let origin = window.frame.origin, oldHeight = window.frame.height
         window.setContentSize(NSSize(width: width, height: want.height))
         window.setFrameOrigin(NSPoint(x: origin.x, y: origin.y + oldHeight - window.frame.height))   // keep the top
+    }
+
+    @objc func dlChanged() {
+        guard let mb = dlPopup.selectedItem?.representedObject as? Int else { return }
+        DownloadLine.set(line: DownloadLine.line, thresholdMB: Double(mb))
+        appendLog("\(logStamp()) DOWNLOAD LINE: a big download from \(mb) MB (Settings)")
     }
 
     @objc func unitChanged() {

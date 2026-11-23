@@ -712,7 +712,7 @@ extension Server {
         if Bond.strictBlocks(host: host) { _ = sendAll(c, [5, 2, 0, 1, 0, 0, 0, 0, 0, 0]); close(c); return }   // v74: PRIVACY STRICT
         guard let (out, u) = open(host, port, for: c) else { _ = sendAll(c, [5, 4, 0, 1, 0, 0, 0, 0, 0, 0]); close(c); return }
         guard sendAll(c, [5, 0, 0, 1, 0, 0, 0, 0, 0, 0]) else { finish(c, out, u, 0, 0); return }
-        relay(c, out, u)
+        relay(c, out, u, host: host)
     }
 
     // UDP (v14, for the virtual device mantra_networkaggregate: name lookups, QUIC, calls): SOCKS5 UDP ASSOCIATE. A UDP
@@ -900,7 +900,7 @@ extension Server {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }
             guard sendAll(c, Array("HTTP/1.1 200 Connection established\r\n\r\n".utf8)) else { finish(c, out, u, 0, 0); return }
-            relay(c, out, u)
+            relay(c, out, u, host: host)
         } else if line[1].hasPrefix("/") {
             let body = line[1].hasPrefix("/status") ? status() : "ck-aggregate v\(CKVersion): use me as a SOCKS5 or HTTP proxy; /status for the lines\n"
             let type = line[1].hasPrefix("/status") ? "application/json" : "text/plain"
@@ -912,20 +912,22 @@ extension Server {
             var rest = text.components(separatedBy: "\r\n").dropFirst().filter { !$0.lowercased().hasPrefix("proxy-connection:") && !$0.lowercased().hasPrefix("connection:") }
             rest.insert("Connection: close", at: rest.count - 2)
             let req = "\(line[0]) \(path) \(line.count > 2 ? line[2] : "HTTP/1.1")\r\n" + rest.joined(separator: "\r\n")
+            // request 105: a plain-HTTP request for a part of a file (Range) is a download: its host to the download line
+            if rest.contains(where: { $0.lowercased().hasPrefix("range: bytes=") }) { DownloadRule.remember(host, why: "an HTTP Range request") }
             if let b = Bond.active(for: host), let s = b.open(host, UInt16(url.port ?? 80), timeout: 1) { b.bridge(c, s, first: Array(req.utf8)); return }
             if Bond.strictBlocks(host: host) { _ = sendAll(c, Array("HTTP/1.1 403 Forbidden (PRIVACY STRICT: no bond leg)\r\n\r\n".utf8)); close(c); return }
             guard let (out, u) = open(host, UInt16(url.port ?? 80), for: c) else {
                 _ = sendAll(c, Array("HTTP/1.1 502 Bad Gateway\r\n\r\n".utf8)); close(c); return
             }
             guard sendAll(out, Array(req.utf8)) else { finish(c, out, u, 0, 0); return }
-            relay(c, out, u)
+            relay(c, out, u, host: host)
         } else {
             close(c)
         }
     }
 
     // Both directions copied until each side has said it is done; the bytes counted on the line.
-    func relay(_ c: Int32, _ out: Int32, _ u: Uplink) {
+    func relay(_ c: Int32, _ out: Int32, _ u: Uplink, host: String = "") {
         deadline(c, 0)
         let group = DispatchGroup()
         var up = 0, down = 0, done = false
@@ -950,7 +952,10 @@ extension Server {
         }
         group.enter()
         Thread.detachNewThread { [self] in pump(c, out) { n in self.lock.lock(); up += n; u.bytesUp += n; u.seen[c] = Date(); self.lock.unlock() }; group.leave() }
-        pump(out, c) { n in self.lock.lock(); down += n; u.bytesDown += n; u.seen[c] = Date(); self.lock.unlock() }
+        pump(out, c) { n in
+            self.lock.lock(); let before = down; down += n; let after = down; u.bytesDown += n; u.seen[c] = Date(); self.lock.unlock()
+            DownloadRule.counted(host, before: before, after: after, line: u.name)      // request 105: a big download remembers its host
+        }
         group.wait()
         lock.lock(); done = true; lock.unlock()
         finish(c, out, u, up, down)
@@ -987,7 +992,8 @@ extension Server {
              "alive": u.alive, "rttMs": rttValue(u), "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6]
         }
         let ig: [[String: String]] = ignored.map { ["name": $0.0.name, "device": $0.0.iface, "sameLineAs": $0.1.name] }
-        let d: [String: Any] = ["version": CKVersion, "port": Int(aggPort), "since": ISO8601DateFormatter().string(from: started), "lines": ls, "ignored": ig, "bond": bond, "watchdog": watchdog]
+        let d: [String: Any] = ["version": CKVersion, "port": Int(aggPort), "since": ISO8601DateFormatter().string(from: started), "lines": ls, "ignored": ig, "bond": bond, "watchdog": watchdog,
+                                "download": DownloadRule.status(lines)]                // request 105
         return String(decoding: try! JSONSerialization.data(withJSONObject: d, options: [.prettyPrinted, .sortedKeys]), as: UTF8.self) + "\n"
     }
 }
@@ -1113,5 +1119,6 @@ case "session" where argv.count > 1:                // v73: what the app does at
 case "bond-init": print(BondConfigFile.initFile())
 case "bond-selftest": bondSelftest(Array(argv.dropFirst()))
 case "sameline-selftest": sameLineSelftest()
+case "download-selftest": downloadSelftest()                // request 105
 default: print("usage: ck-aggregate serve | uplinks | test [seconds] | test-line <name> [seconds] | on | off | bond-init | bond-selftest"); exit(2)
 }

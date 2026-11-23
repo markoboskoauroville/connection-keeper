@@ -1,3 +1,21 @@
+**24.11.2026, request 105: the DEFAULT DOWNLOAD LINE (the ↓ mark).** A ↓ beside each row's tick (LineRow.dl, Ticks.swift
+showDownloadMark / setDownloadLine): one line at most; marking also ticks it (same-road rule); ↓ on the marked row clears it;
+a marked row that leaves the ticks loses the mark with a note. State: download-line.json {"line", "thresholdMB"} beside
+aggregate-selection.json (Sources/Shared/DownloadLine.swift, read at most once a second); ⚙ "A big download from" 10-500 MB,
+default 50; outside: distributed notification `ConnectionKeeperDownloadLine` (object the line's name, "" = none).
+CROATIA (Sources/Aggregate/DownloadRule.swift): relay() counts each connection's received bytes; past the threshold its host
+(the name the client gave, or the address the tunnel hands over) is remembered 10 min and race() dials new connections to it
+first on the download line (Failover.swift race order); a plain-HTTP request with `Range: bytes=` marks its host at once. A
+dead or absent download line is simply not first: race() tries the next line after 1 s or at a failure, nothing waits. ck-net's
+`get` and its workers use only the download line when it is here (downloadLines()). /status: "download": {line, thresholdMB,
+present, alive, bigHosts, appliesThroughBond: false}. Rows: DOWNLOADS (alive), DL: FALLBACK (dead/absent), DL: CROATIA ONLY
+(bond.json on). CI: `ck-aggregate download-selftest` with CK_DL_FILE (7 checks, fake lines, no network).
+**Hook the bond scheduler needs (FRANKFURT, not built here):** read DownloadLine.line and DownloadLine.thresholdBytes; per bond
+stream keep the bytes received; once a stream has received >= thresholdBytes, schedule its frames preferring the leg(s) whose
+line name == DownloadLine.line while that leg is alive (fall back to the normal choice when it is not, never wait); optionally
+remember the stream's target host like DownloadRule.remember so new streams to it start on that leg; then set
+"appliesThroughBond": true in DownloadRule.status and the stripe's FRANKFURT word ("DL: CROATIA ONLY") can go.
+
 **24.11.2026, v92 (request 99 finished): TEST is reliable; the bond word holds still.**
 Cause of v89-v90's 1-in-6: GO was clicked about 1 s after the hidden page started, before speedtest.net's own script was
 ready; the click was ignored and the run waited on the start page until its 120 s timeout (the one run that finished had

@@ -490,6 +490,7 @@ final class Stripe: NSObject {
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperRescan"), object: nil, queue: .main) { [weak self] _ in self?.rescanNow() }
         // v89 (request 97): ticks from outside (ConnectionKeeperTicks, and the older ConnectionKeeperChoose / NothingOnly) (Ticks.swift)
         listenForOutsideTicks()
+        listenForDownloadLine()                // request 105
         foldNothingOnly()
         // v84 (request 93): the speed test's RESTART from outside; opens the speed test when it is closed
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperSpeedRestart"), object: nil, queue: .main) { _ in

@@ -45,6 +45,7 @@ final class LineRow {
     // v89 (request 97): the tick: this line is part of the aggregate connection (Ticks.swift)
     let tick = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     let rail = Rail()                                    // v90 (request 100): the family's line
+    let dl = NSButton()                                  // request 105: the ↓ mark, the DEFAULT DOWNLOAD LINE (Ticks.swift)
     let lead = NSView()
     let wifi = NSButton()           // v34 (request 51): in WIRES, this line shared over Wi-Fi to the house, in the lead's space
     let name: NSTextField
@@ -99,7 +100,7 @@ final class LineRow {
         // lead they stood partly outside it and a click could miss them; now they are items of the row, first in it,
         // and the lead is narrower by their width so nothing else moves.
         for b in [g4, g5] { b.setContentHuggingPriority(.required, for: .horizontal) }
-        lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - tick.fittingSize.width - Rail.width - 6)).isActive = true
+        lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - tick.fittingSize.width - Rail.width - 16 - 3 - 6)).isActive = true
         func mini(_ t: NSTextField, _ m: VUMeter, _ s: NSTextField) -> NSStackView {
             let r = NSStackView(views: [t, m, s]); r.orientation = .horizontal; r.spacing = 3; r.alignment = .centerY; return r
         }
@@ -108,6 +109,11 @@ final class LineRow {
         rail.translatesAutoresizingMaskIntoConstraints = false
         rail.widthAnchor.constraint(equalToConstant: Rail.width).isActive = true
         rail.heightAnchor.constraint(equalToConstant: 24).isActive = true
+        dl.isBordered = false
+        dl.imagePosition = .imageOnly
+        dl.translatesAutoresizingMaskIntoConstraints = false
+        dl.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        dl.setContentHuggingPriority(.required, for: .horizontal)
         tick.appearance = NSAppearance(named: .darkAqua)
         tick.setContentHuggingPriority(.required, for: .horizontal)
         testButton.isBordered = false
@@ -115,7 +121,7 @@ final class LineRow {
         testButton.contentTintColor = Ink.text
         testButton.setContentHuggingPriority(.required, for: .horizontal)
         result.textColor = Ink.dim
-        view = NSStackView(views: [rail, tick, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), sigBox, linePipe(), info, linePipe(), testButton, result])
+        view = NSStackView(views: [rail, tick, dl, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), sigBox, linePipe(), info, linePipe(), testButton, result])
         view.orientation = .horizontal
         view.spacing = 3
         view.edgeInsets = NSEdgeInsets(top: 0, left: 2, bottom: 0, right: 6)
@@ -251,6 +257,7 @@ extension Stripe {
         var changed = false
         rememberLines()
         cleanOutsideTicks()
+        keepDownloadLineTicked()                                  // request 105
         let entries = tickEntries()
         let names = entries.map(\.name)
         for e in entries where lineRows[e.name] == nil {
@@ -268,6 +275,11 @@ extension Stripe {
             r.testButton.action = #selector(rowTestPressed(_:))
             r.testButton.identifier = NSUserInterfaceItemIdentifier(e.name)
             r.testButton.setAccessibilityIdentifier("test-" + e.name)
+            r.dl.target = self
+            r.dl.action = #selector(dlPressed(_:))
+            r.dl.identifier = NSUserInterfaceItemIdentifier(e.name)
+            r.dl.setAccessibilityIdentifier("download-" + e.name)
+            r.dl.setAccessibilityLabel("Download line " + e.name)
             lineRows[e.name] = r
             changed = true
         }
@@ -307,6 +319,7 @@ extension Stripe {
             r.info.stringValue = st.word
             r.info.textColor = st.color
             r.info.toolTip = st.word.hasPrefix("⇄") ? "Unticked: the same road as a line just ticked (\(st.word.dropFirst(2)))" : nil
+            showDownloadMark(r, e)
             let tw = testWords(e.name)
             r.result.stringValue = tw.0; r.result.textColor = tw.1; r.result.toolTip = tw.2
             r.testButton.isEnabled = e.other != nil && LineSpeedTest.running == nil
@@ -363,7 +376,8 @@ extension Stripe {
         // TEST runs speedtest.net over the Mac's route, to compare a combination with its single lines
         if let a = aggRow {
             if a.view.isHidden { a.view.isHidden = false; changed = true }
-            a.tick.alphaValue = 0; a.tick.isEnabled = false      // v90: alpha, not hidden, so its column stays (hidden collapsed it)
+            a.tick.alphaValue = 0; a.tick.isEnabled = false
+            a.dl.alphaValue = 0; a.dl.isEnabled = false      // v90: alpha, not hidden, so its column stays (hidden collapsed it)
             a.name.stringValue = tickedNames.isEmpty ? "NO TICK: THE MAC" : "ALL TICKED"
             a.name.textColor = tickedNames.isEmpty ? Ink.text : Ink.green
             a.name.toolTip = tickedNames.isEmpty ? "No line ticked: the Mac straight on its own connection" : "The ticked lines together: " + tickedNames.joined(separator: " + ")

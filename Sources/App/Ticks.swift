@@ -173,14 +173,7 @@ extension Stripe {
                 show("\(Net.shown(o.name, o.iface)): no internet through it now, it cannot join", Ink.amber, for: 8)
                 return
             }
-            var dropped: [(name: String, by: String, word: String)] = []
-            sel = sel.filter { n in
-                if n == name { return false }
-                if let w = clash(name, n) { dropped.append((name: n, by: name, word: w)); return false }
-                return true
-            }
-            sel.append(name)
-            sayDropped(dropped)
+            sel = ticksAdding(name)
             appendLog("\(logStamp()) TICK \(name) on (by hand)")
         } else {
             sel.removeAll { $0 == name }
@@ -199,12 +192,12 @@ extension Stripe {
         if !sel.isEmpty { Aggregation.selected = sel }
         appendLog("\(logStamp()) TICKS \(sel.isEmpty ? "none: aggregation off, the Mac straight on its own connection" : sel.joined(separator: " + "))")
         show(sel.isEmpty ? "no tick: the Mac straight on its own connection" : sel.count == 1 ? "\(sel[0]): everything through this one line" : "aggregate: " + sel.joined(separator: " + "), Ink.green, for: 8)
-        layoutLines()
         TickQueue.lock.lock()
         TickQueue.pending = sel
         let start = !TickQueue.running
         if start { TickQueue.running = true }
         TickQueue.lock.unlock()
+        layoutLines()                                    // after the queue holds them (request 105: the ↓ mark waits for its tick)
         guard start else { appendLog("\(logStamp()) TICKS queued (a switch is running; the latest wins)"); return }
         DispatchQueue.global().async {
             while true {
@@ -313,6 +306,11 @@ extension Stripe {
     // The state word and its colour for a row.
     func tickState(_ e: TickEntry, ticked: Bool) -> (word: String, color: NSColor) {
         if let f = tickFlash[e.name], f.until > Date() { return ("⇄ " + f.word, Ink.amber) }
+        if ticked, DownloadLine.line == e.name {                  // request 105: the download line says what it does now
+            if BondConfigFile.load()?.on == true { return ("DL: CROATIA ONLY", Ink.amber) }
+            if let o = e.other, let l = agg?.lines.first(where: { $0.device == o.iface }), l.alive { return ("DOWNLOADS", Ink.green) }
+            return ("DL: FALLBACK", Ink.amber)
+        }
         guard let o = e.other else {
             if e.inRange { return ticked ? ("JOINING", Ink.amber) : ("IN RANGE", Ink.dim) }
             return ticked ? ("NOT HERE", Ink.grey) : ("GONE", Ink.grey)
@@ -327,5 +325,78 @@ extension Stripe {
         if let s = o.sameAs { return (s, Ink.grey) }
         if tickedNames.isEmpty, o.iface == iface { return ("MAC'S OWN", Ink.green) }
         return ("READY", Ink.text)
+    }
+}
+
+// THE ↓ MARK: THE DEFAULT DOWNLOAD LINE (request 105, Marko 24.11.2026: "Add a tick or check mark for line to be as default
+// download line ... if I download bigger files, they're automatically going to my cheaper line which I am going to select").
+// One row at most. Marking a row also ticks it into the aggregation (only a ticked line carries anything); a click on the
+// marked row's ↓ clears it (no download line = the balance as before); a row that leaves the ticks loses the mark, with a
+// note. The rule itself is ck-aggregate's (Sources/Aggregate/DownloadRule.swift): in CROATIA a connection past the size
+// (⚙, 50 MB) remembers its host for 10 min and new connections to it are dialled first on this line; in FRANKFURT every
+// connection is a stream of the relay and the rule does not apply yet (the row says DL: CROATIA ONLY).
+extension Stripe {
+    func showDownloadMark(_ r: LineRow, _ e: TickEntry) {
+        let on = DownloadLine.line == e.name
+        let img = NSImage(systemSymbolName: on ? "arrow.down.circle.fill" : "arrow.down.circle", accessibilityDescription: "download line")
+        r.dl.image = img
+        r.dl.contentTintColor = on ? Ink.green : Ink.dim
+        r.dl.alphaValue = e.other == nil && !on ? 0.35 : 1
+        r.dl.isEnabled = e.other != nil || on
+        r.dl.setAccessibilityValue(on ? "on" : "off")
+        r.dl.toolTip = on ? "DOWNLOADS: big downloads (from \(Int(DownloadLine.thresholdMB)) MB, ⚙) go to \(e.name). Click: no download line."
+            : e.other == nil ? "Not here now" : "Downloads: make \(e.name) the line for big downloads (it is ticked too)"
+    }
+
+    // the ticks with `name` added: the rows that are the same road as it are left out (the rule of the tick)
+    func ticksAdding(_ name: String) -> [String] {
+        var dropped: [(name: String, by: String, word: String)] = []
+        var sel = tickedNames.filter { n in
+            if n == name { return false }
+            if let w = clash(name, n) { dropped.append((name: n, by: name, word: w)); return false }
+            return true
+        }
+        sel.append(name)
+        sayDropped(dropped)
+        return sel
+    }
+
+    @objc func dlPressed(_ b: NSButton) {
+        guard let name = b.identifier?.rawValue else { return }
+        setDownloadLine(DownloadLine.line == name ? nil : name, how: "by hand")
+    }
+
+    func setDownloadLine(_ name: String?, how: String) {
+        guard let name else {
+            let was = DownloadLine.line
+            DownloadLine.set(line: nil)
+            appendLog("\(logStamp()) DOWNLOAD LINE none (\(how)\(was.map { ", was \($0)" } ?? ""))")
+            show("no download line: big downloads balanced over the ticked lines as before", Ink.green, for: 8)
+            layoutLines(); return
+        }
+        guard let o = others.first(where: { $0.name == name }) else { show("\(name) is not here: it cannot be the download line", Ink.amber, for: 8); return }
+        if o.ms == nil || deadIfaces.contains(o.iface) { show("\(Net.shown(o.name, o.iface)): no internet through it now, it cannot be the download line", Ink.amber, for: 8); return }
+        DownloadLine.set(line: name)
+        let bond = BondConfigFile.load()?.on == true
+        appendLog("\(logStamp()) DOWNLOAD LINE \(name) (\(how)), big from \(Int(DownloadLine.thresholdMB)) MB")
+        show("\(name): the download line (from \(Int(DownloadLine.thresholdMB)) MB)" + (bond ? "; it works in CROATIA: FRANKFURT sends every connection through the relay" : ""), bond ? Ink.amber : Ink.green, for: 12)
+        if !tickedNames.contains(name) { setTicks(ticksAdding(name)) } else { layoutLines() }
+    }
+
+    // a download line that is no longer ticked loses its mark (said once)
+    func keepDownloadLineTicked() {
+        TickQueue.lock.lock(); let busy = TickQueue.running || TickQueue.pending != nil; TickQueue.lock.unlock()
+        guard let d = DownloadLine.line, !tickedNames.contains(d), !busy, outsideTicksWanted == nil else { return }
+        DownloadLine.set(line: nil)
+        appendLog("\(logStamp()) DOWNLOAD LINE \(d) cleared: it is not ticked any more")
+        show("\(d) is not ticked any more: no download line", Ink.amber, for: 10)
+    }
+
+    // from outside: ConnectionKeeperDownloadLine with the line's name, "" = none
+    func listenForDownloadLine() {
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperDownloadLine"), object: nil, queue: .main) { [weak self] n in
+            let name = ((n.object as? String) ?? "").trimmingCharacters(in: .whitespaces)
+            self?.setDownloadLine(name.isEmpty ? nil : name, how: "from outside")
+        }
     }
 }
