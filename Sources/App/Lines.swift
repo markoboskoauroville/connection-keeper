@@ -17,6 +17,8 @@ struct OtherLine {
 final class LineRow {
     let view: NSStackView
     let dot = Dot()
+    // v89 (request 97): the tick: this line is part of the aggregate connection (Ticks.swift)
+    let tick = NSButton(checkboxWithTitle: "", target: nil, action: nil)
     let lead = NSView()
     let wifi = NSButton()           // v34 (request 51): in WIRES, this line shared over Wi-Fi to the house, in the lead's space
     let name: NSTextField
@@ -32,6 +34,9 @@ final class LineRow {
     let sig = label(textWidth("-110 · -11", LineRow.sigFont), font: LineRow.sigFont), sig2 = label(textWidth("-110 · -11", LineRow.sigFont), font: LineRow.sigFont)
     let sigBox: NSStackView
     let info = label(textWidth(LineRow.infoSample, monoFont), font: monoFont)
+    // v89 (request 99): TEST, speedtest.net over this line only, and its last result ("↓83.1 ↑29.4 23:10")
+    let testButton = NSButton(title: "TEST", target: nil, action: nil)
+    let result = label(textWidth("↓888.8 ↑888.8 88:88", monoFont), font: monoFont)
     var lastBytes: (rx: UInt64, tx: UInt64)?
     var lastAt: Date?, lastRate: (Double, Double)?      // a phone row: when the server's counters were read, the rate
 
@@ -68,13 +73,20 @@ final class LineRow {
         // lead they stood partly outside it and a click could miss them; now they are items of the row, first in it,
         // and the lead is narrower by their width so nothing else moves.
         for b in [g4, g5] { b.setContentHuggingPriority(.required, for: .horizontal) }
-        lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - 6)).isActive = true
+        lead.widthAnchor.constraint(equalToConstant: max(20, leadWidth - g4.fittingSize.width - g5.fittingSize.width - tick.fittingSize.width - 6)).isActive = true
         func mini(_ t: NSTextField, _ m: VUMeter, _ s: NSTextField) -> NSStackView {
             let r = NSStackView(views: [t, m, s]); r.orientation = .horizontal; r.spacing = 3; r.alignment = .centerY; return r
         }
         sigBox = NSStackView(views: [mini(tag1, meter, sig), mini(tag2, meter2, sig2)])
         sigBox.orientation = .vertical; sigBox.spacing = 0; sigBox.alignment = .leading
-        view = NSStackView(views: [dot, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), sigBox, linePipe(), info])
+        tick.appearance = NSAppearance(named: .darkAqua)
+        tick.setContentHuggingPriority(.required, for: .horizontal)
+        testButton.isBordered = false
+        testButton.font = .monospacedSystemFont(ofSize: 11, weight: .bold)
+        testButton.contentTintColor = Ink.text
+        testButton.setContentHuggingPriority(.required, for: .horizontal)
+        result.textColor = Ink.dim
+        view = NSStackView(views: [tick, g4, g5, lead, name, linePipe(), speed, linePipe(), ping, linePipe(), sigBox, linePipe(), info, linePipe(), testButton, result])
         view.orientation = .horizontal
         view.spacing = 3
         view.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
@@ -138,11 +150,13 @@ extension Stripe {
             let st = Aggregation.status()
             let wifi = Net.wifiInterface()
             var found: [OtherLine] = []
+            var routers: [String: String] = [:]                 // v89: each line's router, for the same-road rule (Ticks.swift)
             // v23: aggregating, the one line is AGGREGATE CONNECTION, so the line under it needs its own row too
             // v24: the line carrying the internet has its row too (the opened list shows what is connected now)
             for i in Net.activeInterfaces() {
                 let gw = shell("/usr/sbin/ipconfig", ["getoption", i, "router"], timeout: 5).out.trimmingCharacters(in: .whitespacesAndNewlines)
                 if gw.isEmpty { continue }
+                routers[Net.displayName(i)] = LineMemory.routerMAC(i)
                 // v87 (request 96): a phone's hotspot is a line again (v81 had greyed it)
                 found.append(OtherLine(iface: i, name: Net.displayName(i), wifi: i == wifi, ms: Net.onlineVia(i),
                                        sameAs: st?.ignored.first { $0.device == i }?.sameLineAs))
@@ -158,12 +172,16 @@ extension Stripe {
             for p in Phones.list() {
                 if let note = Phones.ensure(p) { appendLog("\(logStamp()) PHONE \(p.name): \(note)") }
                 found.append(OtherLine(iface: p.device, name: p.name, wifi: false, ms: Phones.online(p), sameAs: nil))
+                CableOnly.learnHotspot(p.serial)                 // v89: its hotspot's name, so the two are one group (once a run)
             }
             DispatchQueue.main.async {
                 self.scanning = false
                 if let n = nothing { self.adbSeen = adbNow; self.nothingAt = Date(); self.sayNothing(n, force: false) }
                 self.others = found
                 self.agg = st
+                var ips: [String: String] = [:]
+                for l in st?.lines ?? [] where !l.publicIP.isEmpty { ips[l.name] = l.publicIP }
+                LineMemory.learn(routers: routers, ips: ips)
                 self.watchServer(st)
                 self.layoutLines()
             }
@@ -195,22 +213,86 @@ extension Stripe {
         }
     }
 
+    // v89 (request 97): ONE list, always every connection the app knows (Ticks.swift), a tick each; no tabs, no ▾ list.
     func layoutLines() {
         guard let column = panel.contentView?.subviews.first as? NSStackView else { return }
-        let lead = gear.fittingSize.width + rescan.fittingSize.width + expand.fittingSize.width + 9, nameW = connectionWidth()
+        // the same lead as the ALL TICKED row (main.swift), so the names stand in one column under the first row's name
+        let lead = onWord.fittingSize.width + offWord.fittingSize.width + linePipe().fittingSize.width + 12 + gear.fittingSize.width + rescan.fittingSize.width + 6, nameW = connectionWidth()
         var changed = false
         rememberLines()
-        // v24 (request 42: "just show what is actually right now connected, and that's all"): only the green lines,
-        // the joined ones while aggregating, else the one carrying the internet; nothing gone, nothing merely here
-        let joinedNow = Set(agg?.lines.filter(\.alive).map(\.device) ?? [])
-        let shown = others.filter { Aggregation.on ? joinedNow.contains($0.iface) : $0.iface == iface }
-        for o in shown where lineRows[o.iface] == nil {
+        cleanOutsideTicks()
+        let entries = tickEntries()
+        let names = entries.map(\.name)
+        for e in entries where lineRows[e.name] == nil {
             let r = LineRow(leadWidth: lead, nameWidth: nameW)
-            r.dot.isHidden = true                           // v28 (request 46): every line shown is connected; no dots
-            r.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(showConnections)))
+            r.dot.isHidden = true
+            r.tick.target = self
+            r.tick.action = #selector(tickPressed(_:))
+            r.tick.identifier = NSUserInterfaceItemIdentifier(e.name)
+            r.tick.setAccessibilityIdentifier("tick-" + e.name)
+            r.tick.setAccessibilityLabel(e.name)
             r.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
             r.wifi.target = self
             r.wifi.action = #selector(toggleShare(_:))
+            r.testButton.target = self
+            r.testButton.action = #selector(rowTestPressed(_:))
+            r.testButton.identifier = NSUserInterfaceItemIdentifier(e.name)
+            r.testButton.setAccessibilityIdentifier("test-" + e.name)
+            lineRows[e.name] = r
+            changed = true
+        }
+        for (n, r) in lineRows where !names.contains(n) {
+            column.removeArrangedSubview(r.view); r.view.removeFromSuperview(); lineRows[n] = nil
+            changed = true
+        }
+        // the rows in the list's order, just above the (hidden) aggregation row; put again only when the set changed
+        let want = names.compactMap { lineRows[$0]?.view }
+        let now = column.arrangedSubviews.filter { v in lineRows.values.contains { $0.view === v } }
+        if want.count != now.count || zip(want, now).contains(where: { $0.0 !== $0.1 }) {
+            for v in now { column.removeArrangedSubview(v); v.removeFromSuperview() }
+            for v in want { column.insertArrangedSubview(v, at: column.arrangedSubviews.firstIndex(of: aggRow.view) ?? column.arrangedSubviews.count - 1) }
+            changed = true
+        }
+        let ticked = Set(tickedNames)
+        let tests = WebSpeedByConnection.all(), aggTest = AggTest.load()
+        for e in entries {
+            guard let r = lineRows[e.name] else { continue }
+            let on = ticked.contains(e.name)
+            let st = tickState(e, ticked: on)
+            if (r.tick.state == .on) != on { r.tick.state = on ? .on : .off }
+            r.tick.setAccessibilityValue(on ? "on" : "off")
+            r.tick.toolTip = on ? "Ticked: \(e.name) is part of the aggregate connection. Untick: leave it out (no tick at all: the Mac straight on its own connection)."
+                : "Tick: \(e.name) becomes part of the aggregate connection. A line that is the same road as a ticked one (one Wi-Fi, the same phone, the same router) unticks that one."
+            r.info.stringValue = st.word
+            r.info.textColor = st.color
+            r.info.toolTip = st.word.hasPrefix("⇄") ? "Unticked: the same road as a line just ticked (\(st.word.dropFirst(2)))" : nil
+            let tw = testWords(e.name)
+            r.result.stringValue = tw.0; r.result.textColor = tw.1; r.result.toolTip = tw.2
+            r.testButton.isEnabled = e.other != nil && LineSpeedTest.running == nil
+            r.testButton.contentTintColor = r.testButton.isEnabled ? Ink.text : Ink.grey
+            r.testButton.toolTip = e.other == nil ? "Not here now: nothing to test" : LineSpeedTest.running != nil ? "A test is running; one at a time"
+                : "TEST: speedtest.net over \(e.name) only (its own device, or the phone's SIM through its cable), in the background, about 40 s"
+            guard let o = e.other else {
+                // not here now: grey, no numbers, no meters
+                r.name.stringValue = e.name
+                r.name.textColor = on ? Ink.amber : Ink.grey
+                r.name.toolTip = e.inRange ? "A Wi-Fi network in range. Tick: the Mac joins it and it is a line." : "Not here now" + (seen[e.name].map { ", last connected " + ago($0.last) } ?? "") + ". Ticked, it joins when it is back."
+                r.ping.stringValue = "—"; r.ping.textColor = Ink.grey
+                r.setIdle()
+                r.lastBytes = nil
+                for m in [r.meter, r.meter2] { m.alphaValue = 0 }
+                for t in [r.tag1, r.sig, r.tag2, r.sig2] { t.stringValue = "" }
+                r.tag1.identifier = nil; r.tag2.identifier = nil
+                r.wifi.isHidden = true
+                for b in [r.g4, r.g5] { b.alphaValue = 0; b.isEnabled = false }
+                continue
+            }
+            let ok = o.ms != nil
+            r.name.stringValue = Net.shown(o.name, o.iface)
+            r.name.textColor = on ? (st.color == Ink.green ? Ink.green : st.color) : (ok ? NSColor.white : Ink.grey)
+            r.name.toolTip = Phones.isPhone(o.iface) ? "\(o.name): the phone on its USB cable (its SIM, over adb)" : o.wifi ? "\(o.name): the Mac's Wi-Fi (\(o.iface))" : "\(o.name): a cable (\(o.iface))"
+            r.ping.stringValue = o.ms.map { String(format: "%3.0f ms", $0) } ?? "—"
+            r.ping.textColor = ok ? Ink.yellow : Ink.grey
             if Phones.isPhone(o.iface) {
                 let serial = String(o.iface.dropFirst(4))
                 for b in [r.g4, r.g5] {
@@ -218,69 +300,14 @@ extension Stripe {
                     b.identifier = NSUserInterfaceItemIdentifier(serial)
                 }
                 showRadio(r, serial)
-            }
-            lineRows[o.iface] = r
-            column.insertArrangedSubview(r.view, at: column.arrangedSubviews.firstIndex(of: aggRow.view) ?? column.arrangedSubviews.count - 1)
-            changed = true
-        }
-        for (dev, r) in lineRows where !shown.contains(where: { $0.iface == dev }) {
-            column.removeArrangedSubview(r.view); r.view.removeFromSuperview(); lineRows[dev] = nil
-            changed = true
-        }
-        let joined = Set(agg?.lines.map(\.device) ?? [])
-        let tests = WebSpeedByConnection.all(), aggTest = AggTest.load()
-        for o in shown {
-            guard let r = lineRows[o.iface] else { continue }
-            let ok = o.ms != nil
-            // request 40: green connected (joined), red here but not connected, grey connected before and gone now
-            let gone = o.iface.hasPrefix(SeenLines.gonePrefix)
-            let color = lineColor(gone: gone, connected: Aggregation.on && joined.contains(o.iface))
-            r.name.stringValue = gone ? o.name : Net.shown(o.name, o.iface)
-            r.name.textColor = color
-            r.dot.color = color
-            r.ping.stringValue = o.ms.map { String(format: "%3.0f ms", $0) } ?? "—"
-            r.ping.textColor = ok ? Ink.yellow : Ink.grey
-            if gone {
-                r.info.stringValue = "gone " + ago(seen[o.name]?.last)
-                r.info.textColor = Ink.grey
-                r.name.toolTip = "Grey: connected before, not available now"
-                r.speed.toolTip = nil
-                if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: true) }
-                continue
-            }
+            } else { for b in [r.g4, r.g5] { b.alphaValue = 0; b.isEnabled = false } }
             showShare(r, o)
-            r.info.textColor = Ink.dim
-            r.name.toolTip = color == Ink.green ? "Green: connected, carrying the internet" : "Red: here, but not connected (tick it in ▾ to join it)"
-            let line = agg?.lines.first { $0.device == o.iface }
-            r.info.stringValue = o.sameAs.map { $0 }
-                ?? (Aggregation.on && line != nil ? String(format: "%d·%.0fMB", line!.active, line!.mbDown + line!.mbUp)
-                    : ok ? "not joined" : "no net")
-            if deadIfaces.contains(o.iface) { r.info.stringValue = "NO DATA"; r.info.textColor = Ink.amber; r.name.textColor = Ink.amber }
-            // v82 (request 91): NOTHING ONLY: one line ACTIVE (green), the other STANDBY (grey, no speed); swapped on fallback
-            if let role = lineRole(o.iface) {
-                switch role {
-                case "standby":
-                    r.name.textColor = Ink.dim; r.info.stringValue = "STANDBY"; r.info.textColor = Ink.grey; r.setIdle()
-                    r.name.toolTip = "STANDBY: NOTHING ONLY is on. This line waits; it carries only if the Nothing stops answering."
-                case "fallback":
-                    r.name.textColor = Ink.amber; r.info.stringValue = "FALLBACK·ACTIVE"; r.info.textColor = Ink.red
-                    r.name.toolTip = "FALLBACK, ACTIVE: the Nothing does not answer, so this line carries until it is back."
-                default:
-                    if line?.alive == false {
-                        r.name.textColor = Ink.red; r.info.stringValue = "NO ANSWER"; r.info.textColor = Ink.red
-                        r.name.toolTip = "The Nothing does not answer: the standby line carries (FALLBACK)."
-                    } else {
-                        r.info.stringValue = "ACTIVE"; r.info.textColor = Ink.green
-                        r.name.toolTip = "ACTIVE: NOTHING ONLY, the Nothing on its USB cable carries the internet."
-                    }
-                }
-            }
             r.speed.toolTip = "Its own live speed (its default route).\nClick: test this line now (Cloudflare, about 6 s each way)."
             if r.lastBytes == nil { r.setSpeed(nil, nil, test: lineTest(o.name, tests, aggTest), dim: !ok, mark: lineTesting.contains(o.name) ? "..." : nil) }
         }
         // A phone row's live speed: the server's bytes on it between two scans (the Mac has no counter for adb).
         for o in others where Phones.isPhone(o.iface) {
-            guard let r = lineRows[o.iface] else { continue }
+            guard let r = lineRows[o.name] else { continue }
             let l = agg?.lines.first { $0.device == o.iface }
             let c = l.map { (rx: UInt64($0.mbDown * 1e6), tx: UInt64($0.mbUp * 1e6)) }
             var v: (Double, Double)?
@@ -291,45 +318,27 @@ extension Stripe {
             r.lastBytes = c; r.lastAt = Date(); r.lastRate = v
             r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil, mark: lineTesting.contains(o.name) ? "..." : nil)
         }
-        // v23 (request 41): the rows only when ▸ is opened; the one line is the whole stripe otherwise
-        let showUse = tab == "inuse"
-        for r in lineRows.values where r.view.isHidden == showUse { r.view.isHidden = !showUse; changed = true }
-        // aggregating, the one line already is AGGREGATE CONNECTION: no second row saying it again
-        let aggHidden = true             // v54: the one total is the first row's live speed; no second total row
-        if let a = aggRow, a.view.isHidden != aggHidden { a.view.isHidden = aggHidden; changed = true }
-        expand.title = expanded ? "▾" : "▸"
-        // The aggregation row: always the last.
-        guard let a = aggRow else { return }
-        a.name.stringValue = Aggregation.on ? "AGGREGATE CONNECTION" : "ONE CONNECTION"   // request 35, his words
-        a.name.toolTip = "Click: switch between one connection and aggregate connection"
-        if !Aggregation.on {
-            a.dot.color = Ink.grey; a.name.textColor = Ink.text
-            a.info.stringValue = Aggregation.selected.isEmpty ? "tick in ▾" : "click to join"
+        // v89 (request 99): the last row is ALL TICKED: the ticked lines together (or the Mac's own line with no tick), its
+        // TEST runs speedtest.net over the Mac's route, to compare a combination with its single lines
+        if let a = aggRow {
+            if a.view.isHidden { a.view.isHidden = false; changed = true }
+            a.tick.isHidden = true
+            a.name.stringValue = tickedNames.isEmpty ? "NO TICK: THE MAC" : "ALL TICKED"
+            a.name.textColor = tickedNames.isEmpty ? Ink.text : Ink.green
+            a.name.toolTip = tickedNames.isEmpty ? "No line ticked: the Mac straight on its own connection" : "The ticked lines together: " + tickedNames.joined(separator: " + ")
+            a.info.stringValue = tickedNames.isEmpty ? "" : "\(tickedNames.count) LINE\(tickedNames.count == 1 ? "" : "S")"
             a.info.textColor = Ink.dim
             a.ping.stringValue = ""
-        } else if let st = agg {
-            let alive = st.lines.filter(\.alive)
-            a.dot.color = alive.count >= 2 ? Ink.green : Ink.amber
-            a.name.textColor = alive.count >= 2 ? Ink.green : Ink.amber
-            a.ping.stringValue = "\(alive.count)/\(st.lines.count) up"
-            a.ping.textColor = alive.count == st.lines.count ? Ink.yellow : Ink.amber
-            let conn = st.lines.reduce(0) { $0 + $1.active }
-            // v13 (request 30, the end was cut): the names are on the rows above; here only the numbers
-            var words = "\(st.lines.count)L·\(conn)c"
-            let names = Set(st.lines.map(\.name))
-            if let t = aggTest, let best = t.alone.filter({ names.contains($0.key) }).values.max(), best > 0 {
-                words += String(format: "·%.1f×", t.joined / best)
-                if let up = t.joinedUp, let bestUp = t.aloneUp?.filter({ names.contains($0.key) }).values.max(), bestUp > 0 { words += String(format: "↑%.1f×", up / bestUp) }
-            }
-            a.info.stringValue = words; a.info.textColor = Ink.text
-        } else {
-            a.dot.color = Ink.red; a.name.textColor = Ink.red
-            a.ping.stringValue = ""
-            a.info.stringValue = proxyDropped ? "server down" : "no server"
-            a.info.textColor = Ink.red
+            a.testButton.target = self
+            a.testButton.action = #selector(rowTestPressed(_:))
+            a.testButton.identifier = NSUserInterfaceItemIdentifier(Stripe.allTickedName)
+            a.testButton.setAccessibilityIdentifier("test-all-ticked")
+            a.testButton.isEnabled = LineSpeedTest.running == nil
+            a.testButton.contentTintColor = a.testButton.isEnabled ? Ink.text : Ink.grey
+            a.testButton.toolTip = "TEST: speedtest.net over the ticked lines together (the Mac's route), to compare with each line alone"
+            let tw = testWords(Stripe.allTickedName)
+            a.result.stringValue = tw.0; a.result.textColor = tw.1; a.result.toolTip = tw.2
         }
-        a.info.toolTip = "The aggregation server ck-aggregate on 127.0.0.1:\(aggPort): every new connection goes out through one of the joined lines, the faster one getting more. One single download stays on one line."
-        layoutAll()
         if changed { fit() }
     }
 
@@ -349,7 +358,7 @@ extension Stripe {
             return (c.rx >= last.rx ? Double(c.rx - last.rx) / dt : 0, c.tx >= last.tx ? Double(c.tx - last.tx) / dt : 0)
         }
         for o in others {
-            guard let r = lineRows[o.iface] else { continue }
+            guard let r = lineRows[o.name] else { continue }
             if Phones.isPhone(o.iface) {                    // its speed is set in layoutLines from the server's counters
                 if let v = r.lastRate {
                     if joined.contains(o.iface) { sumDown += v.0; sumUp += v.1 }
@@ -360,7 +369,6 @@ extension Stripe {
             let c = all[o.iface]
             let v = rates(r.lastBytes, c)
             r.lastBytes = c
-            if lineRole(o.iface) == "standby" { r.setIdle(); continue }      // v82: no live speed on a waiting line
             r.setSpeed(v?.0, v?.1, test: lineTest(o.name, tests, aggTest), dim: o.ms == nil, mark: lineTesting.contains(o.name) ? "..." : nil)
             if joined.contains(o.iface), let v { sumDown += v.0; sumUp += v.1 }
             if o.sameAs == nil, let v { allDown += v.0; allUp += v.1 }
@@ -382,7 +390,7 @@ extension Stripe {
     @objc func testRowSpeed(_ g: NSClickGestureRecognizer) {
         let name: String
         if g.view === aggRow.speed { name = "JOINED" }
-        else if let o = others.first(where: { lineRows[$0.iface]?.speed === g.view }), o.sameAs == nil { name = o.name }
+        else if let o = others.first(where: { lineRows[$0.name]?.speed === g.view }), o.sameAs == nil { name = o.name }
         else { return }
         if !lineTesting.isEmpty { return }                  // one test at a time: two would share the lines
         lineTesting.insert(name)
@@ -421,64 +429,6 @@ extension Stripe {
         }
         show(aggregate ? "aggregate connection: joining the lines…" : "one connection: aggregation off", aggregate ? Ink.amber : Ink.green, for: 8)
         layoutLines()
-    }
-
-    func addModeSection(_ menu: NSMenu) {
-        let on = Aggregation.on
-        for (title, sel, picked) in [("One connection   the Mac straight on its line, aggregation off", #selector(pickOne), !on),
-                                     ("Aggregate connection   join the ticked lines (\(Aggregation.tunnelName))", #selector(pickAggregate), on)] {
-            let i = NSMenuItem(title: title, action: sel, keyEquivalent: "")
-            i.target = self
-            i.state = picked ? .on : .off
-            menu.addItem(i)
-        }
-        menu.addItem(.separator())
-    }
-
-    // THE JOIN TICKS (request 28). Rows are views, so a tick does not close the menu.
-    func addJoinSection(_ menu: NSMenu) {
-        var names: [(String, Bool, String)] = []
-        if let i = iface, i != Aggregation.tunnelDevice { names.append((Net.displayName(i), true, i)) }
-        for o in others where !names.contains(where: { $0.0 == o.name }) { names.append((o.name, o.ms != nil, o.iface)) }
-        menu.addItem(.separator())
-        let head = NSMenuItem(title: "JOIN (aggregation): tick the connections, none = off", action: nil, keyEquivalent: "")
-        head.isEnabled = false
-        menu.addItem(head)
-        let ticked = Set(Aggregation.selected)
-        for (name, ok, dev) in names {
-            let same = others.first { $0.name == name }?.sameAs
-            let role = roleWord(dev).map { "   \($0)" } ?? ""          // v82 (request 91)
-            let b = NSButton(checkboxWithTitle: Net.shown(name, dev) + (same.map { "   (\($0))" } ?? "") + role, target: self, action: #selector(toggleJoin(_:)))
-            b.state = ticked.contains(name) ? .on : .off
-            b.isEnabled = ok && same == nil
-            b.identifier = NSUserInterfaceItemIdentifier(name)
-            b.font = .menuFont(ofSize: 0)
-            let v = NSView(frame: NSRect(x: 0, y: 0, width: 460, height: 24))
-            b.frame = NSRect(x: 20, y: 2, width: 430, height: 20)
-            v.addSubview(b)
-            let item = NSMenuItem()
-            item.view = v
-            menu.addItem(item)
-        }
-    }
-
-    @objc func toggleJoin(_ b: NSButton) {
-        guard let name = b.identifier?.rawValue else { return }
-        let was = Aggregation.on
-        var s = Aggregation.selected.filter { $0 != name }
-        if b.state == .on { s.append(name) }
-        Aggregation.selected = s
-        let now = Aggregation.on
-        appendLog("\(logStamp()) AGGREGATION ticks: \(s.isEmpty ? "none, aggregation off" : s.joined(separator: " + "))")
-        if was != now {
-            proxyDropped = false; serverMisses = 0
-            DispatchQueue.global().async {
-                let said = Aggregation.setMode(now)
-                appendLog("\(logStamp()) AGGREGATION \(now ? "on" : "off"): " + said.joined(separator: "; "))
-            }
-        }
-        layoutLines()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { self.scanLines() }
     }
 }
 
@@ -550,13 +500,13 @@ extension Stripe {
     func readRadios() {
         if radioReading { return }
         radioReading = true
-        let serials = lineRows.keys.filter(Phones.isPhone).map { String($0.dropFirst(4)) }
+        let serials = others.filter { Phones.isPhone($0.iface) }.map { String($0.iface.dropFirst(4)) }
         DispatchQueue.global().async {
             var got: [String: (fiveG: Bool?, shown: String, slot: Int)] = [:]
             for s in serials { if let st = PhoneRadio.state(s) { got[s] = st } }
             DispatchQueue.main.async {
                 for (k, v) in got { self.radioStates[k] = v }
-                for (dev, r) in self.lineRows where Phones.isPhone(dev) { self.showRadio(r, String(dev.dropFirst(4))) }
+                for o in self.others where Phones.isPhone(o.iface) { if let r = self.lineRows[o.name] { self.showRadio(r, String(o.iface.dropFirst(4))) } }
                 self.radioReading = false
             }
         }
@@ -577,7 +527,7 @@ extension Stripe {
             DispatchQueue.main.async {
                 if let st { self.radioStates[serial] = st }
                 appendLog("\(logStamp()) RADIO \(serial): \(ok ? "set" : "NOT set"), the phone shows \(st?.shown ?? "?")")
-                for (dev, r) in self.lineRows where dev == "adb:\(serial)" { self.showRadio(r, serial) }
+                for o in self.others where o.iface == "adb:\(serial)" { if let r = self.lineRows[o.name] { self.showRadio(r, serial) } }
                 self.show(ok ? "\(five ? "5G" : "4G"): the phone shows \(st?.shown ?? "?")" : "the phone did not take the change (adb)", ok ? Ink.green : Ink.red, for: 8)
             }
         }

@@ -100,7 +100,8 @@ enum Lines {
             // not registered and aggregated"): the Mac's Wi-Fi on a phone's hotspot is a line of its own (that phone's SIM,
             // a different road from the cable's router), joined without a tick; v81 had refused it.
             let hot = i == wifi && CableOnly.isPhoneHotspot(Net.currentSSID(i))
-            guard ticked.isEmpty || hot || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
+            // v89 (request 97): the ticks decide alone; a phone hotspot is a line only when it is ticked (v87 joined it without one)
+            guard ticked.isEmpty || ticked.contains(Net.displayName(i)), let gw = gateway(i) else { continue }
             if hot, Uplink.reasons[i] != "PHONE HOTSPOT JOINED" { log("\(Net.currentSSID(i) ?? "?") (\(i)): a phone hotspot, joined as a line of its own (its SIM)"); Uplink.reasons[i] = "PHONE HOTSPOT JOINED" }
             if !hot, Uplink.reasons[i] == "PHONE HOTSPOT JOINED" { Uplink.reasons[i] = nil }
             let u = Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i])

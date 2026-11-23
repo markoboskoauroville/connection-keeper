@@ -52,13 +52,7 @@ extension Stripe {
             menu.addItem(i)
         }
         menu.addItem(.separator())
-        // v81 (request 90): the Nothing on its USB cable as the only line, its cell modem; TP-Link only as standby
-        let n = NSMenuItem(title: "NOTHING ONLY (cable)   the Nothing by USB on its cell modem; TP-Link only if it fails", action: #selector(toggleNothingOnly), keyEquivalent: "")
-        n.target = self
-        n.state = NothingOnly.on ? .on : .off
-        n.toolTip = nothingSaid.isEmpty ? "Switched on only when the Nothing is on the USB cable (adb)" : nothingSaid
-        menu.addItem(n)
-        menu.addItem(.separator())
+        // v89 (request 97): NOTHING ONLY left this menu: tick only the Nothing in the list for the same
         let s = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         s.target = self
         menu.addItem(s)

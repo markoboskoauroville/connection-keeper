@@ -67,16 +67,15 @@ extension Stripe {
         for i in probeState.keys where results[i] == nil { if probeState[i]?.dead == true { changed = true }; probeState[i] = nil }
         let dead = Set(probeState.filter { $0.value.dead }.keys)
         if changed || dead != deadIfaces { deadIfaces = dead; applyDead() }
-        showChoice()
     }
 
     // The dead lines' names for the aggregation, and the service order again.
     func applyDead() {
         let dead = deadIfaces
-        let c = choice
+        let first = tickedDevices()
         DispatchQueue.global().async {
             Aggregation.dead = dead.map { Net.displayName($0) }.sorted()
-            if let said = ServiceOrder.apply(c, cable: Stripe.cableTicks(), dead: dead) { appendLog("\(logStamp()) ORDER (dead lines last): \(said)") }
+            if let said = ServiceOrder.apply(first: first, dead: dead) { appendLog("\(logStamp()) ORDER (dead lines last): \(said)") }
         }
     }
 }

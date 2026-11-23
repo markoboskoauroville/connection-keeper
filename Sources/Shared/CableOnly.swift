@@ -80,15 +80,32 @@ enum CableOnly {
     }
 
     // The phone's own hotspot name, read once over any adb (read only), kept so that Wi-Fi is never a line.
+    // v89 (request 97): with the phone's own serial (ro.serialno, the same as its USB adb serial, also when asked over
+    // wireless adb), so the hotspot and that phone on its cable are one exclusion group in the ticks: the same SIM.
     static var learned = Set<String>()
     static func learnHotspot(_ serial: String) {
         guard !learned.contains(serial), let adb = Phones.adb else { return }
         learned.insert(serial)
-        let r = shell(adb, ["-s", serial, "shell", "dumpsys wifi | grep -m1 mCurrentSoftApConfiguration"], timeout: 8)
+        let r = shell(adb, ["-s", serial, "shell", "dumpsys wifi | grep -m1 mCurrentSoftApConfiguration; getprop ro.serialno"], timeout: 8)
         if let m = r.out.range(of: #"ssid = "([^"]+)""#, options: .regularExpression) {
             let s = String(r.out[m]).replacingOccurrences(of: "ssid = ", with: "").trimmingCharacters(in: CharacterSet(charactersIn: "\""))
             learn(s)
+            let own = r.out.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .last { $0.range(of: #"^[A-Za-z0-9]{6,}$"#, options: .regularExpression) != nil }
+            setOwner(s, own ?? serial)
         }
+    }
+
+    static let ownersFile = Paths.support.appendingPathComponent("phone-hotspot-owners.json")
+    static var owners: [String: String] {
+        (try? Data(contentsOf: ownersFile)).flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+    }
+    static func setOwner(_ ssid: String, _ serial: String) {
+        var o = owners
+        guard o[ssid] != serial else { return }
+        o[ssid] = serial
+        try? FileManager.default.createDirectory(at: Paths.support, withIntermediateDirectories: true)
+        try? JSONEncoder().encode(o).write(to: ownersFile, options: .atomic)
     }
 }
 

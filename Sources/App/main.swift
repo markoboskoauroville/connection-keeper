@@ -149,13 +149,6 @@ final class Stripe: NSObject {
     let gear = NSButton(title: "⚙", target: nil, action: nil)
     let rescan = NSButton(title: "⟳", target: nil, action: nil)   // v32, request 49: find every line again, now
     let lights = TrafficLights()                // v49, request 70: the standard red / yellow / green, on the left (Lights.swift)
-    // v49 (request 69): WI-FI · CABLE · BOTH ticks on the top row (Choose.swift), the dead lines (Health.swift), the signal (Signal.swift)
-    lazy var wifiTick = makeTick(#selector(tickWifi), id: "tick-wifi")
-    lazy var cableTick = makeTick(#selector(tickCable), id: "tick-cable")
-    lazy var bothTick = makeTick(#selector(tickBoth), id: "tick-both")
-    lazy var wifiLabel = word("WI-FI", Ink.text, #selector(openWifiList), id: "choose-wifi", tip: "Tick: the Mac on its Wi-Fi (first in the service order, the cable second). Click the word: the Wi-Fi networks in range, tick the one to use.")
-    lazy var cableLabel = word("CABLE", Ink.text, #selector(openCableList), id: "choose-cable", tip: "Tick: the cable first. Click the word: the wired interfaces and phones, tick the ones to use.")
-    lazy var bothLabel = word("BOTH", Ink.text, #selector(tickBoth), id: "choose-both", tip: "Tick: aggregation over the ticked lines (the Wi-Fi in use and the ticked cables).")
     // v80 (request 88, Marko: "give me the option of Frankfurt or Croatia ... two action buttons"): FRANKFURT = all traffic
     // through the relay (bond on), CROATIA = straight over his own lines (bond off); the chosen one green (BondItem.swift)
     lazy var frankfurtWord = word("FRANKFURT", Ink.grey, #selector(pickFrankfurt), id: "frankfurt", tip: "All traffic through the relay in Frankfurt: the home address hidden")
@@ -165,21 +158,14 @@ final class Stripe: NSObject {
     lazy var cloudWord = word("", Ink.green, #selector(cloudPressed), id: "claude-cloud", tip: "Watches Claude Code's connection to Anthropic")
     // v84 (request 93): PING VM opens iTerm2 pinging chromium-vm over Tailscale (PingVM.swift); right-click: tailscale ping
     lazy var pingVMWord = makePingVMWord()
-    var outsideChoice: LinkChoice?          // v85: the last WI-FI/CABLE/BOTH asked from outside, applied after 1.5 s quiet
-    var outsideChoiceGen = 0
+    var outsideTicksWanted: [String]?       // v85/v89: the last ticks asked from outside, applied after 1.5 s quiet
+    var outsideTicksGen = 0
+    var tickFlash: [String: (word: String, until: Date)] = [:]   // v89: a row unticked by the same-road rule says why
+    var rowTests: [String: (result: WebSpeed?, error: String?, note: String, label: String)] = [:]   // v89 (request 99)
+    static let allTickedName = "ALL TICKED"
     lazy var tsWord = word("", Ink.grey, #selector(tsPressed), id: "tailscale", tip: "Tailscale")
-    lazy var tabAll = word("ALL", Ink.grey, #selector(pickTabAll), id: "tab-all", tip: "Every connection the Mac can see: Wi-Fi networks in range, cables, phones, each with its state and signal")
-    lazy var tabUse = word("IN USE", Ink.green, #selector(pickTabUse), id: "tab-inuse", tip: "Only the lines carrying traffic now, with their signal and live speed")
-    var tab = UserDefaults.standard.string(forKey: "linesTab") ?? "inuse"
-    // v60 (request 80): the filters of ALL, "" / "lan" / "wifi"; the LAN and Wi-Fi icons beside ALL, grey off, green on
-    var allFilter = UserDefaults.standard.string(forKey: "allFilter") ?? ""
-    lazy var lanFilter = word("LAN", Ink.grey, #selector(pickLanFilter), id: "filter-lan", tip: "In ALL: only the wired connections (cables, phones over USB). Again: every connection")
-    lazy var wifiFilter = word("WI-FI", Ink.grey, #selector(pickWifiFilter), id: "filter-wifi", tip: "In ALL: only the Wi-Fi networks. Again: every connection")
     // v60 (request 82): H, the help: an infographic of the stripe in the app's own browser
     lazy var helpWord = word("H", Ink.text, #selector(helpPressed), id: "help", tip: "Help: what every part of the stripe does, as a picture (opens and closes)")
-    var allRows: [String: LineRow] = [:]
-    lazy var wifiNoData = noDataLabel()
-    lazy var cableNoData = noDataLabel()
     let ruleChecks = Rule()
     var deadIfaces = Set<String>()
     var probeState: [String: ProbeState] = [:]
@@ -372,8 +358,8 @@ final class Stripe: NSObject {
         // v27 (request 45: "On the left side, make a minimize button which looks exactly as minimize button from the
         // macOS ... align that button with the rest of the text"): the yellow circle, "−" on it while the mouse is over
         wireLights()
-        for (w, l) in [(lanFilter, "LAN filter"), (wifiFilter, "Wi-Fi filter"), (helpWord, "Help")] { w.setAccessibilityLabel(l) }
-        for (w, sym) in [(testSpeedWord, "speedometer"), (testHealthWord, "waveform.path.ecg"), (helpWord, "questionmark.circle"), (lanFilter, "cable.connector.horizontal"), (wifiFilter, "wifi"), (cloudWord, "cloud.fill"), (tsWord, "point.3.connected.trianglepath.dotted")] {
+        helpWord.setAccessibilityLabel("Help")
+        for (w, sym) in [(testSpeedWord, "speedometer"), (testHealthWord, "waveform.path.ecg"), (helpWord, "questionmark.circle"), (cloudWord, "cloud.fill"), (tsWord, "point.3.connected.trianglepath.dotted")] {
             w.image = NSImage(systemSymbolName: sym, accessibilityDescription: nil); w.title = w.image == nil ? "TS" : ""; w.imagePosition = .imageOnly
         }
         // v27 ("On the right side, put the two vertical lines, which I'm dragging and resizing"): the grip scales the stripe
@@ -409,36 +395,26 @@ final class Stripe: NSObject {
         // v13: the rows stand in a column, the first row on top, the aggregation row last (Lines.swift).
         aggRow = LineRow(leadWidth: onWord.fittingSize.width + offWord.fittingSize.width + pipe().fittingSize.width + 12 + gear.fittingSize.width + rescan.fittingSize.width + 6, nameWidth: connectionWidth())
         aggRow.dot.isHidden = true
-        aggRow.name.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(toggleMode)))
         aggRow.speed.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(testRowSpeed(_:))))
         aggRow.speed.toolTip = "All joined lines' live speed added.\nClick: test every line alone, then all joined, to compare (about 40 s)."
         dlBox.orientation = .vertical
         dlBox.alignment = .leading
         dlBox.spacing = 0
         dlBox.isHidden = true
-        let checkRow = NSStackView(views: [lights, wifiTick, wifiLabel, wifiNoData, pipe(), cableTick, cableLabel, cableNoData, pipe(), bothTick, bothLabel, pipe(), frankfurtWord, croatiaWord, bondWord, cloudWord, tsWord, pingVMWord])
+        let checkRow = NSStackView(views: [lights, frankfurtWord, croatiaWord, bondWord, cloudWord, tsWord, pingVMWord])
         checkRow.orientation = .horizontal
         checkRow.spacing = 3
         checkRow.edgeInsets = NSEdgeInsets(top: 0, left: 8, bottom: 0, right: 6)
         checkRow.translatesAutoresizingMaskIntoConstraints = false
         checkRow.heightAnchor.constraint(equalToConstant: 22).isActive = true
         aggRow.sigBox.alphaValue = 0
-        let spacerL = NSView(), spacerR = NSView()
-        for sp in [spacerL, spacerR] { sp.translatesAutoresizingMaskIntoConstraints = false; sp.setContentHuggingPriority(.defaultLow, for: .horizontal) }
-        let tabRow = NSStackView(views: [spacerL, lanFilter, wifiFilter, tabAll, tabUse, spacerR])
-        spacerL.widthAnchor.constraint(equalTo: spacerR.widthAnchor).isActive = true      // only after both are in tabRow (v55: before it crashed at launch)
-        tabRow.orientation = .horizontal; tabRow.spacing = 18
-        tabRow.translatesAutoresizingMaskIntoConstraints = false
-        tabRow.heightAnchor.constraint(equalToConstant: 20).isActive = true
-        showTabs()
-        let column = NSStackView(views: [checkRow, ruleChecks, row, ruleLines, tabRow, aggRow.view, ruleStatus, dlBox])
+        let column = NSStackView(views: [checkRow, ruleChecks, row, ruleLines, aggRow.view, ruleStatus, dlBox])   // v89: the tick rows go in before aggRow
         column.orientation = .vertical
         column.alignment = .leading
         column.spacing = 0
         column.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 4, right: 20)   // the right 20 points: the grip
         column.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(column)
-        tabRow.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -16).isActive = true
         for r in [ruleChecks, ruleLines, ruleStatus] { r.widthAnchor.constraint(equalTo: column.widthAnchor, constant: -16).isActive = true }
         column.setCustomSpacing(3, after: checkRow); column.setCustomSpacing(3, after: ruleChecks); column.setCustomSpacing(3, after: row); column.setCustomSpacing(3, after: ruleLines)
         column.setCustomSpacing(3, after: aggRow.view); column.setCustomSpacing(3, after: ruleStatus)
@@ -508,27 +484,9 @@ final class Stripe: NSObject {
         NotificationCenter.default.addObserver(forName: DataBalanceNote.checkNow, object: nil, queue: .main) { [weak self] _ in self?.checkDataByHand() }
         // v32: ⟳ pressed from outside too (a terminal, a script): the distributed notification "ConnectionKeeperRescan"
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperRescan"), object: nil, queue: .main) { [weak self] _ in self?.rescanNow() }
-        // v81 (request 90): NOTHING ONLY from a terminal too: object "on" or "off" (the same checks as ⚙)
-        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperNothingOnly"), object: nil, queue: .main) { [weak self] n in
-            self?.setNothingOnly((n.object as? String) == "on")
-        }
-        // v84 (request 93): WI-FI / CABLE / BOTH from outside (Queen, a terminal): object "wifi", "cable" or "both", the same as the tick
-        // v85: coalesced: requests within 1.5 s collapse into the last one (a burst never runs overlapping mode switches)
-        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperChoose"), object: nil, queue: .main) { [weak self] n in
-            guard let self else { return }
-            let want = (n.object as? String)?.lowercased()
-            guard let c = want.flatMap({ LinkChoice(rawValue: $0) }) else {
-                appendLog("\(logStamp()) CHOICE from outside ignored: \(want ?? "nothing") (wifi, cable or both)"); return
-            }
-            self.outsideChoice = c
-            self.outsideChoiceGen += 1
-            let g = self.outsideChoiceGen
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-                guard let self, g == self.outsideChoiceGen, let c = self.outsideChoice else { return }
-                self.outsideChoice = nil
-                self.setChoice(c)
-            }
-        }
+        // v89 (request 97): ticks from outside (ConnectionKeeperTicks, and the older ConnectionKeeperChoose / NothingOnly) (Ticks.swift)
+        listenForOutsideTicks()
+        foldNothingOnly()
         // v84 (request 93): the speed test's RESTART from outside; opens the speed test when it is closed
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperSpeedRestart"), object: nil, queue: .main) { _ in
             SpeedBrowser.restartOrOpen()
@@ -679,7 +637,6 @@ final class Stripe: NSObject {
         reading()
         showDownloads()
         showRoute()
-        showChoice()
         if tick % 5 == 0 { showCloud(); showTailscale() }
         if tick % 2 == 0 { showBond(); showNothingOnly() }
         applyAlert()
@@ -787,13 +744,20 @@ final class Stripe: NSObject {
         // in the Dock brings it back out (AppKit deminiaturizes it). fit() runs every second and on every status word, so
         // the window came back up by itself. Down in the Dock it keeps its frame; the size is applied when he brings it back.
         if panel.isMiniaturized { fitWaiting = true; return }
+        // v89 (request 98, Marko 23.11.2026: "with every refresh, is moving up through the screen by itself"): the new frame is
+        // computed from the CONTENT size plus the title bar (frameRect(forContentRect:)) and set in one step with the same
+        // top-left corner. Until v88 the origin was set to top − content height after setContentSize, so the frame's top
+        // landed one title bar (28 pt) higher at every size change, until the top of the display stopped it.
         let x = panel.frame.minX, top = panel.frame.maxY
         resizingByHand = true
-        panel.setContentSize(size)
+        let fr = panel.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        panel.setFrame(NSRect(x: x, y: top - fr.height, width: fr.width, height: fr.height), display: true)
         rescale(root, natural)
-        panel.setFrameOrigin(NSPoint(x: x, y: top - size.height))
         resizingByHand = false
-        keepOnScreen()
+        if abs(panel.frame.maxY - top) >= 0.5 || abs(panel.frame.minX - x) >= 0.5 {
+            appendLog("\(logStamp()) WINDOW top-left moved by a refresh (\(Int(x)),\(Int(top)) → \(Int(panel.frame.minX)),\(Int(panel.frame.maxY))): put back")
+            panel.setFrameTopLeftPoint(NSPoint(x: x, y: top))
+        }
     }
 
     // v29 (request 47: "Please make a digital display. Make fixed positions for every number and every letter"): every
@@ -1027,7 +991,7 @@ final class Stripe: NSObject {
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.minimumWidth = 460
-        addModeSection(menu)
+        // v89 (request 97): the lines are chosen only by the ticks of the list; this menu keeps the checks, the log, quit
         let cfg = Config.load()
         let wifi = Net.wifiInterface()
         let active = Net.activeInterfaces().filter { $0 != wifi }
@@ -1087,7 +1051,6 @@ final class Stripe: NSObject {
                 menu.update()
             }
         }
-        addJoinSection(menu)
         menu.addItem(.separator())
         let check = NSMenuItem(title: "Check now", action: #selector(checkNow), keyEquivalent: "")
         check.target = self
