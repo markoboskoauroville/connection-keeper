@@ -1,5 +1,5 @@
 #!/bin/bash
-# CI only (v90, assessment 23.11.2026): the keeper's ladder with every probe offline (dry run, short waits), around it a
+# CI only (v91, assessment 23.11.2026): the keeper's ladder with every probe offline (dry run, short waits), around it a
 # simulated Wi-Fi, its network, a second live line and the aggregation. The Wi-Fi power cycle must appear only when no
 # other line carries and the Wi-Fi is not on a phone hotspot.
 set -u

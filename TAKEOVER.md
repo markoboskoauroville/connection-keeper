@@ -1,8 +1,8 @@
-**23.11.2026, v90 (requests 100-103, the four weak points of the read-only assessment; no interface change).**
+**23.11.2026, v91 (requests 101-104, the four weak points of the read-only assessment; no interface change).**
 (1) Relay (Sources/Bond/server/group.go): an idle bonded stream is no longer reset after 10 minutes (SSH, websockets, Claude
 Code died only when bonded); the safety net is 24 h (`streamIdle`, env CK_BOND_IDLE shortens it for tests), the relay's own
 outbound socket has TCP keepalive 30 s (`dialKeepAlive`; Linux gives up after 9 probes, ~5 min) so a dead destination is
-still reaped; relayVersion "v90", its start line says the idle limit. The Mac side never had an idle timer (bridge: deadline 0).
+still reaped; relayVersion "v91", its start line says the idle limit. The Mac side never had an idle timer (bridge: deadline 0).
 CI "Bond idle test": a stream to a local echo silent 15 s on the relay as deployed is kept; the control (CK_BOND_IDLE=4s, the
 old rule shrunk) ends it. (2) Bond selftest speed floors (BondTest.swift `BondFloors`): fetch 1 >= 0.50x the best line (40
 Mbit/s), fetch 2 >= 0.25x of 80 (20 Mbit/s); every run prints "SPEED fetch 1/2: N x ... KNOWN SHORTFALL" against the goals

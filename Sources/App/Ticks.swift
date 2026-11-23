@@ -77,7 +77,37 @@ extension Stripe {
             add(TickEntry(name: n, other: nil, wifi: s.wifi, inRange: false, kind: s.wifi ? 2 : n.hasSuffix("(USB)") ? 1 : 0))
         }
         for n in tickedNames { add(TickEntry(name: n, other: nil, wifi: false, inRange: false, kind: 0)) }
-        return out.sorted { ($0.kind, $0.name.lowercased()) < ($1.kind, $1.name.lowercased()) }
+        // v90 (request 100): by FAMILY (the rows of one road out, families() below), the families in a fixed order (their
+        // first kind, then their first name), inside a family the wired row first and the Wi-Fi under it
+        let fam = families(out.map(\.name))
+        func key(_ e: TickEntry) -> (Int, String, Int, String) {
+            let f = fam[e.name] ?? [e.name]
+            let members = out.filter { f.contains($0.name) }
+            let first = members.map(\.kind).min() ?? e.kind
+            let head = members.filter { $0.kind == first }.map { $0.name.lowercased() }.min() ?? e.name.lowercased()
+            return (first, head, e.kind, e.name.lowercased())
+        }
+        return out.sorted { key($0) < key($1) }
+    }
+
+    // FAMILIES (v90, request 100): the rows that are one road out (the same phone, the same router, the same public
+    // address: the groups of tickGroups() without "one Wi-Fi", which is the Mac's radio, not a road), joined through any
+    // shared group. What is drawn together is what cancels each other. Every name → the names of its family.
+    func families(_ names: [String]) -> [String: Set<String>] {
+        var keys: [String: Set<String>] = [:]
+        for n in names { keys[n] = Set(tickGroups(n).map(\.key).filter { $0 != "radio:wifi" }) }
+        var fam: [String: Set<String>] = [:]
+        var left = Set(names)
+        while let start = left.first {
+            var group: Set<String> = [start], todo = [start]
+            left.remove(start)
+            while let n = todo.popLast() {
+                for m in left where !(keys[m] ?? []).isDisjoint(with: keys[n] ?? []) { group.insert(m); todo.append(m) }
+                left.subtract(group)
+            }
+            for n in group { fam[n] = group }
+        }
+        return fam
     }
 
     // The groups of one tick's name (see the head of this file), each with the word a row shows when it is unticked by it.
@@ -105,9 +135,12 @@ extension Stripe {
     }
 
     // The ticks without clashes: the earlier tick stays. Returns the ticks kept and the ones dropped, with the reason.
+    // v90: a line that is here beats one that is away (v89 kept the absent "mantra" and dropped the cable that was here).
     func cleanTicks(_ names: [String]) -> (kept: [String], dropped: [(name: String, by: String, word: String)]) {
         var kept: [String] = [], dropped: [(name: String, by: String, word: String)] = []
-        for n in names where !kept.contains(n) {
+        let here = Set(others.map(\.name))
+        let ordered = names.filter { here.contains($0) } + names.filter { !here.contains($0) }
+        for n in ordered where !kept.contains(n) {
             if let by = kept.first(where: { clash($0, n) != nil }) { dropped.append((name: n, by: by, word: clash(by, n) ?? "")) } else { kept.append(n) }
         }
         return (kept, dropped)

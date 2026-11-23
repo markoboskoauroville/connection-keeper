@@ -441,7 +441,7 @@ of every display: to Marko it "follows him around". The rules are in MANTRA_MANI
 ## Lesson: hover card (16.11.2026)
 The item is image-only, so the pipes are drawn into the image, with room (pad) on both sides; the mouse is polled by the kit (one copy of the item per display).
 
-## Lessons: v90 (23.11.2026)
+## Lessons: v91 (23.11.2026)
 - A test that shortens a limit to prove the limit is gone proves nothing: with CK_BOND_IDLE=4s the stream was (rightly)
   ended. Test the deployed default (a stream silent longer than the test, kept) AND a control with the short limit (ended),
   so the test is known to see a reset when there is one.
@@ -450,3 +450,6 @@ The item is image-only, so the pipes are drawn into the image, with room (pad) o
   printed as a KNOWN SHORTFALL line instead.
 - A build check of a branch needs the Release step guarded (`if: github.ref == 'refs/heads/main'`), else a dispatch on a
   branch publishes vN ahead of main.
+- Never `git reset --soft origin/main` after a fetch that brought someone else's commits: the next commit carries your
+  old tree and silently reverts theirs (23.11.2026: caught at once, the build cancelled after 7 s, fixed by applying the
+  own diff onto their head). Rebase, or apply `git diff <own base> <own tip>` onto the new head.

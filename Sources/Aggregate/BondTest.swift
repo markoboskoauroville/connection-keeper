@@ -10,8 +10,8 @@ import Foundation
 import Darwin
 import CryptoKit
 
-// v90 (request 101): the bond selftest's speed floors, as fractions of the best emulated line (80 Mbit/s); measured first
-// (CI history and the bench run of 23.11.2026, see TAKEOVER v90), set under the lowest good run, above a broken scheduler.
+// v91 (request 102): the bond selftest's speed floors, as fractions of the best emulated line (80 Mbit/s); measured first
+// (CI history and the bench run of 23.11.2026, see TAKEOVER v91), set under the lowest good run, above a broken scheduler.
 enum BondFloors {
     static let fetch1 = 0.50      // one stream over 80 + 80 + 16: 40 Mbit/s (lowest good run 49.7; the v65 spiral 36.7)
     static let fetch2 = 0.25      // lineA silenced at 24 MB, the 3 s to notice included: 20 Mbit/s (lowest good 25.8; v65 10.0)
@@ -101,7 +101,7 @@ func loopbackConnect(_ port: UInt16) -> Int32? {
     return fd
 }
 
-// v90: a TCP echo on 127.0.0.1 (the idle test's destination); its port, or nil.
+// v91: a TCP echo on 127.0.0.1 (the idle test's destination); its port, or nil.
 func tcpEcho() -> UInt16? {
     let s = socket(AF_INET, SOCK_STREAM, 0)
     guard s >= 0 else { return nil }
@@ -208,9 +208,9 @@ func bondSelftest(_ args: [String]) -> Never {
     guard client.legCount == 3 else { print("BOND SELFTEST FAIL: the legs did not come up"); exit(1) }
     sleep(2)                                                // a few PINGs: each leg knows its RTT
 
-    // v90 (assessment 23.11.2026): an idle bonded stream is not reset. This stream to a local echo stays silent for
+    // v91 (assessment 23.11.2026): an idle bonded stream is not reset. This stream to a local echo stays silent for
     // --idle-only seconds. `--idle-expect kept` (the relay as deployed, 24 h safety net): it must still echo afterwards.
-    // `--idle-expect ended` (the control: the relay with CK_BOND_IDLE=4s, the pre-v90 rule shrunk from 10 min): it must
+    // `--idle-expect ended` (the control: the relay with CK_BOND_IDLE=4s, the pre-v91 rule shrunk from 10 min): it must
     // be gone, so the test is known to see a reset when there is one.
     if let idleText = arg("--idle-only"), let idle = UInt32(idleText) {
         guard let echo = tcpEcho() else { print("BOND IDLE TEST FAIL: no local echo"); exit(1) }
@@ -301,7 +301,7 @@ func bondSelftest(_ args: [String]) -> Never {
     let mbps2 = Double(f2.bytes) * 8 / max(f2.secs, 0.001) / 1e6
     print(String(format: "fetch 2 (lineA silenced mid-way): %d bytes in %.2f s = %.1f Mbit/s; sha %@ (%@); legs left %d",
                  f2.bytes, f2.secs, mbps2, f2.sha, f2.sha == want ? "matches" : "DIFFERENT", client.legCount))
-    // v90 (assessment 23.11.2026, request 101): speed floors. The goal is fetch 1 at 1.1x the best line (88 Mbit/s) and
+    // v91 (assessment 23.11.2026, request 102): speed floors. The goal is fetch 1 at 1.1x the best line (88 Mbit/s) and
     // fetch 2 at 0.7x of 80 (56) after a line died; today's scheduler does not reach that every run, and GitHub's runner
     // varies up to 2x run to run (TAKEOVER v76-v78), so the floors fail a real regression (one line carrying it all, the
     // v65 estimator spiral at 36.7 / 10.0) but not the runner's noise. The gap to the goal is printed every run.

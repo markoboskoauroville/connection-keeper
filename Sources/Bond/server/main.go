@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-const relayVersion = "v90"
+const relayVersion = "v91"
 
 const (
 	maxGroups      = 64

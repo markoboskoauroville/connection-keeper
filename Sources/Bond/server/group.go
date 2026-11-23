@@ -32,7 +32,7 @@ const (
 
 var epoch = time.Now()
 
-// v90 (assessment 23.11.2026): a bonded stream that says nothing (an SSH session, a websocket, Claude Code waiting) is
+// v91 (assessment 23.11.2026): a bonded stream that says nothing (an SSH session, a websocket, Claude Code waiting) is
 // no longer reset after 10 minutes; a direct connection had no such limit. The safety net is 24 hours (env CK_BOND_IDLE,
 // a Go duration, shortens it for the selftest); a dead destination is found by TCP keepalive on the relay's own socket
 // (dialKeepAlive), a dead Mac by its legs going silent (the group ends 60 s after its last leg).

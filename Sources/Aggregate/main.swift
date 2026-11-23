@@ -53,13 +53,13 @@ final class Uplink {
     static var reasons: [String: String] = [:]           // v53: the phones kept out of the pool, and why
     var cellular = false                                 // a phone whose internet is its mobile data, not a Wi-Fi
     var standby = false                                  // v81 NOTHING ONLY: used only while no other line answers
-    var ssid: String?                                    // v90: the Mac's Wi-Fi on a phone hotspot: that hotspot's name
-    // `twins` false: the rule before v90 (the UDP road of ONLY PHONES TICKED keeps a phone's hotspot beside the phone)
+    var ssid: String?                                    // v91: the Mac's Wi-Fi on a phone hotspot: that hotspot's name
+    // `twins` false: the rule before v91 (the UDP road of ONLY PHONES TICKED keeps a phone's hotspot beside the phone)
     func sameLine(_ o: Uplink, twins: Bool = true) -> Bool {
         // Two 4G lines of the same operator can leave through the same public address (carrier NAT): at 09:06 on
         // 31.10.2026 the Nothing (LTE, Telemach) read the TP-Link's 86.33.92.213 and was dropped as "the same line" for
         // three minutes. A phone on its own mobile data is its own radio, so its own line.
-        // v90 (assessment 23.11.2026): except a phone and its OWN hotspot, the same SIM twice: the Nothing by USB and
+        // v91 (assessment 23.11.2026): except a phone and its OWN hotspot, the same SIM twice: the Nothing by USB and
         // "Something" were joined as two lines (both 31.217.5.94, +6 % down and -22 % up together). Both cellular and
         // the hotspot's learned owner (phone-hotspot-owners.json, v89) is that phone, or both leave by the same public
         // address; two different phones (two serials, or a hotspot owned by another phone) stay two lines.
@@ -77,7 +77,7 @@ final class Uplink {
     }
 }
 
-// `ck-aggregate sameline-selftest` (v90, CI): the same-line rule on fake lines, no network.
+// `ck-aggregate sameline-selftest` (v91, CI): the same-line rule on fake lines, no network.
 func sameLineSelftest() -> Never {
     func phone(_ serial: String, ip: String?) -> Uplink {
         let u = Uplink(iface: "phone-\(serial)", name: "Nothing", gateway: nil, gatewayMAC: nil, publicIP: ip)
@@ -154,7 +154,7 @@ enum Lines {
             if !hot, Uplink.reasons[i] == "PHONE HOTSPOT JOINED" { Uplink.reasons[i] = nil }
             let u = Uplink(iface: i, name: Net.displayName(i), gateway: gw, gatewayMAC: gatewayMAC(gw, i), publicIP: publicIP(i) ?? known[i])
             u.cellular = hot                                   // a phone's own radio: never "the same line" by carrier NAT
-            if hot { u.ssid = Net.currentSSID(i) }             // v90: matched to the phone that owns it (sameLine)
+            if hot { u.ssid = Net.currentSSID(i) }             // v91: matched to the phone that owns it (sameLine)
             found.append(u)
         }
         // v17 (request 36): every phone on a USB cable with its server answering is a line of its own.

@@ -14,7 +14,7 @@ let simulateOffline = args.contains("--simulate-offline")
 let dryRunFlag = args.contains("--dry-run") || simulateOffline
 let once = args.contains("--once")
 let fast = args.contains("--fast")
-// v90 (assessment 23.11.2026), CI only, together with --simulate-offline: what the ladder sees around it.
+// v91 (assessment 23.11.2026), CI only, together with --simulate-offline: what the ladder sees around it.
 //   --simulate-wifi en0          the Wi-Fi device (a runner has none)
 //   --simulate-ssid Something    the network it is on (a phone hotspot when the name is one)
 //   --simulate-other-line NAME   another line carries while the default device does not
@@ -94,11 +94,11 @@ final class Keeper {
     var manual = false                      // a switch Marko asked for: no red alert
     var wifiIface: String? { simWifi ?? Net.wifiInterface() }   // asked every time (v12: a lazy answer stuck empty since a login)
     func ssid(_ iface: String) -> String? { simSSID ?? Net.currentSSID(iface) }
-    // v90: the Mac's Wi-Fi is on a phone's hotspot (phone-hotspots.txt): its SIM decides; a power cycle cannot help it
+    // v91: the Mac's Wi-Fi is on a phone's hotspot (phone-hotspots.txt): its SIM decides; a power cycle cannot help it
     var onPhoneHotspot: Bool { wifiIface.flatMap { ssid($0) }.map { CableOnly.isPhoneHotspot($0) } ?? false }
     var aggregating: Bool { simAggregate || (!simulateOffline && Aggregation.aggregateMode) }
 
-    // v90 (assessment 23.11.2026): the probe is pinned to the default-route device, so a dead default device is not "the
+    // v91 (assessment 23.11.2026): the probe is pinned to the default-route device, so a dead default device is not "the
     // Mac is offline" while another line carries. ck-aggregate's own health check first (every line it holds, also
     // NOTHING ONLY's standby), else a cable of the list that answers a ping through itself. The line's name, or nil.
     func liveElsewhere() -> String? {
@@ -110,7 +110,7 @@ final class Keeper {
         }
         return nil
     }
-    // v90: the next look; 30 s while the Wi-Fi is on a phone's hotspot (a SIM that runs out of data shows quickly)
+    // v91: the next look; 30 s while the Wi-Fi is on a phone's hotspot (a SIM that runs out of data shows quickly)
     func nextLook() -> Double { onPhoneHotspot ? Double(min(30, cfg.intervalSeconds)) : Double(cfg.intervalSeconds) }
 
     init() {
@@ -222,7 +222,7 @@ final class Keeper {
         setPhase("checking", healthy: state.healthy)
         var p = probe(); record(p)
         if p.isOnline { online(p); return }
-        // v90: with the aggregation on, the traffic rides ck-aggregate's lines; one of them alive is not an outage of the Mac
+        // v91: with the aggregation on, the traffic rides ck-aggregate's lines; one of them alive is not an outage of the Mac
         if aggregating, let other = liveElsewhere() {
             failures = 0
             setPhase("ok: \(state.current ?? "the default device") has no internet, \(other) carries", healthy: true)
@@ -255,7 +255,7 @@ final class Keeper {
         for c in enabled where !(c.kind == "wifi" && c.name == here) {
             if bringUp(c) { online(probe()); return }
         }
-        // v90 (23.11.2026: the hotspot's SIM had no data; the cycle added about two minutes and the Claude API was gone for
+        // v91 (23.11.2026: the hotspot's SIM had no data; the cycle added about two minutes and the Claude API was gone for
         // 212 s): the Wi-Fi is never power-cycled while another line carries, nor when it is on a phone's hotspot
         let other = liveElsewhere()
         if let wifi, other != nil || onPhoneHotspot {

@@ -183,6 +183,7 @@ final class LineSpeedTest: NSObject, WKNavigationDelegate {
     var phase = "load"
     var goAt: Date?
     var finished = false
+    var failLogged = false
     var last: [String: Any] = [:]
     let done: (_ result: WebSpeed?, _ error: String?, _ note: String) -> Void
 
@@ -278,6 +279,15 @@ final class LineSpeedTest: NSObject, WKNavigationDelegate {
 
     func finish(_ s: WebSpeed?, _ error: String?) {
         guard !finished else { return }
+        if s == nil && !failLogged {
+            // v90: what the page showed when it gave no result (which server, how far it got), once, then finish
+            failLogged = true
+            js("TEXT") { [weak self] r in
+                appendLog("\(logStamp()) LINE TEST \(self?.name ?? "?") page at the failure: \(String(((r as? String) ?? "no text").prefix(900)))")
+                self?.finish(nil, error)
+            }
+            return
+        }
         finished = true
         web.stopLoading()
         web.loadHTMLString("", baseURL: nil)
