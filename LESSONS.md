@@ -482,3 +482,15 @@ The item is image-only, so the pipes are drawn into the image, with room (pad) o
 - On this Mac macOS gave the cable (secondary) its scoped default route but not the phone hotspot as secondary; the hotspot
   has a scoped route only while it is first and the tunnel helper adds one. Keep Wi-Fi first while Something is a line, and
   remember that the v49 rule "dead lines last" can move it down and so keep it dead (not changed yet).
+
+## 24.11.2026 (v95): the bond scheduler
+- Look at the kernel before blaming the scheduler's ordering: `ss -ti` on the relay showed TCP windows of 1 MB with 50-120 KB
+  queued, i.e. the relay starved its own legs. "The slow leg paces the stream" was the hypothesis; neither leg was full.
+- An in-flight cap built on the idle ping is a cap on throughput for any line whose round trip grows under load (4G, a
+  hotspot's Wi-Fi hop): delivery at the cap is cap / round trip, and an estimator fed by those samples spirals down.
+- An estimator that takes 40 % of every low sample forgets a line in 2 s of radio stall; a high rank of a window of samples
+  (and no samples while the leg is known stalled) forgets nothing that was true and still follows a real change in ~3 s.
+- A stalled leg must stop taking frames and give back what the receiver waits for long before it is declared dead; the
+  receiver's duplicate handling made this a sender-only change, so old and new ends mix without a version step.
+- An A/B switch in the same binary (CK_BOND_LEGACY) beats comparing builds: same harness, same runner, interleaved rounds.
+- A new CI step must not leave a server on a port a later step uses (the way test's whoami is on 18081): kill what you start.

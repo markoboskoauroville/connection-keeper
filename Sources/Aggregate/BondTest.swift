@@ -12,21 +12,31 @@ import CryptoKit
 
 // v91 (request 102): the bond selftest's speed floors, as fractions of the best emulated line (80 Mbit/s); measured first
 // (CI history and the bench run of 23.11.2026, see TAKEOVER v91), set under the lowest good run, above a broken scheduler.
+// v95 (the scheduler): raised after the A/B bench of 24.11.2026 (TAKEOVER v95): v95's scheduler read fetch 1 108-143 and
+// fetch 2 96-108 on the runner (v92's: 44-141 and 25-69); the floors keep about 35 % room under the lowest v95 run.
 enum BondFloors {
-    static let fetch1 = 0.40      // one stream over 80 + 80 + 16: 32 Mbit/s (lowest good run 44.4, v91 release run)
-    static let fetch2 = 0.25      // lineA silenced at 24 MB, the 3 s to notice included: 20 Mbit/s (lowest good 25.8; v65 10.0)
+    static let fetch1 = 0.85      // one stream over 80 + 80 + 16: 68 Mbit/s (v91 0.40)
+    static let fetch2 = 0.70      // lineA silenced at 24 MB: 56 Mbit/s, the goal itself (v91 0.25; a stalled leg is copied now)
 }
 
 final class ThrottleProxy {
     let name: String, mbps: Double, delay: Double, target: UInt16
+    // v95: `bloat` s: a loaded line's extra delay (a 4G cell's scheduler, a hotspot's Wi-Fi hop): each chunk is held
+    // delay + bloat x (how busy the line was over the last 0.5 s), so the round trip rises to about delay x 2 + bloat under
+    // load whatever the sender's own queue is. The queue is sized for it.
+    let bloat: Double
     var port: UInt16 = 0
     private let lock = NSLock()
-    private var holed = false
-    init(_ name: String, mbps: Double, delay: Double, target: UInt16) { self.name = name; self.mbps = mbps; self.delay = delay; self.target = target }
+    private var holed = false, holedUntil = 0.0
+    init(_ name: String, mbps: Double, delay: Double, target: UInt16, bloat: Double = 0) {
+        self.name = name; self.mbps = mbps; self.delay = delay; self.target = target; self.bloat = bloat
+    }
 
-    var isHoled: Bool { lock.lock(); defer { lock.unlock() }; return holed }
+    var isHoled: Bool { lock.lock(); defer { lock.unlock() }; return holed || bnow() < holedUntil }
     // The line goes silent: nothing moves any more, nothing is closed (the leg must notice by itself).
     func blackhole() { lock.lock(); holed = true; lock.unlock() }
+    // v95: silent for `secs`, then it carries on (a 4G stall): the leg must not die, the stream must not wait for it.
+    func stall(_ secs: Double) { lock.lock(); holedUntil = bnow() + secs; lock.unlock() }
 
     func start() -> Bool {
         let s = socket(AF_INET, SOCK_STREAM, 0)
@@ -58,12 +68,13 @@ final class ThrottleProxy {
     func pipe(_ from: Int32, _ to: Int32) {
         let q = NSCondition()
         var chunks: [(Double, [UInt8])] = [], queued = 0, eof = false
-        let limit = Int(mbps * 1e6 / 8 * delay) + 131_072
+        let limit = Int(mbps * 1e6 / 8 * (delay + bloat)) + 131_072
+        var recent: [(Double, Int)] = []                    // v95: bytes sent in the last 0.5 s (how busy the line is)
         Thread.detachNewThread { [self] in
             var buf = [UInt8](repeating: 0, count: 16384)
             while true {
                 q.lock(); while queued >= limit { q.wait() }; q.unlock()
-                while isHoled { sleep(1) }
+                while isHoled { usleep(10_000) }
                 let n = buf.withUnsafeMutableBytes { recv(from, $0.baseAddress, 16384, 0) }
                 q.lock()
                 if n <= 0 { eof = true } else { chunks.append((bnow(), Array(buf[0..<n]))); queued += n }
@@ -81,10 +92,18 @@ final class ThrottleProxy {
             q.broadcast(); q.unlock()
             // a sleep on GitHub's runner can last several ms longer than asked (the first run read 27 of 80 Mbit/s):
             // the bucket keeps up to 20 ms of credit, so the line still averages its speed
-            let now = bnow(), when = max(at + delay, nextFree)
+            var hold = delay
+            if bloat > 0 {
+                let t = bnow()
+                recent.removeAll { t - $0.0 > 0.5 }
+                let busy = min(1, Double(recent.reduce(0) { $0 + $1.1 }) * 8 / (mbps * 1e6 * 0.5))
+                hold += bloat * busy
+                recent.append((t, bytes.count))
+            }
+            let now = bnow(), when = max(at + hold, nextFree)
             nextFree = max(when, now - 0.02) + Double(bytes.count * 8) / (mbps * 1e6)
             if when > now + 0.001 { usleep(UInt32((when - now) * 1e6)) }
-            while isHoled { sleep(1) }
+            while isHoled { usleep(10_000) }
             if !sendAll(to, bytes) { return }
         }
     }
@@ -128,7 +147,7 @@ func tcpEcho() -> UInt16? {
     return UInt16(bigEndian: a.sin_port)
 }
 
-struct BondFetch { var ok = false, bytes = 0, length = -1, sha = "", secs = 0.0, why = "" }
+struct BondFetch { var ok = false, bytes = 0, length = -1, sha = "", secs = 0.0, why = "", maxGap = 0.0 }
 
 // One HTTP/1.0 GET through ONE bond stream: a socket pair, one end bridged into the stream exactly as a SOCKS client is.
 func bondFetch(_ b: BondClient, host: String, port: UInt16, path: String, progress: ((Int) -> Void)? = nil) -> BondFetch {
@@ -150,9 +169,13 @@ func bondFetch(_ b: BondClient, host: String, port: UInt16, path: String, progre
     shutdown(outer, SHUT_WR)                                // the request is all we send
     var head = [UInt8](), inBody = false, hasher = SHA256()
     var buf = [UInt8](repeating: 0, count: 65536)
+    var lastAt = 0.0                                        // v95: the longest wait between two pieces of the body
     while true {
         let n = buf.withUnsafeMutableBytes { recv(outer, $0.baseAddress, 65536, 0) }
         if n <= 0 { break }
+        let now = bnow()
+        if inBody && lastAt > 0 { r.maxGap = max(r.maxGap, now - lastAt) }
+        lastAt = now
         if inBody {
             hasher.update(data: Data(buf[0..<n])); r.bytes += n
         } else {
@@ -192,6 +215,10 @@ func bondSelftest(_ args: [String]) -> Never {
         exit(2)
     }
     let port = UInt16(url.port ?? 80), path = url.path.isEmpty ? "/" : url.path
+    if let names = arg("--scenarios") {
+        bondScenarios(names.split(separator: ",").map(String.init), server: sp, token: token, host: host, port: port, path: path, want: want,
+                      measureOnly: args.contains("--measure-only"))
+    }
     let lines = [ThrottleProxy("lineA", mbps: 80, delay: 0.020, target: sp), ThrottleProxy("lineB", mbps: 80, delay: 0.020, target: sp),
                  ThrottleProxy("lineC", mbps: 16, delay: 0.060, target: sp)]
     for l in lines {
@@ -451,4 +478,152 @@ func bondSelftest(_ args: [String]) -> Never {
     }
     print("BOND SELFTEST FAIL: " + failures.joined(separator: "; "))
     exit(1)
+}
+
+// MARK: v95 scenarios (the bond scheduler, 24.11.2026)
+
+// The floors of the scenarios, as fractions of the best line of each (measured first: TAKEOVER v95; the runner is noisy).
+enum BondScenarioFloors {
+    static let unequal = 0.80     // 90 + 25 Mbit/s: one stream (v95 86-106; v92 59-101)
+    static let deep = 0.80        // 80 + 80 Mbit/s whose round trip rises by 0.25 s under load (v95 90-113; v92 37-77)
+    static let upload = 0.70      // one upload over 80 + 80 + 16 (v95 80-131; v92 69-81)
+    static let maxGap = 1.0       // seconds: the longest wait in a stream while one of two lines stalls for 2 s (v95 0.40-0.82; v92 1.66-2.00)
+}
+
+// A TCP sink on 127.0.0.1: reads to the end, answers "<bytes> <sha256 hex>\n".
+func tcpSink() -> UInt16? {
+    let s = socket(AF_INET, SOCK_STREAM, 0)
+    guard s >= 0 else { return nil }
+    var a = sockaddr_in(); a.sin_family = sa_family_t(AF_INET); a.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    a.sin_port = 0; a.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let size = socklen_t(MemoryLayout<sockaddr_in>.size)
+    guard withUnsafePointer(to: &a, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(s, $0, size) } }) == 0, listen(s, 4) == 0 else { close(s); return nil }
+    var len = size
+    _ = withUnsafeMutablePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(s, $0, &len) } }
+    Thread.detachNewThread {
+        while true {
+            let c = accept(s, nil, nil)
+            if c < 0 { usleep(10_000); continue }
+            Thread.detachNewThread {
+                var h = SHA256(), n = 0, buf = [UInt8](repeating: 0, count: 65536)
+                while true {
+                    let r = buf.withUnsafeMutableBytes { recv(c, $0.baseAddress, 65536, 0) }
+                    if r <= 0 { break }
+                    h.update(data: Data(buf[0..<r])); n += r
+                }
+                _ = sendAll(c, Array("\(n) \(bondHex(h.finalize().withUnsafeBytes { Array($0) }))\n".utf8))
+                close(c)
+            }
+        }
+    }
+    return UInt16(bigEndian: a.sin_port)
+}
+
+// One upload through ONE bond stream to the sink: `bytes` random bytes; their SHA-256 must come back.
+func bondUpload(_ b: BondClient, port: UInt16, bytes: Int) -> (ok: Bool, secs: Double, why: String) {
+    let t0 = bnow()
+    guard let s = b.open("127.0.0.1", port, timeout: 3) else { return (false, 0, "the stream did not open") }
+    var sv: [Int32] = [0, 0]
+    guard socketpair(AF_UNIX, SOCK_STREAM, 0, &sv) == 0 else { b.reset(s); return (false, 0, "socketpair failed") }
+    var big: Int32 = 1 << 20, one: Int32 = 1
+    for fd in sv {
+        setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &big, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &big, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
+    }
+    let inner = sv[0], outer = sv[1]
+    Thread.detachNewThread { b.bridge(inner, s) }
+    var h = SHA256(), sent = 0
+    var g = SystemRandomNumberGenerator()
+    let block = (0..<(1 << 20)).map { _ in UInt8.random(in: 0...255, using: &g) }
+    while sent < bytes {
+        let piece = Array(block[0..<min(block.count, bytes - sent)])
+        h.update(data: Data(piece))
+        guard sendAll(outer, piece) else { close(outer); return (false, bnow() - t0, "write failed at \(sent)") }
+        sent += piece.count
+    }
+    shutdown(outer, SHUT_WR)
+    var answer = [UInt8](), buf = [UInt8](repeating: 0, count: 256)
+    deadline(outer, 60)
+    while true { let n = buf.withUnsafeMutableBytes { recv(outer, $0.baseAddress, 256, 0) }; if n <= 0 { break }; answer += buf[0..<n] }
+    close(outer)
+    let want = "\(bytes) \(bondHex(h.finalize().withUnsafeBytes { Array($0) }))"
+    let got = String(decoding: answer, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    return (got == want, bnow() - t0, got == want ? "" : "the sink said \(got.prefix(80))")
+}
+
+// `--scenarios unequal,deep,stall,upload` [--measure-only]: each on its own emulated lines and its own bond client (a
+// new group on the relay). One line per result, "SCENARIO <name>: ..."; without --measure-only a floor missed fails.
+func bondScenarios(_ names: [String], server sp: UInt16, token: [UInt8], host: String, port: UInt16, path: String, want: String, measureOnly: Bool) -> Never {
+    var failures: [String] = []
+    print("scheduler: \(BondProto.legacy ? "v92 (CK_BOND_LEGACY)" : "v95")")
+    func run(_ lines: [ThrottleProxy], _ body: (BondClient) -> Void) {
+        for l in lines { guard l.start() else { failures.append("no port for \(l.name)"); return } }
+        let c = BondClient(host: "127.0.0.1", port: sp, token: token, paths: { lines.map { l in BondPath(key: l.name, line: l.name, dial: { loopbackConnect(l.port) }) } })
+        c.start()
+        let t0 = bnow()
+        while c.legCount < lines.count && bnow() - t0 < 20 { usleep(100_000) }
+        guard c.legCount == lines.count else { failures.append("legs did not come up"); c.stop(); return }
+        sleep(2)
+        body(c)
+        if let d = try? JSONSerialization.data(withJSONObject: c.status()["legs"] ?? [], options: [.sortedKeys]) { print("  legs: " + String(decoding: d, as: UTF8.self)) }
+        c.stop()
+        sleep(1)
+    }
+    func check(_ name: String, _ ok: Bool, _ what: String) { if !ok { failures.append("\(name): \(what)") } }
+    for name in names {
+        switch name {
+        case "unequal":                                     // the real pair of 24.11.2026: hotspot ~90, cable ~25
+            run([ThrottleProxy("fast", mbps: 90, delay: 0.020, target: sp), ThrottleProxy("slow", mbps: 25, delay: 0.015, target: sp)]) { c in
+                let f = bondFetch(c, host: host, port: port, path: path)
+                let mbps = Double(f.bytes) * 8 / max(f.secs, 0.001) / 1e6
+                print(String(format: "SCENARIO unequal (90 + 25 Mbit/s, one stream): %.1f Mbit/s = %.2fx the best line (sum 115 = %.2fx); longest wait %.2f s; sha %@",
+                             mbps, mbps / 90, mbps / 115, f.maxGap, f.sha == want ? "matches" : "DIFFERENT"))
+                check(name, f.ok && f.sha == want, "fetch broken (\(f.why))")
+                check(name, mbps >= BondScenarioFloors.unequal * 90, String(format: "%.1f Mbit/s under the floor %.2fx of 90", mbps, BondScenarioFloors.unequal))
+            }
+        case "deep":                                        // a 4G-like line: the round trip rises by 0.25 s under load
+            run([ThrottleProxy("deepA", mbps: 80, delay: 0.020, target: sp, bloat: 0.25), ThrottleProxy("deepB", mbps: 80, delay: 0.020, target: sp, bloat: 0.25)]) { c in
+                let f = bondFetch(c, host: host, port: port, path: path)
+                let mbps = Double(f.bytes) * 8 / max(f.secs, 0.001) / 1e6
+                print(String(format: "SCENARIO deep (80 + 80 Mbit/s, +0.25 s under load): %.1f Mbit/s = %.2fx the best line; longest wait %.2f s; sha %@",
+                             mbps, mbps / 80, f.maxGap, f.sha == want ? "matches" : "DIFFERENT"))
+                check(name, f.ok && f.sha == want, "fetch broken (\(f.why))")
+                check(name, mbps >= BondScenarioFloors.deep * 80, String(format: "%.1f Mbit/s under the floor %.2fx of 80", mbps, BondScenarioFloors.deep))
+            }
+        case "stall":                                       // one of two lines silent for 2 s in the middle of a stream
+            let a = ThrottleProxy("stallA", mbps: 80, delay: 0.020, target: sp), b = ThrottleProxy("stallB", mbps: 40, delay: 0.020, target: sp)
+            run([a, b]) { c in
+                var at = -1.0
+                let t0 = bnow()
+                let f = bondFetch(c, host: host, port: port, path: path, progress: { got in
+                    if at < 0 && got >= 16 << 20 { at = bnow() - t0; a.stall(2) }
+                })
+                let mbps = Double(f.bytes) * 8 / max(f.secs, 0.001) / 1e6
+                let legs = c.legCount
+                print(String(format: "SCENARIO stall (80 + 40 Mbit/s, the 80 silent for 2 s at %.2f s): %.1f Mbit/s; longest wait in the stream %.2f s (limit %.1f); legs after %d of 2; sha %@",
+                             at, mbps, f.maxGap, BondScenarioFloors.maxGap, legs, f.sha == want ? "matches" : "DIFFERENT"))
+                check(name, at >= 0, "the line was never stalled")
+                check(name, f.ok && f.sha == want, "fetch broken (\(f.why))")
+                check(name, f.maxGap < BondScenarioFloors.maxGap, String(format: "the stream waited %.2f s", f.maxGap))
+                check(name, legs == 2, "a 2 s stall killed a leg")
+            }
+        case "upload":
+            guard let sink = tcpSink() else { failures.append("upload: no sink"); continue }
+            run([ThrottleProxy("upA", mbps: 80, delay: 0.020, target: sp), ThrottleProxy("upB", mbps: 80, delay: 0.020, target: sp),
+                 ThrottleProxy("upC", mbps: 16, delay: 0.060, target: sp)]) { c in
+                let n = 32 << 20
+                let u = bondUpload(c, port: sink, bytes: n)
+                let mbps = Double(n) * 8 / max(u.secs, 0.001) / 1e6
+                print(String(format: "SCENARIO upload (one stream up over 80 + 80 + 16): %.1f Mbit/s = %.2fx the best line; sha %@", mbps, mbps / 80, u.ok ? "matches" : "DIFFERENT " + u.why))
+                check(name, u.ok, "upload broken (\(u.why))")
+                check(name, mbps >= BondScenarioFloors.upload * 80, String(format: "%.1f Mbit/s under the floor %.2fx of 80", mbps, BondScenarioFloors.upload))
+            }
+        default: failures.append("no scenario \(name)")
+        }
+    }
+    if failures.isEmpty || measureOnly {
+        print("BOND SCENARIOS \(failures.isEmpty ? "PASS" : "MEASURED (floors not applied): " + failures.joined(separator: "; "))"); exit(0)
+    }
+    print("BOND SCENARIOS FAIL: " + failures.joined(separator: "; ")); exit(1)
 }

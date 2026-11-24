@@ -23,7 +23,7 @@ import (
 	"time"
 )
 
-const relayVersion = "v91"
+const relayVersion = "v95"
 
 const (
 	maxGroups      = 64
@@ -33,6 +33,8 @@ const (
 	failsToBan     = 10
 	banFor         = 10 * time.Minute
 )
+
+var lowatWarned bool
 
 type failRec struct {
 	n            int
@@ -75,7 +77,7 @@ func main() {
 	if inherited {
 		how = "the socket handed over by the old process"
 	}
-	log.Printf("BOND ckbond v1 (%s) pid %d on %s, %s (local destinations %s; an idle stream ends after %s)", relayVersion, os.Getpid(), *listen, how, map[bool]string{true: "allowed", false: "refused"}[*allowLocal], streamIdle)
+	log.Printf("BOND ckbond v1 (%s) pid %d on %s, %s (local destinations %s; an idle stream ends after %s; scheduler %s)", relayVersion, os.Getpid(), *listen, how, map[bool]string{true: "allowed", false: "refused"}[*allowLocal], streamIdle, map[bool]string{true: "v92 (CK_BOND_LEGACY)", false: "v95"}[legacy])
 	readyForParent()
 	sdNotify(fmt.Sprintf("MAINPID=%d\nREADY=1", os.Getpid()))
 	go s.signals(ln, *drainFor)
@@ -131,6 +133,12 @@ func (s *server) handle(c net.Conn) {
 	}
 	if tc, ok := c.(*net.TCPConn); ok {
 		tc.SetNoDelay(true)
+	}
+	if !legacy {
+		if err := setLowat(c, notsentLow); err != nil && !lowatWarned {
+			lowatWarned = true
+			log.Printf("BOND TCP_NOTSENT_LOWAT not set (%v): the kernel keeps its default queue", err)
+		}
 	}
 	c.SetDeadline(time.Now().Add(handshakeLimit))
 	snonce := make([]byte, 32)

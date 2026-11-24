@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	window         = 4 << 20   // unacknowledged bytes per stream and direction
+	window         = 8 << 20   // unacknowledged bytes per stream and direction (v95: 8 MB; CK_BOND_LEGACY 4 MB)
 	streamAckEvery = 256 << 10 // a stream ACK at least every 256 KB delivered (else on the 50 ms tick)
 	legAckEvery    = 32 << 10  // a leg ACK at least every 32 KB received (else on the 50 ms tick)
 	tick           = 50 * time.Millisecond
@@ -31,6 +31,49 @@ const (
 )
 
 var epoch = time.Now()
+
+// v95 (the bond scheduler, 24.11.2026; TAKEOVER v95, docs/ckbond.md "The scheduler"). Live on 24.11.2026 the relay's
+// legs had congestion windows of 1 MB and 470 KB with only 49-123 KB queued: the relay's own in-flight cap starved them
+// (8 streams over cable + phone: 47 Mbit/s against 30 + 105 alone). Three causes, three changes:
+//  1. the cap was rate x (2 x lowest ping + 50 ms) = about 0.12 s, under the round trip of a loaded 4G line; delivery at
+//     the cap is cap / round trip, below the rate, and the rate followed it down. Now 2 x lowest ping + 0.2 s.
+//  2. the rate fell 40 % per 250 ms sample while capped: a 2 s radio stall wiped it (journal 23.11: 67.7 -> 1.1 Mbit/s,
+//     minutes to recover). Now the 5th-highest of the last 16 samples of 10 s (a stall or a burst moves nothing).
+//  3. a frame on a stalled or slow leg was resent only when the leg was declared dead (3 s); the stream waited behind
+//     it. Now a leg with in-flight bytes and no leg ACK for 0.15 s + 1.5 x its ping is "suspect" (no new frames), and a
+//     frame the receiver is waiting for (a later one arrived) that is late is copied to another leg, ahead of its
+//     queue; the receiver drops the copy it does not need (it always has: the wire is unchanged).
+//
+// CK_BOND_LEGACY=1 brings back the v92 scheduler (A/B tests in CI, and a switch on the VM without a new binary).
+var legacy = os.Getenv("CK_BOND_LEGACY") != ""
+
+const (
+	capSlack   = 0.15     // seconds of in-flight beyond v92's 2 x RTT + 50 ms
+	rateRing   = 16       // delivery samples kept per leg
+	rateAge    = 10.0     // seconds a sample counts
+	ackDelay   = 0.06     // the receiver's leg ACK: every 32 KB or on its 50 ms tick
+	writeChunk = 64 << 10 // bulk bytes per write, so copies and young streams can go ahead of the rest
+	notsentLow = 128 << 10
+	maxCopies  = 2
+	stallAfter = 0.15 // + 1.5 x the leg's lowest ping without a leg ACK while bytes are in flight: suspect
+)
+
+func streamWindow() int {
+	if legacy {
+		return 4 << 20
+	}
+	return window
+}
+
+type rateSample struct{ at, v float64 }
+
+// mark: one placement of a frame on a leg, in the leg's byte order (v95): the leg ACK that covers end says it arrived.
+type mark struct {
+	end uint64
+	at  float64
+	s   *stream
+	p   *pending
+}
 
 // v91 (assessment 23.11.2026): a bonded stream that says nothing (an SSH session, a websocket, Claude Code waiting) is
 // no longer reset after 10 minutes; a direct connection had no such limit. The safety net is 24 hours (env CK_BOND_IDLE,
@@ -52,6 +95,10 @@ type pending struct {
 	enc    []byte
 	leg    *leg
 	legEnd uint64 // the leg's byte count after this frame: received when the leg's ACK reaches it
+	// v95: when it went on its leg, when that leg's ACK should cover it, a copy of it arrived, copies made
+	placed, ackDue float64
+	arrived        bool
+	copies         int
 }
 
 type leg struct {
@@ -72,6 +119,17 @@ type leg struct {
 	capped, dead, gotPong      bool
 	lastHeard, lastPing, start float64
 	pingID                     uint32
+	// v95
+	prioq        [][]byte // copies and young streams' frames: written before dataq
+	ring         [rateRing]rateSample
+	ringN        int
+	marks        []mark
+	lastAckAt    float64
+	suspect      bool
+	srtt, ackRTT float64 // smoothed ping time; smoothed time from a frame's placing to its leg ACK (the round trip under load)
+	copiesIn     int     // copies this leg carried
+	stalls       int
+	lastData     float64 // a sequenced frame from the Mac last arrived on this leg
 }
 
 type stream struct {
@@ -96,23 +154,24 @@ type stream struct {
 	target           string
 	born             time.Time
 	lastActive       time.Time
+	arrivedTop       uint32 // v95: one past the highest seq a leg ACK says arrived at the Mac
 }
 
 type group struct {
-	srv        *server
-	id         [16]byte
-	name       string
-	mu         sync.Mutex
-	cond       *sync.Cond
-	legs       []*leg
-	nextLeg    int
-	streams    map[uint32]*stream
-	closed     map[uint32]time.Time
-	emptySince time.Time
-	gone       bool
-	up, down   int64 // bytes Mac -> destinations, destinations -> Mac
-	opened     int
-	lastReport time.Time
+	srv            *server
+	id             [16]byte
+	name           string
+	mu             sync.Mutex
+	cond           *sync.Cond
+	legs           []*leg
+	nextLeg        int
+	streams        map[uint32]*stream
+	closed         map[uint32]time.Time
+	emptySince     time.Time
+	gone           bool
+	up, down       int64 // bytes Mac -> destinations, destinations -> Mac
+	opened         int
+	lastReport     time.Time
 	flows          map[uint32]*uflow
 	lastFlowReport time.Time
 }
@@ -135,7 +194,7 @@ func (g *group) addLeg(l *leg) bool {
 	l.wcond = sync.NewCond(&g.mu)
 	l.id = g.nextLeg
 	g.nextLeg++
-	l.lastHeard, l.start, l.sampleAt = now, now, now
+	l.lastHeard, l.start, l.sampleAt, l.lastAckAt = now, now, now, now
 	l.rate, l.rttMin, l.busyAll = 2.5e6, 0.05, true
 	l.ctlq = append(l.ctlq, frame{typ: fWelcome}.encode()) // the first record of the leg
 	g.legs = append(g.legs, l)
@@ -151,15 +210,31 @@ func (l *leg) writer() {
 	buf := make([]byte, 0, 1<<20)
 	for {
 		g.mu.Lock()
-		for !l.dead && len(l.ctlq) == 0 && len(l.dataq) == 0 && len(l.udpq) == 0 {
+		for !l.dead && len(l.ctlq) == 0 && len(l.dataq) == 0 && len(l.udpq) == 0 && len(l.prioq) == 0 {
 			l.wcond.Wait()
 		}
 		if l.dead {
 			g.mu.Unlock()
 			return
 		}
-		batch := append(append(l.ctlq, l.udpq...), l.dataq...)
-		l.ctlq, l.udpq, l.dataq, l.udpBytes = nil, nil, nil, 0
+		var batch [][]byte
+		if legacy {
+			batch = append(append(l.ctlq, l.udpq...), l.dataq...)
+			l.dataq = nil
+		} else {
+			// v95: control, datagrams, copies and young streams first; the bulk in pieces of 64 KB, so whatever comes
+			// next can still go ahead of the rest (the kernel holds at most notsentLow unsent)
+			batch = append(append(append(batch, l.ctlq...), l.udpq...), l.prioq...)
+			k, n := 0, 0
+			for k < len(l.dataq) && (k == 0 || n+len(l.dataq[k]) <= writeChunk) {
+				n += len(l.dataq[k])
+				k++
+			}
+			batch = append(batch, l.dataq[:k]...)
+			l.dataq = append([][]byte(nil), l.dataq[k:]...)
+			l.prioq = nil
+		}
+		l.ctlq, l.udpq, l.udpBytes = nil, nil, 0
 		g.mu.Unlock()
 		buf = buf[:0]
 		for _, p := range batch {
@@ -233,12 +308,13 @@ func (g *group) killLeg(l *leg, why string) {
 		p *pending
 	}
 	var list []redo
+	l.marks = nil
 	for _, s := range g.streams {
 		if s.done {
 			continue
 		}
 		for _, p := range s.unacked {
-			if p.leg == l && p.legEnd > l.acked {
+			if p.leg == l && p.legEnd > l.acked && !p.arrived {
 				list = append(list, redo{s, p})
 			}
 		}
@@ -269,29 +345,55 @@ func (g *group) killLeg(l *leg, why string) {
 	}()
 }
 
-// pick (under g.mu): the live leg where these n bytes would arrive first, RTT/2 + queued/rate, among those under their
-// in-flight cap (about 2 x rate x RTT plus the ACK interval, at least 64 KB). nil: every leg is full (or none is up).
-// urgent: a young stream (its first 64 KB, a handshake or a small answer) may use up to twice the cap, so it does not wait
-// behind the bulk of the other streams.
-func (g *group) pick(n int, urgent bool) *leg {
+// pick (under g.mu): the live leg where these n bytes would arrive first among those under their in-flight cap; not:
+// a leg to leave out (a copy's own leg). nil: every leg is full (or none is up). urgent: a young stream (its first 64 KB,
+// a handshake or a small answer) may use up to twice the cap, so it does not wait behind the bulk of the other streams.
+// v95: suspect legs (stalled) only when every other live leg is suspect too; returns the predicted arrival too.
+func (g *group) pick(n int, urgent bool, not *leg) (*leg, float64) {
+	healthy := false
+	for _, l := range g.legs {
+		if !l.dead && l != not && !l.suspect {
+			healthy = true
+		}
+	}
 	var best *leg
 	bt := 0.0
 	for _, l := range g.legs {
-		if l.dead {
+		if l.dead || l == not || (healthy && l.suspect) {
 			continue
 		}
 		infl := float64(l.sent - l.acked)
-		limit := max(minCap, l.rate*(2*l.rttMin+0.05))
+		limit := l.limit()
 		if infl > 0 && infl+float64(n) > limit && !(urgent && infl+float64(n) <= 2*limit) {
 			l.capped = true
 			continue
 		}
-		t := l.rttMin/2 + (infl+float64(n))/l.rate
+		t := l.arrival(n)
 		if best == nil || t < bt {
 			best, bt = l, t
 		}
 	}
-	return best
+	return best, bt
+}
+
+// limit: the leg's in-flight cap. v92: rate x (2 x lowest ping + 50 ms). v95: + capSlack, so a 4G line whose round trip
+// grows under load is not held under its speed by the cap (TAKEOVER v95).
+func (l *leg) limit() float64 {
+	if legacy {
+		return max(minCap, l.rate*(2*l.rttMin+0.05))
+	}
+	return max(minCap, l.rate*(2*l.rttMin+0.05+capSlack))
+}
+
+// arrival: when n more bytes would reach the Mac on this leg. v95: the bytes already on the way (about a round trip's
+// worth) do not delay a new frame; only the queue in front of it does.
+func (l *leg) arrival(n int) float64 {
+	infl := float64(l.sent - l.acked)
+	if legacy {
+		return l.rttMin/2 + (infl+float64(n))/l.rate
+	}
+	ahead := max(0, infl-l.rate*(l.rttMin+0.02))
+	return l.rttMin/2 + (ahead+float64(n))/l.rate
 }
 
 // place (under g.mu, may wait): puts a sequenced frame on a leg.
@@ -301,14 +403,73 @@ func (g *group) place(s *stream, p *pending) bool {
 		if g.gone || s.done {
 			return false
 		}
-		if l := g.pick(n, s.sentBytes <= 65536); l != nil {
-			l.dataq = append(l.dataq, p.enc)
-			l.sent += uint64(n)
-			p.leg, p.legEnd = l, l.sent
-			l.wcond.Signal()
+		urgent := s.sentBytes <= 65536
+		if l, t := g.pick(n, urgent, nil); l != nil {
+			g.put(l, s, p, t, urgent && !legacy)
 			return true
 		}
 		g.cond.Wait()
+	}
+}
+
+// put (under g.mu): the frame goes on leg l (prio: ahead of the bulk); t is its predicted arrival.
+func (g *group) put(l *leg, s *stream, p *pending, t float64, prio bool) {
+	n := len(p.enc)
+	if prio {
+		l.prioq = append(l.prioq, p.enc)
+	} else {
+		l.dataq = append(l.dataq, p.enc)
+	}
+	l.sent += uint64(n)
+	p.leg, p.legEnd = l, l.sent
+	if !legacy {
+		now := mono()
+		p.placed, p.ackDue = now, now+t+l.rttMin/2+ackDelay
+		l.marks = append(l.marks, mark{end: l.sent, at: now, s: s, p: p})
+	}
+	l.wcond.Signal()
+}
+
+// rescue (under g.mu, every tick; v95): a leg with bytes in flight and no leg ACK for 0.2 s + 2 x its ping is suspect
+// (no new frames until its next ACK); a frame the Mac is waiting for (a later one of its stream arrived, or its leg is
+// suspect) that is late against its own prediction is copied to the leg where it arrives first, ahead of that leg's
+// bulk. At most maxCopies copies per frame; no room on another leg: the next tick tries again.
+func (g *group) rescue(now float64) {
+	if legacy || len(g.legs) < 2 {
+		return
+	}
+	for _, l := range g.legs {
+		if l.dead || l.suspect || len(l.marks) == 0 {
+			continue
+		}
+		if now-max(l.lastAckAt, l.marks[0].at) > stallAfter+1.5*l.rttMin {
+			l.suspect = true
+			l.stalls++
+			g.cond.Broadcast()
+		}
+	}
+	for _, l := range g.legs {
+		if l.dead {
+			continue
+		}
+		for i := range l.marks {
+			m := l.marks[i]
+			p := m.p
+			if p.arrived || p.leg != l || m.s.done || p.copies >= maxCopies || m.s.unacked[p.seq] != p {
+				continue
+			}
+			late := now > p.ackDue+0.1+0.5*(p.ackDue-p.placed)
+			if !late || !(l.suspect || p.seq < m.s.arrivedTop) {
+				continue
+			}
+			to, t := g.pick(len(p.enc), true, l)
+			if to == nil || to.suspect {
+				break
+			}
+			p.copies++
+			to.copiesIn++
+			g.put(to, m.s, p, t, true)
+		}
 	}
 }
 
@@ -343,13 +504,48 @@ func (g *group) sendStreamAck(s *stream) {
 		return
 	}
 	g.ctl(l, frame{typ: fAck, stream: s.id, seq: s.delivered})
+	// v95: the quickest leg has gone quiet while another still speaks (a stall): the ACK goes on that one too, so the
+	// Mac's window does not wait for the stalled leg (a stream ACK is cumulative: a second copy is harmless)
+	if !legacy {
+		var fresh *leg
+		for _, x := range g.legs {
+			if !x.dead && (fresh == nil || x.lastHeard > fresh.lastHeard) {
+				fresh = x
+			}
+		}
+		if fresh != nil && fresh != l && fresh.lastHeard-l.lastHeard > 0.2+2*l.rttMin {
+			g.ctl(fresh, frame{typ: fAck, stream: s.id, seq: s.delivered})
+		}
+	}
 	s.ackSent, s.ackBytes, s.ackForce = s.delivered, 0, false
 }
 
 // A leg ACK: what the Mac has received on this leg. It frees in-flight room and measures the leg's rate.
 func (g *group) legAck(l *leg, v uint64) {
+	now := mono()
 	if v > l.acked && v <= l.sent {
 		l.acked = v
+		l.lastAckAt = now
+		l.suspect = false
+	}
+	if !legacy {
+		k := 0
+		for k < len(l.marks) && l.marks[k].end <= l.acked {
+			m := l.marks[k]
+			m.p.arrived = true
+			if m.p.seq+1 > m.s.arrivedTop {
+				m.s.arrivedTop = m.p.seq + 1
+			}
+			k++
+		}
+		if k > 0 {
+			if d := now - l.marks[k-1].at; l.ackRTT == 0 {
+				l.ackRTT = d
+			} else {
+				l.ackRTT = 0.9*l.ackRTT + 0.1*d
+			}
+			l.marks = append(l.marks[:0:0], l.marks[k:]...)
+		}
 	}
 	// the delivery over >= 250 ms (and 2 RTT), smoothed; it follows a sample down only when the leg was backlogged the whole
 	// time (found full between every two ACKs). A best-100-ms maximum believed a phone's adb bursts (v66, live 14.11.2026).
@@ -357,10 +553,16 @@ func (g *group) legAck(l *leg, v uint64) {
 		l.busyAll = false
 	}
 	l.capped = false
-	now := mono()
 	if dt := now - l.sampleAt; dt >= max(0.25, 2*l.rttMin) {
 		sample := float64(l.acked-l.sampleAcked) / dt
-		if l.busyAll {
+		if !legacy {
+			// v95: a sample counts when the leg was backlogged the whole time, or when it beats the estimate (it proves
+			// that much); the estimate is the 5th-highest of the last 16 such samples of 10 s: a stall (the leg is suspect
+			// then, not backlogged) or a burst moves nothing, a real change shows within about 3 s
+			if l.busyAll || sample > l.rate {
+				l.addSample(now, sample)
+			}
+		} else if l.busyAll {
 			l.rate = max(16384, 0.6*l.rate+0.4*sample)
 		} else if sample > l.rate {
 			l.rate = 0.6*l.rate + 0.4*sample
@@ -368,6 +570,22 @@ func (g *group) legAck(l *leg, v uint64) {
 		l.busyAll, l.sampleAt, l.sampleAcked = true, now, l.acked
 	}
 	g.cond.Broadcast()
+}
+
+func (l *leg) addSample(now, v float64) {
+	l.ring[l.ringN%rateRing] = rateSample{at: now, v: max(v, 16384)}
+	l.ringN++
+	var vs []float64
+	for i := 0; i < min(l.ringN, rateRing); i++ {
+		if now-l.ring[i].at <= rateAge {
+			vs = append(vs, l.ring[i].v)
+		}
+	}
+	if len(vs) == 0 {
+		return
+	}
+	sort.Sort(sort.Reverse(sort.Float64Slice(vs)))
+	l.rate = vs[min(4, (len(vs)-1)/3)]
 }
 
 func (g *group) onFrame(l *leg, f frame) {
@@ -386,6 +604,11 @@ func (g *group) onFrame(l *leg, f frame) {
 			rtt := max(now-float64(binary.BigEndian.Uint64(f.payload[:8]))/1e9, 0.0005)
 			if !l.gotPong || rtt < l.rttMin { // the lowest seen: a PING waits behind the leg's own queue
 				l.rttMin, l.rttMinAt = rtt, now
+			}
+			if l.srtt == 0 {
+				l.srtt = rtt
+			} else {
+				l.srtt = 0.875*l.srtt + 0.125*rtt
 			}
 			l.gotPong = true
 		}
@@ -407,6 +630,7 @@ func (g *group) onFrame(l *leg, f frame) {
 		g.closeFlow(f.stream)
 	case fOpen, fOpenOK, fOpenFail, fData, fFin:
 		l.recv += uint64(f.size())
+		l.lastData = now
 		if l.recv-l.rAcked >= legAckEvery {
 			g.sendLegAck(l)
 		}
@@ -466,7 +690,7 @@ func (g *group) onSeq(l *leg, f frame) {
 func (g *group) sendSeq(s *stream, typ byte, payload []byte) bool {
 	f := frame{typ: typ, stream: s.id, payload: payload}
 	n := f.size()
-	for !s.done && !g.gone && s.unackedBytes > 0 && s.unackedBytes+n > window {
+	for !s.done && !g.gone && s.unackedBytes > 0 && s.unackedBytes+n > streamWindow() {
 		g.cond.Wait()
 	}
 	if s.done || g.gone {
@@ -692,6 +916,7 @@ func (g *group) loop() {
 			}
 		}
 		g.expireFlows(wall)
+		g.rescue(now)
 		for id, s := range g.streams {
 			if s.delivered != s.ackSent || s.ackForce {
 				g.sendStreamAck(s)
@@ -716,6 +941,9 @@ func (g *group) loop() {
 			legs := ""
 			for _, l := range g.legs {
 				legs += fmt.Sprintf("; leg %d %s: rtt %.0f ms, rate %.1f Mbit/s, sent %.1f MB", l.id, l.remote, l.rttMin*1000, l.rate*8/1e6, float64(l.sent)/1e6)
+				if !legacy {
+					legs += fmt.Sprintf(" (under load %.0f ms, ping %.0f ms, copies carried %d, stalls %d)", l.ackRTT*1000, l.srtt*1000, l.copiesIn, l.stalls)
+				}
 			}
 			log.Printf("BOND group %s: %d legs, %d streams, %d opened, up %.1f MB, down %.1f MB in total%s", g.name, len(g.legs), len(g.streams), g.opened, float64(g.up)/1e6, float64(g.down)/1e6, legs)
 			g.lastReport = wall

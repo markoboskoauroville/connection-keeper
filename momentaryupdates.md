@@ -925,3 +925,11 @@ The four, approved together (assessment of 23.11.2026, building in v91; v90 was 
 > There is a menu bar item I want, when I press on it to have something similar as iSTAT drop-down menu, so not opening the interface itself, opening the controller as a drop-down menu. There must be also options to start the interface from the top, first option, and then quick options.
 
 **Status:** saved first; building in the next free version (v93 carries request 105).
+
+## 24.11.2026, request 107 (the bond scheduler: two lines through Frankfurt must add up, not average down)
+
+> Yes, start the bond scheduler work
+
+What it means (the assessment Marko approved): through FRANKFURT the ticked pair measured 45-48 Mbit/s against 91-93 for the hotspot alone. The in-flight limit per leg follows a round trip that grows under load, the leg's rate falls with every stall, and a frame on a slow or stalled leg is resent only when the leg is declared dead (3 s). Build: a limit and a rate that survive a loaded 4G line, earliest-delivery choice of leg, a copy of a frame the far end waits for on the fastest leg, both directions, the wire unchanged; CI proof with a deep-queue line, an unequal pair and a 2 s stall; floors raised; real lines before and after.
+
+**Status:** building in v95 (v93 and v94 taken by requests 105 and 106).

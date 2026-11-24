@@ -21,9 +21,13 @@ enum BondProto {
     static let dgram: UInt8 = 11, dgramClose: UInt8 = 12, udpQueueMax = 256 << 10, maxFlows = 256   // v74: UDP
     static let header = 11, maxPayload = 16384, tag = 16
     static let minRecord = 11 + 16, maxRecord = 11 + 16384 + 16
-    static let window = 4 << 20, streamAckEvery = 256 << 10, legAckEvery: UInt64 = 32 << 10, minCap = 65536.0
+    static let window = 8 << 20, streamAckEvery = 256 << 10, legAckEvery: UInt64 = 32 << 10, minCap = 65536.0
     static let maxStreams = 1024
     static func sequenced(_ t: UInt8) -> Bool { t >= 1 && t <= 5 }
+    // v95 (the bond scheduler; the relay's group.go says why, TAKEOVER v95). CK_BOND_LEGACY=1: v92's scheduler.
+    static let legacy = aggEnv["CK_BOND_LEGACY"] != nil
+    static let capSlack = 0.15, rateRing = 16, rateAge = 10.0, ackDelay = 0.06, writeChunk = 64 << 10, maxCopies = 2, stallAfter = 0.15
+    static var streamWindow: Int { legacy ? 4 << 20 : window }
 }
 
 func bnow() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e9 }
@@ -132,6 +136,7 @@ struct BondPath { let key: String; let line: String; let dial: () -> Int32? }
 final class BSent {
     let seq: UInt32, enc: [UInt8]
     var leg: BLeg?, legEnd: UInt64 = 0
+    var placed = 0.0, ackDue = 0.0, arrived = false, copies = 0     // v95
     init(_ seq: UInt32, _ enc: [UInt8]) { self.seq = seq; self.enc = enc }
 }
 
@@ -144,6 +149,9 @@ final class BLeg {
     var busyAll = true, peerRate = 0.0                   // v67: backlogged since the last sample; the relay's estimate (its PONGs)
     var lastHeard = bnow(), lastPing = 0.0, pingID: UInt32 = 0, dead = false
     var gen = 0                                          // v71: the relay process (generation) this leg belongs to
+    // v95: copies and young streams first; the rate samples; each placement in byte order (its ACK = it arrived)
+    var prioq: [[UInt8]] = [], ring: [(at: Double, v: Double)] = [], marks: [(end: UInt64, at: Double, s: BStream, st: BSent)] = []
+    var lastAckAt = bnow(), suspect = false, srtt = 0.0, ackRTT = 0.0, copiesIn = 0, stalls = 0
     init(key: String, line: String, fd: Int32, tx: BondCipher, rx: BondCipher) {
         self.key = key; self.line = line; self.fd = fd; self.tx = tx; self.rx = rx
     }
@@ -181,6 +189,11 @@ final class BStream {
     var up = 0, down = 0
     var born = bnow(), sentTotal = 0                    // v67: the watchdog of an optimistic OPEN; the priority of a young stream
     var gen = 0                                          // v71: its relay process; it stays on that generation's legs
+    var arrivedTop: UInt32 = 0                           // v95: one past the highest seq a leg ACK says arrived
+    // v95 hook (the "default download line", 24.11.2026): once the stream has sent `preferAfter` bytes it goes only on
+    // the legs of line `prefer` while one of them is alive and not suspect, else as usual. Speed is traded for cost on
+    // purpose. This side covers the Mac's sending (uploads); downloads need the relay to know it (a frame, not built).
+    var prefer: String?, preferAfter = 0
     init(_ id: UInt32) { self.id = id }
 }
 
@@ -314,10 +327,16 @@ final class BondClient {
     func writer(_ l: BLeg) {
         while true {
             cv.lock()
-            while !l.dead && l.ctlq.isEmpty && l.dataq.isEmpty && l.udpq.isEmpty { cv.wait() }
+            while !l.dead && l.ctlq.isEmpty && l.dataq.isEmpty && l.udpq.isEmpty && l.prioq.isEmpty { cv.wait() }
             if l.dead { cv.unlock(); return }
-            let batch = l.ctlq + l.udpq + l.dataq           // v74: datagrams before the bulk of the streams
-            l.ctlq = []; l.udpq = []; l.dataq = []; l.udpBytes = 0
+            var batch = l.ctlq + l.udpq + l.prioq           // v74: datagrams before the bulk of the streams
+            if BondProto.legacy { batch += l.dataq; l.dataq = [] } else {
+                // v95: the bulk in pieces of 64 KB, so a copy or a young stream can still go ahead of the rest
+                var k = 0, n = 0
+                while k < l.dataq.count && (k == 0 || n + l.dataq[k].count <= BondProto.writeChunk) { n += l.dataq[k].count; k += 1 }
+                batch += l.dataq[0..<k]; l.dataq.removeFirst(k)
+            }
+            l.ctlq = []; l.udpq = []; l.prioq = []; l.udpBytes = 0
             cv.unlock()
             var out = [UInt8]()
             out.reserveCapacity(batch.reduce(0) { $0 + $1.count + 18 })
@@ -351,8 +370,9 @@ final class BondClient {
         legs.removeAll { $0 === l }
         retryAt[l.key] = bnow() + 1
         var redo: [(BStream, BSent)] = []
+        l.marks = []
         for s in streams.values where !s.done {
-            for st in s.unacked.values where st.leg === l && st.legEnd > l.acked { redo.append((s, st)) }
+            for st in s.unacked.values where st.leg === l && st.legEnd > l.acked && !st.arrived { redo.append((s, st)) }
         }
         redo.sort { $0.0.id != $1.0.id ? $0.0.id < $1.0.id : $0.1.seq < $1.1.seq }
         log("BOND leg \(l.key) (\(l.line)) down: \(why); \(redo.count) frames resent, \(legs.count) legs left")
@@ -367,31 +387,77 @@ final class BondClient {
         }
     }
 
-    // (under cv) The live leg where n bytes arrive first: RTT/2 + queued/rate, among those under their in-flight cap.
-    // `urgent` (v67): a young stream (its first 64 KB: a TLS handshake, a request) may use up to twice the cap, so it never
-    // waits behind the bulk of the others (measured 14.11.2026: 0.6-1.4 s for google.com with one leg carrying the Mac).
-    func pick(_ n: Int, urgent: Bool = false, gen g: Int) -> BLeg? {
+    // (under cv) The live leg where n bytes arrive first, among those under their in-flight cap; `not`: a leg to leave out
+    // (a copy's own leg). `urgent` (v67): a young stream (its first 64 KB: a TLS handshake, a request) may use up to twice
+    // the cap, so it never waits behind the bulk of the others (measured 14.11.2026: 0.6-1.4 s for google.com with one leg
+    // carrying the Mac). v95: suspect legs only when every other live leg is suspect too; `line`: only that line's legs.
+    func pick(_ n: Int, urgent: Bool = false, gen g: Int, not: BLeg? = nil, line: String? = nil) -> (BLeg, Double)? {
+        let live = legs.filter { !$0.dead && $0.gen == g && $0 !== not && (line == nil || $0.line == line) }
+        let healthy = live.contains { !$0.suspect }
         var best: BLeg?, bt = Double.infinity
-        for l in legs where !l.dead && l.gen == g {
+        for l in live where !(healthy && l.suspect) {
             let infl = Double(l.sent - l.acked)
-            let limit = max(BondProto.minCap, l.rate * (2 * l.rttMin + 0.05))
+            let limit = capLimit(l)
             if infl > 0 && infl + Double(n) > limit && !(urgent && infl + Double(n) <= 2 * limit) { l.capped = true; continue }
-            let t = l.rttMin / 2 + (infl + Double(n)) / l.rate
+            let t = arrival(l, n)
             if t < bt { bt = t; best = l }
         }
-        return best
+        return best.map { ($0, bt) }
+    }
+    func capLimit(_ l: BLeg) -> Double {
+        max(BondProto.minCap, l.rate * (2 * l.rttMin + 0.05 + (BondProto.legacy ? 0 : BondProto.capSlack)))
+    }
+    func arrival(_ l: BLeg, _ n: Int) -> Double {
+        let infl = Double(l.sent - l.acked)
+        if BondProto.legacy { return l.rttMin / 2 + (infl + Double(n)) / l.rate }
+        return l.rttMin / 2 + (max(0, infl - l.rate * (l.rttMin + 0.02)) + Double(n)) / l.rate
     }
 
     func place(_ st: BSent, _ s: BStream) -> Bool {
         while running && !s.done {
-            if let l = pick(st.enc.count, urgent: s.sentTotal <= 65536, gen: s.gen) {
-                l.dataq.append(st.enc); l.sent += UInt64(st.enc.count); st.leg = l; st.legEnd = l.sent
-                cv.broadcast()
+            let urgent = s.sentTotal <= 65536
+            // the hook: a preferred line while one of its legs is alive and not suspect (then only there, waiting for room)
+            var line: String?
+            if let p = s.prefer, s.sentTotal >= s.preferAfter, legs.contains(where: { !$0.dead && $0.gen == s.gen && $0.line == p && !$0.suspect }) { line = p }
+            if case let (l, t)? = pick(st.enc.count, urgent: urgent, gen: s.gen, line: line) {
+                put(l, st, s, t, prio: urgent && !BondProto.legacy)
                 return true
             }
             cv.wait()
         }
         return false
+    }
+
+    func put(_ l: BLeg, _ st: BSent, _ s: BStream, _ t: Double, prio: Bool) {
+        if prio { l.prioq.append(st.enc) } else { l.dataq.append(st.enc) }
+        l.sent += UInt64(st.enc.count); st.leg = l; st.legEnd = l.sent
+        if !BondProto.legacy {
+            let now = bnow()
+            st.placed = now; st.ackDue = now + t + l.rttMin / 2 + BondProto.ackDelay
+            l.marks.append((end: l.sent, at: now, s: s, st: st))
+        }
+        cv.broadcast()
+    }
+
+    // (under cv, every tick; v95) A leg with bytes in flight and no leg ACK for 0.15 s + 1.5 x its ping is suspect (no new
+    // frames until its next ACK); a frame the relay is waiting for (a later one of its stream arrived, or its leg is
+    // suspect) that is late against its own prediction is copied to the leg where it arrives first, ahead of the bulk.
+    func rescue(_ now: Double) {
+        guard !BondProto.legacy, legs.count >= 2 else { return }
+        for l in legs where !l.dead && !l.suspect && !l.marks.isEmpty {
+            if now - max(l.lastAckAt, l.marks[0].at) > BondProto.stallAfter + 1.5 * l.rttMin { l.suspect = true; l.stalls += 1 }
+        }
+        for l in legs where !l.dead {
+            for m in l.marks {
+                let st = m.st, s = m.s
+                if st.arrived || st.leg !== l || s.done || st.copies >= BondProto.maxCopies || s.unacked[st.seq] !== st { continue }
+                let late = now > st.ackDue + 0.1 + 0.5 * (st.ackDue - st.placed)
+                if !late || !(l.suspect || st.seq < s.arrivedTop) { continue }
+                guard case let (to, t)? = pick(st.enc.count, urgent: true, gen: s.gen, not: l), !to.suspect else { break }
+                st.copies += 1; to.copiesIn += 1
+                put(to, st, s, t, prio: true)
+            }
+        }
     }
 
     func ctl(_ l: BLeg?, _ f: BFrame) {
@@ -409,23 +475,53 @@ final class BondClient {
     func streamAckSend(_ s: BStream) {
         guard let l = bestLeg(s.gen) else { return }
         ctl(l, BFrame(BondProto.ack, s.id, s.delivered)); s.ackSent = s.delivered; s.ackBytes = 0; s.ackForce = false
+        // v95: the quickest leg has gone quiet while another still speaks (a stall): the ACK goes on that one too
+        if !BondProto.legacy, let fresh = legs.filter({ !$0.dead && $0.gen == s.gen }).max(by: { $0.lastHeard < $1.lastHeard }),
+           fresh !== l, fresh.lastHeard - l.lastHeard > 0.2 + 2 * l.rttMin {
+            ctl(fresh, BFrame(BondProto.ack, s.id, s.delivered))
+        }
     }
 
     func legAck(_ l: BLeg, _ v: UInt64) {
-        if v > l.acked && v <= l.sent { l.acked = v }
+        let now = bnow()
+        if v > l.acked && v <= l.sent { l.acked = v; l.lastAckAt = now; l.suspect = false }
+        if !BondProto.legacy {
+            var k = 0
+            while k < l.marks.count && l.marks[k].end <= l.acked {
+                let m = l.marks[k]
+                m.st.arrived = true
+                if m.st.seq &+ 1 > m.s.arrivedTop { m.s.arrivedTop = m.st.seq &+ 1 }
+                k += 1
+            }
+            if k > 0 {
+                let d = now - l.marks[k - 1].at
+                l.ackRTT = l.ackRTT == 0 ? d : 0.9 * l.ackRTT + 0.1 * d
+                l.marks.removeFirst(k)
+            }
+        }
         // v67: the rate is the delivery over >= 250 ms (and 2 RTT), smoothed. It follows a sample down only when the leg was
         // backlogged the whole time (found full between every two ACKs): idle time measures the traffic, not the line
         // (v65's average spiralled a leg to nothing). v66's best-100-ms maximum believed a phone's adb bursts: live on
         // 14.11.2026 the phone took 87 % of a stream and filled its window, 40 Mbit/s against 51 direct.
         if !l.capped { l.busyAll = false }
         l.capped = false
-        let now = bnow(), dt = now - l.sampleAt
+        let dt = now - l.sampleAt
         if dt >= max(0.25, 2 * l.rttMin) {
             let sample = Double(l.acked - l.sampleAcked) / dt
-            if l.busyAll { l.rate = max(16384, 0.6 * l.rate + 0.4 * sample) } else if sample > l.rate { l.rate = 0.6 * l.rate + 0.4 * sample }
+            if !BondProto.legacy {
+                // v95: backlogged throughout, or better than the estimate; the estimate = the 5th-highest of the last 16
+                if l.busyAll || sample > l.rate { addSample(l, now, sample) }
+            } else if l.busyAll { l.rate = max(16384, 0.6 * l.rate + 0.4 * sample) } else if sample > l.rate { l.rate = 0.6 * l.rate + 0.4 * sample }
             l.busyAll = true; l.sampleAt = now; l.sampleAcked = l.acked
         }
         cv.broadcast()
+    }
+
+    func addSample(_ l: BLeg, _ now: Double, _ v: Double) {
+        l.ring.append((at: now, v: max(v, 16384)))
+        if l.ring.count > BondProto.rateRing { l.ring.removeFirst(l.ring.count - BondProto.rateRing) }
+        let vs = l.ring.filter { now - $0.at <= BondProto.rateAge }.map { $0.v }.sorted(by: >)
+        if !vs.isEmpty { l.rate = vs[min(4, (vs.count - 1) / 3)] }
     }
 
     func streamAck(_ s: BStream, _ v: UInt32) {
@@ -449,6 +545,7 @@ final class BondClient {
             // the lowest seen on this leg: a PING waits behind the leg's own queue, and a minimum that followed it up would
             // grow the in-flight cap, which grows the queue (the leg is made again when its line changes)
             if !l.gotPong || rtt < l.rttMin { l.rttMin = rtt; l.rttMinAt = now }
+            l.srtt = l.srtt == 0 ? rtt : 0.875 * l.srtt + 0.125 * rtt
             l.gotPong = true
         case BondProto.ack:
             if f.stream == 0 { if f.payload.count == 8 { legAck(l, rd64(f.payload, 0)) } }
@@ -500,7 +597,7 @@ final class BondClient {
     // (under cv, may wait for the window and a leg)
     func sendSeq(_ s: BStream, _ type: UInt8, _ payload: [UInt8]) -> Bool {
         let n = BondProto.header + payload.count
-        while !s.done && running && s.unackedBytes > 0 && s.unackedBytes + n > BondProto.window { cv.wait() }
+        while !s.done && running && s.unackedBytes > 0 && s.unackedBytes + n > BondProto.streamWindow { cv.wait() }
         guard !s.done, running else { return false }
         let f = BFrame(type, s.id, s.nextSeq, payload)
         s.nextSeq += 1
@@ -519,6 +616,7 @@ final class BondClient {
             if now - l.lastPing >= 1 { l.lastPing = now; l.pingID &+= 1; ctl(l, BFrame(BondProto.ping, 0, l.pingID, be64(UInt64(now * 1e9)))) }
             if l.recv != l.recvAcked { legAckSend(l) }
         }
+        rescue(now)
         for (id, s) in streams {
             if !s.done && s.opened == 0 && now - s.born > 10 { log("BOND stream \(s.id): no OPEN_OK in 10 s, reset"); finish(s, rst: true) }
             if s.delivered != s.ackSent || s.ackForce { streamAckSend(s) }
@@ -687,9 +785,10 @@ final class BondClient {
         let ls: [[String: Any]] = legs.map { l in
             ["line": l.line, "key": l.key, "alive": !l.dead, "rttMs": Double(Int(l.rttMin * 10_000)) / 10,
              "rateUpMbps": Double(Int(l.rate * 8 / 100_000)) / 10, "rateDownMbps": Double(Int(l.peerRate * 8 / 100_000)) / 10, "inflightKB": Int(l.sent - l.acked) / 1024,
-             "mbSent": Double(Int(Double(l.sent) / 1e4)) / 100, "mbReceived": Double(Int(Double(l.recv) / 1e4)) / 100]
+             "mbSent": Double(Int(Double(l.sent) / 1e4)) / 100, "mbReceived": Double(Int(Double(l.recv) / 1e4)) / 100,
+             "loadRttMs": Int(l.ackRTT * 1000), "pingMs": Int(l.srtt * 1000), "copiesCarried": l.copiesIn, "stalls": l.stalls, "suspect": l.suspect]
         }
-        return ["on": running, "bypass": bypass() ?? NSNull(), "server": "\(host):\(port)", "legs": ls, "generation": gen, "accepting": accepting, "streams": streams.count, "udpFlows": flows.count, "opened": opened,
+        return ["scheduler": BondProto.legacy ? "v92 (CK_BOND_LEGACY)" : "v95", "on": running, "bypass": bypass() ?? NSNull(), "server": "\(host):\(port)", "legs": ls, "generation": gen, "accepting": accepting, "streams": streams.count, "udpFlows": flows.count, "opened": opened,
                 "mbUp": Double(Int(Double(bytesUp) / 1e4)) / 100, "mbDown": Double(Int(Double(bytesDown) / 1e4)) / 100]
     }
 }

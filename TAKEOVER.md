@@ -1,3 +1,26 @@
+**24.11.2026, v95 (request 107): the bond scheduler; two lines through Frankfurt add up.**
+Cause, measured live before the change (cable AX88179B + Nothing A142 USB, FRANKFURT, v91 relay / v92 Mac): 8 streams 47
+Mbit/s, one stream 47.5, while the lines alone gave 25-30 and 99-107 (Hetzner fsn1, 10 s). The relay's leg sockets had TCP
+windows of 1 MB and 470 KB with only 49-123 KB queued (ss -ti): the relay's own in-flight cap (rate x (2 x lowest ping +
+50 ms) = about 0.12 s) starved them, because a loaded 4G leg's round trip is longer; the rate followed the starved samples
+down (40 % per backlogged 250 ms sample; journal 23.11: the hotspot leg 67.7 -> 2.5 -> 1.1 Mbit/s in two minutes). Not the
+slow leg pacing the stream: neither leg was full. Change (both ends, group.go and Bond.swift, the wire unchanged, an old
+peer works with a new one): cap + 150 ms; rate = the 5th-highest of the last 16 counted samples of 10 s (stall- and
+burst-proof); arrival counts only the queue in front; a leg with bytes in flight and no ACK for 0.15 s + 1.5 x its ping is
+suspect (no new frames); a frame the far end waits for that is late is copied to the leg where it arrives first (at most
+twice; the receiver has always dropped duplicates); copies and young streams in a priority queue, bulk written in 64 KB
+pieces, TCP_NOTSENT_LOWAT 128 KB on the relay's legs; stream ACKs also on the freshest leg when the best one went quiet;
+window 8 MB. CK_BOND_LEGACY=1 (either end) = the v92 scheduler. Hook for request 105: BStream.prefer/preferAfter (Mac side
+only; downloads need a new frame to the relay, not built). Details: docs/ckbond.md "The scheduler".
+CI (BondTest.swift --scenarios unequal,deep,stall,upload; Tools/ci/sched_ab.sh via bench.yml kind=sched, the same build with
+and without CK_BOND_LEGACY, interleaved on one runner): bench runs 45292108099 (3 rounds) and 45293457362 (4 rounds),
+medians v92 -> v95: fetch 1 88-137 -> 123-133, fetch 2 (a line died) 58-69 -> 100, unequal 90 + 25 75-97 -> 87-89 (range
+83-106; the runner's emulated lines read a lowest RTT of 70-160 ms), deep (round trip +0.25 s under load) 51-60 -> 106-107,
+upload 62-79 -> 92-116, the longest wait while one of two lines stalls 2 s: 1.9-2.0 s -> 0.6-0.7 s (max 0.82). Floors
+(BondTest.swift): fetch 1 0.40x -> 0.85x, fetch 2 0.25x -> 0.70x (the goal), unequal 0.80x of 90, deep 0.80x of 80, upload
+0.70x of 80, the stall's longest wait < 1.0 s; each about 25 % or more under the lowest v95 run. Branch runs 45292103555
+(way test failed only on a port clash of the new step, fixed) and 45293452955 green; branch sched-v93 deleted after.
+
 **24.11.2026, request 106: the menu-bar drop-down controller (MenuDrop.swift).** A left click on the menu-bar item opens a
 dark rounded panel under the item on the display that was clicked (NSEvent.mouseLocation; level statusBar+2, above the hover
 card): "Open Connection Keeper" first (bringStripe(): the window in front on that display; reads "... is open: bring it

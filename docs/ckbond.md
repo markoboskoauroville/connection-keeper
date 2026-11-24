@@ -81,26 +81,52 @@ whatever it is (its DATA may overtake its OPEN on a faster leg); one whose OPEN 
   frame it carried that its leg ACK does not cover is sent again on the other legs, oldest first.
 - The receiver sorts by `seq`, delivers in order, drops copies (and answers a copy with an ACK, in case the ACK it
   lost was the reason).
-- Stream ACK every 256 KB delivered or on the 50 ms tick. The window: at most 4 MB unacknowledged per stream and
+- Stream ACK every 256 KB delivered or on the 50 ms tick. The window: at most 8 MB (v95; v92 4 MB) unacknowledged per stream and
   direction, so a slow destination or client never fills memory.
 
-### The scheduler (both sides, per frame)
+### The scheduler (both sides, per frame; v95, 24.11.2026)
 
-- `arrival(leg) = minRTT/2 + (bytes in flight on the leg + this frame) / rate`; the leg with the earliest arrival wins.
-- In flight = sequenced bytes put on the leg minus its leg ACK. Cap: `max(64 KB, rate × (2 × minRTT + 50 ms))`; a leg
-  at its cap takes nothing until its ACKs come back. This bounds the reordering and keeps the kernel's buffers small.
-- `rate` (v67): delivered bytes from the leg ACKs over at least 250 ms (and 2 × minRTT), smoothed 0.6 old / 0.4 new. It
-  follows a sample down only when the leg was backlogged the whole sample (found full between every two ACKs); otherwise
-  it only rises. Starting value 20 Mbit/s. Each side sends its estimate in its PONGs, so the Mac shows both directions.
-  (v65 averaged over 100 ms and spiralled a leg to nothing; v66 took the best 100 ms and believed a phone's adb bursts.)
-- A young stream (its first 64 KB: a handshake, a request, a small answer) may use up to twice a leg's cap, so it does
-  not queue behind the other streams' bulk.
-- `minRTT`: the lowest PING time seen on the leg (a ping waits behind the leg's own queue; a minimum that followed it
-  up would grow the cap and with it the queue). The leg is made again when its line changes.
+The wire did not change: every rule below is the sender's own, and an old peer works with a new one in both directions
+(the copies are ordinary duplicates, which every receiver has always dropped). `CK_BOND_LEGACY=1` in the environment of
+the relay or of ck-aggregate brings back the v92 scheduler on that side (CI's A/B bench; a switch on the VM).
+
+- `arrival(leg) = minRTT/2 + (queued in front + this frame) / rate`, where "queued in front" is the in-flight bytes minus
+  about one round trip's worth (`rate × (minRTT + 20 ms)`, already on the way); the leg with the earliest arrival wins.
+  v92 counted all in-flight bytes as queue.
+- In flight = sequenced bytes put on the leg minus its leg ACK. Cap: `max(64 KB, rate × (2 × minRTT + 50 ms + 150 ms))`
+  (v92: without the 150 ms). A loaded 4G line's round trip is well above 2 × its idle ping; under v92's cap the leg
+  delivered cap / round trip, less than its rate, and the rate followed that down (measured live 24.11.2026: TCP windows of
+  1 MB and 470 KB on the relay's legs with only 49-123 KB queued; 47 Mbit/s for cable 29 + phone 105).
+- `rate`: delivered bytes from the leg ACKs over at least 250 ms (and 2 × minRTT). A sample counts when the leg was
+  backlogged the whole sample, or when it beats the estimate; the estimate is the 5th-highest of the last 16 counted
+  samples younger than 10 s (fewer samples: a higher rank). A stall (the leg is suspect then, not backlogged) or a burst
+  moves nothing; a real change shows within about 3 s. v92 took 40 % of every backlogged sample: a 2 s radio stall wiped
+  the estimate (journal 23.11.2026: 67.7 → 1.1 Mbit/s) and it took minutes to climb back. Starting value 20 Mbit/s; each
+  side sends its estimate in its PONGs.
+- **Suspect leg**: bytes in flight and no leg ACK for `150 ms + 1.5 × minRTT` (counted from the later of its last ACK
+  and its oldest frame in flight): it takes no new frames until its next ACK (unless every live leg is suspect). It is
+  declared dead after 3 s of silence as before.
+- **Copies**: each frame remembers when its leg ACK is due (`placed + arrival + minRTT/2 + 60 ms`). Every 50 ms, a frame
+  that is late (`due + 100 ms + half its expected time`) and that the receiver is waiting for (a later frame of its
+  stream has arrived, or its leg is suspect) is copied to the leg where it arrives first, at most twice; that leg is then
+  responsible for it (resent if it dies). The receiver keeps the first copy, drops the other, and answers it with an ACK.
+- Copies and young streams' frames (the first 64 KB of a stream: a handshake, a request, a small answer) go in a
+  priority queue written before the bulk; the bulk is written in pieces of 64 KB, and the relay sets TCP_NOTSENT_LOWAT
+  128 KB on its legs, so what waits, waits in the relay's own queue where the priority applies. A young stream may also
+  use up to twice a leg's cap.
+- A stream ACK goes on the leg with the lowest ping; when that leg has gone quiet (`0.2 s + 2 × its ping` longer than
+  the freshest), the ACK goes on the freshest too.
+- Window: 8 MB unacknowledged per stream and direction (v92: 4 MB).
+- `minRTT`: the lowest PING time seen on the leg, for the arrival order only. The smoothed ping (`pingMs`) and the time
+  from a frame's placing to its leg ACK (`loadRttMs`, the round trip under load) are shown in /status and the relay's
+  minute log.
+- Hook (Mac side; request 105, the default download line): `BStream.prefer` / `preferAfter`: once a stream has sent that
+  many bytes its frames go only on the legs of that line while one is alive and not suspect. The relay has no such
+  field: downloads would need the Mac to tell it (a new frame type, negotiated), not built.
 
 ### Limits and timeouts (relay)
 
-Streams idle 10 min are reset; a group without legs for 60 s is gone (the Mac gives up after 50 s and starts a new
+Streams idle 24 h are reset (v91; `CK_BOND_IDLE`); a group without legs for 60 s is gone (the Mac gives up after 50 s and starts a new
 group); 1024 streams per group, 64 legs per group, 64 groups, 512 legs in all. Destinations on loopback, private,
 link-local (the cloud's metadata), and 100.64/10 (Tailscale) are refused unless `-allow-local` (the CI test only).
 

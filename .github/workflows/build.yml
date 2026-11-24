@@ -50,6 +50,22 @@ jobs:
           python3 Tools/ci/handover_test.py "build/$APP.app/Contents/MacOS/ck-aggregate" "$T/agg" 18080 "$SHA" || ok=$?
           echo "--- aggregate log"; grep -E "HANDOVER|ck-aggregate v|taken" "$T/agg/aggregate.log" | tail -30
           exit $ok
+      - name: Bond scheduler scenarios (v95; 90 + 25 Mbit/s, a round trip that rises under load, a 2 s stall, an upload)
+        run: |
+          T=$(mktemp -d)
+          head -c 67108864 /dev/urandom > "$T/big.bin"
+          SHA=$(shasum -a 256 "$T/big.bin" | cut -d' ' -f1)
+          openssl rand -hex 32 > "$T/token"
+          python3 -m http.server 18097 --bind 127.0.0.1 --directory "$T" >/dev/null 2>&1 &
+          HTTP=$!
+          build/ck-bond-server-darwin -listen 127.0.0.1:18447 -token-file "$T/token" -allow-local 2> "$T/relay.log" &
+          sleep 2
+          ok=0
+          perl -e 'alarm 300; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" bond-selftest \
+            --server 127.0.0.1:18447 --token-file "$T/token" --url http://127.0.0.1:18097/big.bin --sha "$SHA" --scenarios unequal,deep,stall,upload || ok=$?
+          echo "--- relay log"; grep -E "scheduler|legs," "$T/relay.log" | tail -12
+          pkill -f ck-bond-server-darwin || true; kill $HTTP || true
+          exit $ok
       - name: Bond idle test (v91; a stream silent longer than the relay's idle limit still echoes)
         run: |
           T=$(mktemp -d)

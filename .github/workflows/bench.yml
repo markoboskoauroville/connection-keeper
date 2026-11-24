@@ -10,6 +10,9 @@ on:
       rounds:
         description: "rounds"
         default: "3"
+      kind:
+        description: "refs (build each ref) or sched (v95: this ref's build with CK_BOND_LEGACY=1 against without, plus the scenarios)"
+        default: "refs"
 jobs:
   bench:
     runs-on: macos-15
@@ -21,6 +24,13 @@ jobs:
         with:
           go-version: "1.22"
       - name: Build each ref (ck-aggregate and the relay only)
+        if: github.event.inputs.kind != 'sched'
         run: ./Tools/ci/bench.sh build "${{ github.event.inputs.refs }}"
       - name: Run interleaved
+        if: github.event.inputs.kind != 'sched'
         run: ./Tools/ci/bench.sh run "${{ github.event.inputs.refs }}" "${{ github.event.inputs.rounds }}"
+      - name: Scheduler A/B (v95; one build, the v92 scheduler by CK_BOND_LEGACY=1 against v95)
+        if: github.event.inputs.kind == 'sched'
+        run: |
+          ./Tools/ci/bench.sh build HEAD
+          ./Tools/ci/sched_ab.sh /tmp/bench/bin/agg-HEAD /tmp/bench/bin/relay-HEAD "${{ github.event.inputs.rounds }}"
