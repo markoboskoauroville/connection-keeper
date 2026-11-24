@@ -2,6 +2,21 @@
 
 ## The decisions
 
+- **Experiments run in TEST MODE; the live app is touched only by an install, and only when DO NOT DISTURB is clear
+  (request 108, 24.11.2026).** Twice in one night a worker's install or experiment cut the Mac (and the Claude sessions
+  working on it) off; once the install left en17 and en0 without their default routes and nobody saw it for minutes
+  because only the tunnel path was checked. `ck-test start` runs a sandboxed copy on its own port and folder, refusing
+  every changing command, with drops played inside it and a guard that tears it down when the safe line fails;
+  `ck-dnd on` holds every install, restart and deploy; every install ends with `ck-test safe --all` (curl --interface on
+  every present line and its own default route), never with the tunnel path alone. A CK_AGG_TEST copy before v97 still
+  wrote the live folder (nothing-only-state, aggregate-speeds.json, its serving mark) and could switch the phone's Wi-Fi
+  off over adb: "a separate port" was never "a separate copy".
+- **Place a connection by the room it can expect, not by a count (request 112, 24.11.2026).** A stored speed of 9 Mbit/s
+  for a 30 Mbit/s cable (an average of old tests) kept it nearly unused, because a line thought slow never carries enough
+  to show its speed; and a burst of new connections all saw rate 0. An unmeasured line is now tried at half the best
+  line's capacity, and "full" is decided only by the gain of one more connection (two connections alone never say full:
+  over 4G one TCP connection is limited by its round trip).
+
 - **"It raises itself" was a move, not a restore (v81, 14.11.2026).** A minimized v80 stayed in the Dock for 3+ minutes and a
   pyobjc test showed setContentSize/setFrameOrigin do not deminiaturize a window. The stripe's keepOnScreen(), called on every
   size change, put a window he had placed low back inside the display. Respect his place: only the title bar must be reachable.

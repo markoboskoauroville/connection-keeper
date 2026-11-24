@@ -37,7 +37,8 @@ LIVE = os.path.join(HOME, "Library/Application Support/connection-keeper")
 BASE = os.path.join(HOME, "Library/Caches/ck-test")
 LIVE_PORT = 8857
 DEFAULT_PORT = 18857
-PROBES = ["http://cp.cloudflare.com/generate_204", "http://www.google.com/generate_204"]
+PROBES = [u for u in os.environ.get("CK_TEST_PROBES", "").split(",") if u] or ["http://cp.cloudflare.com/generate_204", "http://www.google.com/generate_204"]
+UNREACHABLE = ["http://192.0.2.1/generate_204"]    # TEST-NET-1: never answers (ck-test fail-guard)
 SPEED = ["https://fsn1-speed.hetzner.com/1GB.bin", "https://nbg1-speed.hetzner.com/1GB.bin"]
 # the live folder's files a copy under test could have written before request 108 (and must not now)
 WATCHED = ["aggregate-speeds.json", "aggregate-lines.json", "aggregate-selection.json", "nothing-only-state", "nothing-only",
@@ -114,8 +115,8 @@ def present_lines():
     return found
 
 
-def answers(extra, timeout=4):
-    for url in PROBES:
+def answers(extra, timeout=4, probes=None):
+    for url in probes or PROBES:
         code, out = sh(["/usr/bin/curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", str(timeout)] + extra + [url], timeout + 2)
         if out.strip() == "204":
             return True
@@ -137,17 +138,22 @@ def phone_socks():
     return ports
 
 
-def safe_check(require_all=False, quiet=False):
+def safe_check(require_all=False, quiet=False, probes=None):
     """(ok, report lines). ok: the Mac's own route answers and at least one line with a default route answers by itself
     (require_all: every present line answers by itself, and each has its own default route)"""
     rep, ok = [], True
-    own = answers([])
+    own = answers([], probes=probes)
     rep.append(f"the Mac's own route (no interface given): {'204' if own else 'NO ANSWER'}")
     defaults, halves = default_lines()
+    if not own and not require_all:                # the guard acts at once: the Mac's own route is the branch we sit on
+        rep.append(f"  default routes: {'; '.join(defaults) or 'none'}; utun99 halves: {'; '.join(halves) or 'none'}")
+        rep.append("NOT SAFE")
+        if not quiet: print("\n".join(rep))
+        return False, rep
     carrying = sorted({d.split()[-1] for d in defaults if d.split()[-1].startswith("en")})
     good = []
     for i in (present_lines() if require_all else carrying):
-        a = answers(["--interface", i])
+        a = answers(["--interface", i], probes=probes)
         has_default = i in carrying
         rep.append(f"  {i}: curl --interface {'204' if a else 'NO ANSWER'}; its own default route: {'yes' if has_default else 'NO'}")
         if a:
@@ -155,7 +161,7 @@ def safe_check(require_all=False, quiet=False):
         if require_all and (not a or not has_default):
             ok = False
     for p in phone_socks():
-        a = answers(["-x", f"socks5h://127.0.0.1:{p}"])
+        a = answers(["-x", f"socks5h://127.0.0.1:{p}"], probes=probes)
         rep.append(f"  phone SOCKS 127.0.0.1:{p}: {'204' if a else 'NO ANSWER'}")
         if require_all and not a:
             ok = False
@@ -398,14 +404,14 @@ def cmd_guard(args):
             print(f"{time.strftime('%H:%M:%S')} the copy has ended: the guard ends", flush=True)
             return
         why = None
-        if os.path.exists(os.path.join(st, "guard-fail")):
-            why = "the check was made to fail on purpose (ck-test fail-guard)"
-        elif time.time() > rec["until"]:
+        # ck-test fail-guard: the same check, its probes pointed at an address that never answers
+        forced = os.path.exists(os.path.join(st, "guard-fail"))
+        if time.time() > rec["until"]:
             why = "its time is up (--ttl)"
         else:
-            ok, rep = safe_check(quiet=True)
+            ok, rep = safe_check(quiet=True, probes=UNREACHABLE if forced else None)
             if not ok:
-                why = "NO SAFE LINE: " + " | ".join(rep)
+                why = ("(made to fail on purpose: probes at 192.0.2.1) " if forced else "") + "NO SAFE LINE: " + " | ".join(rep)
             else:
                 d, h = default_lines()
                 live = live_status_steady()

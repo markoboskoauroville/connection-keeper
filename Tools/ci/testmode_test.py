@@ -33,6 +33,9 @@ SHA10 = hashlib.sha256(open(mid, "rb").read()).hexdigest()
 class Quiet(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **k): super().__init__(*a, directory=T, **k)
     def log_message(self, *a): pass
+    def handle(self):
+        try: super().handle()
+        except (BrokenPipeError, ConnectionResetError): pass       # curl -m cuts a download: expected
 
 
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", WEB), Quiet)
@@ -124,11 +127,19 @@ time.sleep(4)
 ck("cap", "B", "40")
 time.sleep(0.5)
 _, _, base = curl("ten.bin")
+res = {}
+th = threading.Thread(target=lambda: res.update(v=curl("ten.bin")))
+th.start(); time.sleep(0.6)                       # the stall comes in the middle of the download
 ck("stall", "B", "3")
-time.sleep(0.4)                                   # the copy reads its fault file every 0.2 s
-size, _, took = curl("ten.bin")
+th.join(30)
+size, _, took = res.get("v", (0, 0, 0))
 ok = size == (10 << 20) and hashlib.sha256(open(os.path.join(T, "got.bin"), "rb").read()).hexdigest() == SHA10
-check(ok and took >= base + 2.0, f"stall B 3 s: 10 MB in {took:.1f} s (without: {base:.1f} s), intact: {ok}")
+check(ok and took >= base + 2.0, f"stall B 3 s mid-download: 10 MB in {took:.1f} s (without: {base:.1f} s), intact: {ok}")
+ck("stall", "B", "2")
+time.sleep(0.4)                                   # a new connection during a stall waits for it (the copy reads faults every 0.2 s)
+size, _, took2 = curl("ten.bin")
+ok2 = size == (10 << 20)
+check(ok2 and took2 >= base + 1.0, f"stall B 2 s, a new connection during it: 10 MB in {took2:.1f} s, whole: {ok2}")
 ck("restore", "B")
 
 # delay: only A, 300 ms
@@ -155,10 +166,10 @@ check((line("A") or {}).get("alive") is True, f"restore A: alive again after {ti
 # the guard tears the copy down when its check fails
 rec = json.load(open(os.path.expanduser("~/Library/Caches/ck-test/current.json")))
 ck("fail-guard"); t0 = time.time()
-while time.time() - t0 < 8 and status() is not None: time.sleep(0.3)
+while time.time() - t0 < 20 and status() is not None: time.sleep(0.3)
 gone = status() is None
 ended = open(os.path.join(rec["state"], "ENDED")).read() if os.path.exists(os.path.join(rec["state"], "ENDED")) else ""
-check(gone and "on purpose" in ended, f"fail-guard: the copy gone after {time.time() - t0:.1f} s; ENDED: {ended.strip()}")
+check(gone and "on purpose" in ended and "NO SAFE LINE" in ended, f"fail-guard: the copy gone after {time.time() - t0:.1f} s; ENDED: {ended.strip()}")
 r = ck("stop")
 check("port %d free" % PORT in r.stdout and "LIVE SIDE IDENTICAL" in r.stdout, "stop: port free, the live side identical")
 check(live_files() == live_before, "the live folder: as before (" + ("absent" if live_before == "absent" else f"{len(live_before)} files") + ")")

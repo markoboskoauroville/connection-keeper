@@ -135,18 +135,25 @@ enum Faults {
     static func unregister(_ c: Int32) { guard enabled else { return }; lock.lock(); open[c] = nil; lock.unlock() }
 }
 
-// the dial's part: true = this attempt fails (dead at once; silent or stalled after `timeout`); a delay only waits
+// the dial's part: true = this attempt fails (dead at once; silent after `timeout`); a stall holds the dial until it is
+// over (as a SYN is answered once a stalled hotspot moves again) and fails only when it outlasts `timeout`; a delay waits
 func fault(_ u: Uplink) -> String? {
     guard let f = Faults.of(u.name) else { return nil }
     if f.dead { return "dead" }
-    if f.silent || f.stalled(Date().timeIntervalSince1970) { return "silent" }
+    if f.silent { return "silent" }
+    if f.stalled(Date().timeIntervalSince1970) { return "stalled" }
     return nil
 }
 func faulted(_ u: Uplink, timeout: Int) -> Bool {
     guard let f = Faults.of(u.name) else { return false }
     if f.delayMs > 0 { usleep(useconds_t(min(f.delayMs, 10_000) * 1000)) }
     guard let kind = fault(u) else { return false }
-    if kind == "silent" { sleep(UInt32(timeout)) }
+    if kind == "silent" { sleep(UInt32(timeout)); return true }
+    if kind == "stalled" {
+        let end = Date().addingTimeInterval(Double(timeout))
+        while Date() < end, fault(u) == "stalled" { usleep(50_000) }
+        return fault(u) != nil
+    }
     return true
 }
 
