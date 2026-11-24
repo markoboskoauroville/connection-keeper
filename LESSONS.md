@@ -494,3 +494,8 @@ The item is image-only, so the pipes are drawn into the image, with room (pad) o
   receiver's duplicate handling made this a sender-only change, so old and new ends mix without a version step.
 - An A/B switch in the same binary (CK_BOND_LEGACY) beats comparing builds: same harness, same runner, interleaved rounds.
 - A new CI step must not leave a server on a port a later step uses (the way test's whoami is on 18081): kill what you start.
+- Measure the relay's own internet before tuning the bond: chromium-vm receives about 50 Mbit/s from any source although
+  its shape promises 2 Gbit/s; the bonded pair sat at 47-48 with the old and the new scheduler alike. Recv-Q 0 on the relay's
+  sockets to the destination meant "waiting for the internet", not "the bond is full".
+- install.sh resolves a relative binary path after it changes into its own folder: always give the absolute path, and check
+  the start line's version after a deploy (the first try put v91 back in, hitless, and said "handed over").

@@ -19,7 +19,27 @@ medians v92 -> v95: fetch 1 88-137 -> 123-133, fetch 2 (a line died) 58-69 -> 10
 upload 62-79 -> 92-116, the longest wait while one of two lines stalls 2 s: 1.9-2.0 s -> 0.6-0.7 s (max 0.82). Floors
 (BondTest.swift): fetch 1 0.40x -> 0.85x, fetch 2 0.25x -> 0.70x (the goal), unequal 0.80x of 90, deep 0.80x of 80, upload
 0.70x of 80, the stall's longest wait < 1.0 s; each about 25 % or more under the lowest v95 run. Branch runs 45292103555
-(way test failed only on a port clash of the new step, fixed) and 45293452955 green; branch sched-v93 deleted after.
+(way test failed only on a port clash of the new step, fixed) and 45293452955 green; branch sched-v93 deleted after. Release: main run 45295275745 green (fetch 1 114.7 = 1.43x, fetch 2 92.5 = 1.16x, unequal
+85.2, deep 81.3, stall wait 0.59 s, upload 93.8, hand-over 19 / 456 probes 0 failed, UDP 300/300, way, session green), v95
+Latest. RELAY v95 DEPLOYED 24.11.2026 00:26 UTC (before the coordinator's hold): ~/ckbond/v95 from the release, install.sh
+--keep-token with the ABSOLUTE path (a relative path is resolved after install.sh cd's to its own folder: the first try at
+00:26:01 reinstalled v91 from ~/ckbond/v91, hitless; the second at 00:26:22 put v95 in, pid 4030510, "scheduler v95", no
+NOTSENT_LOWAT warning); 299 of 299 generate_204 probes through the Mac across both switches, slowest 0.27 s; public IP
+130.61.181.83 after. Rollback: `sudo bash ~/ckbond/v91/install.sh --keep-token /home/ubuntu/ckbond/v91/ck-bond-server-linux-arm64`,
+or a drop-in Environment=CK_BOND_LEGACY=1 + reload (the v92 scheduler in the v95 binary). The Mac side (v95 app) was NOT
+installed by this job.
+REAL LINES (8 streams x 10 s from fsn1-speed.hetzner.com; cable en17 by --interface, the Nothing by its ck-phone SOCKS
+127.0.0.1:8860, the pair = the Mac's route through FRANKFURT): before (v91 relay, 01:00) cable 29.5 / 29.5 / 25.1, Nothing
+107.2 / 102.2 / 102.4, pair 47.2 / 46.8 / 47.5 (one stream: 47.6 / 47.5); after the v95 relay (01:28) cable 30.6 / 31.0 / 32.1,
+Nothing 99.6 / 94.5 / 96.1, pair 47.8 / 48.3 / 48.2. No change, and the reason is not the bond: THE VM ITSELF RECEIVES ONLY
+ABOUT 50 Mbit/s (on chromium-vm: Hetzner fsn1 1 stream 49.0, 8 streams 48.1; OVH 50.4; Hetzner Ashburn 43.6; no tc shaping,
+fq_codel only, load 0.3) although its shape says VM.Standard.A1.Flex, 2 OCPU, networkingBandwidthInGbps 2.0. During the
+bonded download the relay's sockets to Hetzner had Recv-Q 0 (the relay waits for the destination). The earlier docs' "2
+Gbit/s" for the VM was the shape's promise, never measured. Whatever the scheduler does, FRANKFURT tops out near 50 down
+until the VM's own bandwidth is found and raised (Oracle account tier or limit, another region or host). CROATIA (no relay)
+is where two lines add up today. The v95 scheduler stays right for the day the relay has bandwidth (CI above), and it fixes
+the rate collapse after a stall seen in the journal on 23.11.
+
 
 **24.11.2026, request 106: the menu-bar drop-down controller (MenuDrop.swift).** A left click on the menu-bar item opens a
 dark rounded panel under the item on the display that was clicked (NSEvent.mouseLocation; level statusBar+2, above the hover

@@ -932,4 +932,12 @@ The four, approved together (assessment of 23.11.2026, building in v91; v90 was 
 
 What it means (the assessment Marko approved): through FRANKFURT the ticked pair measured 45-48 Mbit/s against 91-93 for the hotspot alone. The in-flight limit per leg follows a round trip that grows under load, the leg's rate falls with every stall, and a frame on a slow or stalled leg is resent only when the leg is declared dead (3 s). Build: a limit and a rate that survive a loaded 4G line, earliest-delivery choice of leg, a copy of a frame the far end waits for on the fastest leg, both directions, the wire unchanged; CI proof with a deep-queue line, an unequal pair and a 2 s stall; floors raised; real lines before and after.
 
-**Status:** building in v95 (v93 and v94 taken by requests 105 and 106).
+**Status 24.11.2026:** built in v95 (CI run 45295275745 green, v95 Latest; A/B bench runs 45292108099, 45293457362). Relay v95 deployed on chromium-vm 00:26 UTC (hitless, 299 of 299 probes). Mac side not installed by this job. Real lines: the pair through Frankfurt stays at 47-48 Mbit/s before and after, because the VM itself receives only about 50 Mbit/s from any source (OVH 50.4, Hetzner 48.1 / 43.6) although its shape (VM.Standard.A1.Flex, 2 OCPU) promises 2 Gbit/s: the relay's own internet is the ceiling, not the scheduler. See TAKEOVER v95.
+
+## 24.11.2026, request 108 (a TEST MODE: exercise the aggregation without cutting the Mac's own connection)
+
+> Please make a special test mode when you can go through Wi-Fi, normal Mac connection, and test all the drops without dropping yourself from the internet. Do not cut the branch you are sitting on, please.
+
+What it means (the coordinator's brief, 01:45): the Mac's own traffic stays on a safe line (no utun99 half routes, no system proxy to the tested server); the system under test is a separate ck-aggregate copy (own port, own state directory, writes nothing shared, never commands a phone or the Wi-Fi radio) with its own bond session (a test group or a second relay instance); drops are simulated inside the test copy per line (silence, delay, loss, rate cap, kill, restore) from the command line; a guard refuses to start without a working safe line, checks it every few seconds and tears the test down when it fails; install/restart/deploy scripts refuse while a "do not disturb" flag is set and end with `curl --interface` on every present line; one command (start | drop | restore | measure | stop) documented in TAKEOVER and LESSONS.
+
+**Status:** saved first; not started (the bond scheduler job handed back first: the relay VM's ~50 Mbit/s ceiling changes what a real-line test can show).
