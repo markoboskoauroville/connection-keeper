@@ -941,3 +941,21 @@ What it means (the assessment Marko approved): through FRANKFURT the ticked pair
 What it means (the coordinator's brief, 01:45): the Mac's own traffic stays on a safe line (no utun99 half routes, no system proxy to the tested server); the system under test is a separate ck-aggregate copy (own port, own state directory, writes nothing shared, never commands a phone or the Wi-Fi radio) with its own bond session (a test group or a second relay instance); drops are simulated inside the test copy per line (silence, delay, loss, rate cap, kill, restore) from the command line; a guard refuses to start without a working safe line, checks it every few seconds and tears the test down when it fails; install/restart/deploy scripts refuse while a "do not disturb" flag is set and end with `curl --interface` on every present line; one command (start | drop | restore | measure | stop) documented in TAKEOVER and LESSONS.
 
 **Status:** saved first; not started (the bond scheduler job handed back first: the relay VM's ~50 Mbit/s ceiling changes what a real-line test can show).
+
+## 24.11.2026, request 108 (BYPASS beside the resize grip)
+
+> Please to aggregate give the bypass button next to this grip for resizing
+
+**Status:** saved first.
+
+## 24.11.2026, request 109 (the whole interface pulsates while numbers change)
+
+> notice when still there is some movement in the app as some numbers are changing. The whole user interface is pulsating.
+
+**Status:** saved first.
+
+## 24.11.2026, request 110 (the lines lost their routes at an install: never again)
+
+> If you are disconnecting and experimenting now we have offline, how can you work?
+
+**Status:** saved first. Routes put back 24.11.2026 ~01:37 (service AX88179B off and on: configd rebuilt the scoped default routes of en17 and en0); no live installs until the coordinator says.
