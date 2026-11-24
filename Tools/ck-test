@@ -1,0 +1,633 @@
+#!/usr/bin/env python3
+"""ck-test: TEST MODE for Connection Keeper (request 108, Marko 24.11.2026 01:45: "make a special test mode when you can go
+through Wi-Fi, normal Mac connection, and test all the drops without dropping yourself from the internet. Do not cut the
+branch you are sitting on, please.")
+
+A separate ck-aggregate (the copy under test) on its own port and its own folder; only traffic sent to that port on
+purpose goes through it (curl -x socks5h://127.0.0.1:18857 ...). The Mac's own traffic, the live app, its ticks, its way,
+its tunnel (utun99), its routes and the production relay are never touched; drops are played inside the copy.
+
+    ck-test safe [--all]            the safe-line check alone (the Mac's own route + curl --interface on each line with a
+                                    default route, the Nothing's SOCKS); --all: EVERY present line must answer (installs)
+    ck-test start [--lines "A,B"] [--port 18857] [--bin PATH] [--bond] [--ttl MIN]
+                                    refuses without a safe line; downloads the Latest release's ck-aggregate (or --bin),
+                                    starts it under sandbox-exec (no write outside its folder) with CK_AGG_TEST, and a
+                                    guard that re-checks every 3 s and tears the copy down when the check fails, the live
+                                    side changes, or the TTL (default 60 min) runs out. --bond: the copy bonds through
+                                    the production relay in a group of its own (its own client id; the live group and
+                                    the relay process are untouched); default CROATIA (no relay)
+    ck-test lines "A,B"             the copy's ticks (names as the copy's /status lists them; fuzzy)
+    ck-test drop <line> [dead|silent]    ck-test delay <line> <ms>     ck-test loss <line> <pct>
+    ck-test cap <line> <mbps>       ck-test flow <line> <mbps>    ck-test stall <line> <s>    ck-test kill <line>
+    ck-test restore <line>|all      ck-test faults
+    ck-test measure [--streams 8] [--secs 10] [--url URL] [--direct LINE] [--runs N]
+                                    N curl streams through the copy (or --direct: that one line alone, outside the copy);
+                                    Mbit/s and the split per line from the copy's own counters
+    ck-test status                  the copy, its lines and room, the faults, the guard
+    ck-test snapshot [FILE]         the live side: default routes, utun99 halves, live /status (steady fields), the
+                                    live folder's files (sha256); ck-test compare A B
+    ck-test fail-guard              make the guard's next check fail on purpose (the proof that it tears down)
+    ck-test stop                    the copy and the guard stopped, the live side compared with its start snapshot,
+                                    the folder removed (the log kept in ~/Library/Caches/ck-test/last-run)
+"""
+import hashlib, json, os, re, shutil, signal, socket, subprocess, sys, time, urllib.request
+
+HOME = os.path.expanduser("~")
+LIVE = os.path.join(HOME, "Library/Application Support/connection-keeper")
+BASE = os.path.join(HOME, "Library/Caches/ck-test")
+LIVE_PORT = 8857
+DEFAULT_PORT = 18857
+PROBES = ["http://cp.cloudflare.com/generate_204", "http://www.google.com/generate_204"]
+SPEED = ["https://fsn1-speed.hetzner.com/1GB.bin", "https://nbg1-speed.hetzner.com/1GB.bin"]
+# the live folder's files a copy under test could have written before request 108 (and must not now)
+WATCHED = ["aggregate-speeds.json", "aggregate-lines.json", "aggregate-selection.json", "nothing-only-state", "nothing-only",
+           "download-line.json", "boost.json", "bond.json", "dead-lines.json", "mode", "tunnel-on", "tunnel-strict", "wires",
+           "phone-hotspots.txt", "phone-hotspot-owners.json", "aggregate-rescan", "aggregate-rescan-done", "app-lease.json",
+           "session-mode", "service-order-before.txt", "bond-direct.txt"]
+os.makedirs(BASE, exist_ok=True)
+
+
+def sh(args, timeout=10):
+    try:
+        r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        return r.returncode, r.stdout + r.stderr
+    except Exception as e:
+        return -1, str(e)
+
+
+def state_dir(port):
+    return os.path.join(BASE, f"state-{port}")
+
+
+def current():
+    """the running test's record, or None"""
+    p = os.path.join(BASE, "current.json")
+    try:
+        return json.load(open(p))
+    except Exception:
+        return None
+
+
+def alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except Exception:
+        return False
+
+
+def http_json(url, timeout=3):
+    try:
+        return json.load(urllib.request.urlopen(url, timeout=timeout))
+    except Exception:
+        return None
+
+
+# MARK: the safe line
+
+def default_lines():
+    """the physical devices that carry a default route now, and the utun99 halves"""
+    _, out = sh(["/usr/sbin/netstat", "-rn", "-f", "inet"])
+    defaults, halves = [], []
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) < 4:
+            continue
+        if f[0] == "default":
+            defaults.append(" ".join(f[:4]))
+        elif f[0] in ("0/1", "128.0/1"):
+            halves.append(" ".join(f[:4]))
+    return sorted(defaults), sorted(halves)
+
+
+def present_lines():
+    """every en* device with an IPv4 address and a router (what an install must leave working)"""
+    _, out = sh(["/sbin/ifconfig", "-l"])
+    found = []
+    for i in out.split():
+        if not i.startswith("en"):
+            continue
+        _, a = sh(["/usr/sbin/ipconfig", "getifaddr", i], 3)
+        _, g = sh(["/usr/sbin/ipconfig", "getoption", i, "router"], 3)
+        if a.strip() and re.match(r"^[0-9.]+$", g.strip() or "x"):
+            found.append(i)
+    return found
+
+
+def answers(extra, timeout=4):
+    for url in PROBES:
+        code, out = sh(["/usr/bin/curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-m", str(timeout)] + extra + [url], timeout + 2)
+        if out.strip() == "204":
+            return True
+    return False
+
+
+def phone_socks():
+    """the live app's phone forwards (127.0.0.1:886x answering SOCKS5)"""
+    ports = []
+    for p in range(8860, 8864):
+        try:
+            s = socket.create_connection(("127.0.0.1", p), timeout=0.5)
+            s.sendall(b"\x05\x01\x00")
+            if s.recv(2) == b"\x05\x00":
+                ports.append(p)
+            s.close()
+        except Exception:
+            pass
+    return ports
+
+
+def safe_check(require_all=False, quiet=False):
+    """(ok, report lines). ok: the Mac's own route answers and at least one line with a default route answers by itself
+    (require_all: every present line answers by itself, and each has its own default route)"""
+    rep, ok = [], True
+    own = answers([])
+    rep.append(f"the Mac's own route (no interface given): {'204' if own else 'NO ANSWER'}")
+    defaults, halves = default_lines()
+    carrying = sorted({d.split()[-1] for d in defaults if d.split()[-1].startswith("en")})
+    good = []
+    for i in (present_lines() if require_all else carrying):
+        a = answers(["--interface", i])
+        has_default = i in carrying
+        rep.append(f"  {i}: curl --interface {'204' if a else 'NO ANSWER'}; its own default route: {'yes' if has_default else 'NO'}")
+        if a:
+            good.append(i)
+        if require_all and (not a or not has_default):
+            ok = False
+    for p in phone_socks():
+        a = answers(["-x", f"socks5h://127.0.0.1:{p}"])
+        rep.append(f"  phone SOCKS 127.0.0.1:{p}: {'204' if a else 'NO ANSWER'}")
+        if require_all and not a:
+            ok = False
+    if not own:
+        ok = False
+    if not good:
+        ok = False
+        rep.append("  no line answers by itself")
+    rep.append(f"  default routes: {'; '.join(defaults) or 'none'}; utun99 halves: {'; '.join(halves) or 'none'}")
+    rep.append(("SAFE" if not require_all else "ALL LINES ANSWER") if ok else ("NOT SAFE" if not require_all else "A LINE DOES NOT ANSWER"))
+    if not quiet:
+        print("\n".join(rep))
+    return ok, rep
+
+
+# MARK: the live side, for before / after
+
+def live_status_steady():
+    s = http_json(f"http://127.0.0.1:{LIVE_PORT}/status")
+    if not s:
+        return None
+    w = s.get("watchdog", {})
+    b = s.get("bond") or {}
+    return {"version": s.get("version"), "port": s.get("port"), "since": s.get("since"), "pid": w.get("pid"),
+            "app": w.get("app"), "lines": [(l.get("name"), l.get("device"), l.get("role"), l.get("alive"), l.get("publicIP")) for l in s.get("lines", [])],
+            "ignored": s.get("ignored"), "bond_on": b.get("on"), "bond_bypass": b.get("bypass"), "download": s.get("download")}
+
+
+def snapshot():
+    defaults, halves = default_lines()
+    files = {}
+    for f in WATCHED:
+        p = os.path.join(LIVE, f)
+        if os.path.isfile(p):
+            files[f] = hashlib.sha256(open(p, "rb").read()).hexdigest()[:16] + f" {int(os.path.getmtime(p))}"
+        else:
+            files[f] = "absent"
+    serving = sorted(os.listdir(os.path.join(LIVE, "aggregate-serving"))) if os.path.isdir(os.path.join(LIVE, "aggregate-serving")) else []
+    _, socks = sh(["/usr/sbin/networksetup", "-getsocksfirewallproxy", "Wi-Fi"], 5)
+    return {"at": time.strftime("%Y-%m-%d %H:%M:%S"), "defaults": defaults, "utun99": halves, "live": live_status_steady(),
+            "files": files, "serving": serving, "socks_wifi": " ".join(socks.split()),
+            "ports_registry": _ports_entry()}
+
+
+def _ports_entry():
+    try:
+        d = json.load(open(os.path.join(HOME, ".config/mantra-ports.json")))
+        e = d.get("aggregate", {})
+        return {"port": e.get("port"), "pid": e.get("pid")}
+    except Exception:
+        return None
+
+
+def compare(a, b, out=print):
+    same = True
+    for k in ["defaults", "utun99", "live", "files", "serving", "socks_wifi", "ports_registry"]:
+        if a.get(k) != b.get(k):
+            same = False
+            out(f"  CHANGED {k}:\n    before {json.dumps(a.get(k))}\n    after  {json.dumps(b.get(k))}")
+        else:
+            out(f"  identical {k}")
+    return same
+
+
+# MARK: start / stop
+
+SANDBOX = """(version 1)
+(allow default)
+(deny file-write* (subpath "{live}"))
+(deny file-write* (literal "{home}/.config/mantra-ports.json"))
+(deny file-write* (literal "{home}/.config/connection-keeper.json"))
+(deny file-write* (subpath "{home}/Library/LaunchAgents"))
+(deny file-write* (subpath "{home}/Library/Preferences"))
+(deny file-write* (subpath "/Library"))
+(deny file-write* (subpath "/Applications"))
+(deny process-exec (literal "/usr/bin/osascript"))
+(deny process-exec (literal "/usr/bin/pkill"))
+(deny process-exec (literal "/usr/bin/killall"))
+"""
+
+
+def find_binary(want_bin):
+    if want_bin:
+        return os.path.abspath(want_bin)
+    code, out = sh(["gh", "release", "view", "--repo", "markoboskoauroville/connection-keeper", "--json", "tagName"], 20)
+    try:
+        tag = json.loads(out)["tagName"]
+    except Exception:
+        sys.exit(f"ck-test: cannot read the Latest release ({out.strip()[:200]}); give --bin")
+    d = os.path.join(BASE, "bin", tag)
+    b = os.path.join(d, "ck-aggregate")
+    if os.path.isfile(b):
+        return b
+    os.makedirs(d, exist_ok=True)
+    dl = os.path.join(d, "dl")
+    shutil.rmtree(dl, ignore_errors=True); os.makedirs(dl)
+    dm = os.path.join(HOME, "Developer/DOWNLOAD_MONITOR/dlmon.py")
+    if os.path.isfile(dm):
+        sh(["python3", dm, "add", f"ck-test-{tag}", "--name", f"Connection Keeper {tag} (ck-test copy)", "--want-mb", "5",
+            "--file", os.path.join(dl, "app.zip"), "--info", "the copy under test (ck-test start): only ck-aggregate is kept"], 10)
+    code, out = sh(["gh", "release", "download", tag, "--repo", "markoboskoauroville/connection-keeper", "-p", "app.zip", "-D", dl], 300)
+    if code != 0:
+        sys.exit(f"ck-test: download of {tag} failed: {out[:200]}")
+    sh(["/usr/bin/ditto", "-x", "-k", os.path.join(dl, "app.zip"), dl], 60)
+    src = [os.path.join(r, f) for r, _, fs in os.walk(dl) for f in fs if f == "ck-aggregate" and "/MacOS/" in os.path.join(r, f)]
+    if not src:
+        sys.exit("ck-test: no ck-aggregate in the release")
+    shutil.copy2(src[0], b); os.chmod(b, 0o755)
+    shutil.rmtree(dl, ignore_errors=True)
+    if os.path.isfile(dm):
+        sh(["python3", dm, "done", f"ck-test-{tag}"], 10)
+    return b
+
+
+def env_for(st, port):
+    return dict(os.environ, CK_AGG_TEST="1", CK_AGG_PORT=str(port), CK_AGG_STATE=st,
+                CK_AGG_SELECTION=os.path.join(st, "aggregate-selection.json"), CK_AGG_LINES=os.path.join(st, "aggregate-lines.json"),
+                CK_AGG_MARKS=os.path.join(st, "aggregate-serving"), CK_AGG_FAULT=os.path.join(st, "faults.txt"),
+                CK_DL_FILE=os.path.join(st, "download-line.json"), CK_BOND_CONFIG=os.path.join(st, "bond.json"),
+                CK_BOND_DIRECT=os.path.join(st, "bond-direct.txt"))
+
+
+def port_free(port):
+    s = socket.socket()
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("127.0.0.1", port))
+        return True
+    except Exception:
+        return False
+    finally:
+        s.close()
+
+
+def cmd_start(args):
+    if current() and alive(current().get("pid", 0)):
+        sys.exit(f"ck-test: a test is running already (port {current()['port']}); ck-test stop first")
+    port = int(opt(args, "--port", DEFAULT_PORT))
+    if port == LIVE_PORT or port < 1024:
+        sys.exit(f"ck-test: port {port} is not for a copy under test")
+    if not port_free(port):
+        sys.exit(f"ck-test: port {port} is taken")
+    ok, rep = safe_check()
+    if not ok:
+        sys.exit("ck-test: REFUSED: no safe line, nothing started")
+    binary = find_binary(opt(args, "--bin", None))
+    st = state_dir(port)
+    shutil.rmtree(st, ignore_errors=True); os.makedirs(st)
+    e = env_for(st, port)
+    # the copy must know request 108 (its own folder, the refusals): asked of its own selftest, nothing is run
+    r = subprocess.run([binary, "fault-selftest"], env=e, capture_output=True, text=True, timeout=30)
+    if "FAULT SELFTEST PASS" not in r.stdout:
+        shutil.rmtree(st, ignore_errors=True)
+        sys.exit(f"ck-test: REFUSED: {binary} has no test mode (v97 or later needed):\n{r.stdout[-400:]}")
+    # read-only inputs copied in: what the live server knows about hotspots and speeds (the copy may change its copies)
+    for f in ["phone-hotspots.txt", "phone-hotspot-owners.json", "aggregate-speeds.json"]:
+        if os.path.isfile(os.path.join(LIVE, f)):
+            shutil.copy(os.path.join(LIVE, f), os.path.join(st, f))
+    lines = opt(args, "--lines", None)
+    if lines:
+        sel = [x.strip() for x in lines.split(",") if x.strip()]
+    else:
+        try:
+            sel = json.load(open(os.path.join(LIVE, "aggregate-selection.json")))
+        except Exception:
+            sel = []
+    json.dump(sel, open(os.path.join(st, "aggregate-selection.json"), "w"))
+    open(os.path.join(st, "faults.txt"), "w").close()
+    open(os.path.join(st, "mode"), "w").write("aggregate\n")
+    if "--bond" in args:
+        try:
+            cfg = json.load(open(os.path.join(LIVE, "bond.json")))
+            cfg["on"] = True; cfg["strict"] = False
+            fd = os.open(os.path.join(st, "bond.json"), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.write(fd, json.dumps(cfg).encode()); os.close(fd)       # the token stays in a 0600 file, never printed
+        except Exception as ex:
+            sys.exit(f"ck-test: --bond needs the live bond.json ({ex})")
+    before = snapshot()
+    json.dump(before, open(os.path.join(st, "live-before.json"), "w"), indent=1)
+    profile = os.path.join(st, "sandbox.sb")
+    open(profile, "w").write(SANDBOX.format(live=LIVE, home=HOME))
+    log = open(os.path.join(st, "aggregate.log"), "a")
+    p = subprocess.Popen(["/usr/bin/sandbox-exec", "-f", profile, binary, "serve"], env=e, stdout=log, stderr=log,
+                         stdin=subprocess.DEVNULL, start_new_session=True)
+    ttl = float(opt(args, "--ttl", 60))
+    rec = {"pid": p.pid, "port": port, "state": st, "binary": binary, "started": time.time(), "until": time.time() + ttl * 60,
+           "bond": "--bond" in args}
+    json.dump(rec, open(os.path.join(BASE, "current.json"), "w"))
+    g = subprocess.Popen([sys.executable, os.path.abspath(__file__), "_guard"], stdin=subprocess.DEVNULL,
+                         stdout=open(os.path.join(st, "guard.log"), "a"), stderr=subprocess.STDOUT, start_new_session=True)
+    rec["guard"] = g.pid
+    json.dump(rec, open(os.path.join(BASE, "current.json"), "w"))
+    for _ in range(60):
+        s = http_json(f"http://127.0.0.1:{port}/status")
+        if s and s.get("lines"):
+            break
+        if not alive(p.pid):
+            print(open(os.path.join(st, "aggregate.log")).read()[-1500:])
+            cmd_stop([])
+            sys.exit("ck-test: the copy did not start")
+        time.sleep(1)
+    s = http_json(f"http://127.0.0.1:{port}/status") or {}
+    print(f"ck-test: the copy under test v{s.get('version')} pid {p.pid} on 127.0.0.1:{port} (sandboxed, folder {st}),"
+          f" guard pid {g.pid}, ends by itself in {int(ttl)} min")
+    print("  lines: " + ", ".join(f"{l['name']} ({l['device']})" for l in s.get("lines", [])) + ("; bonds in its own group" if rec["bond"] else "; CROATIA (no relay)"))
+    print(f"  send traffic on purpose: curl -x socks5h://127.0.0.1:{port} URL; ck-test measure; ck-test stop")
+
+
+def teardown(rec, why):
+    for key in ["pid"]:
+        pid = rec.get(key)
+        if pid and alive(pid):
+            try:
+                os.killpg(int(pid), signal.SIGTERM)
+            except Exception:
+                try: os.kill(int(pid), signal.SIGTERM)
+                except Exception: pass
+            for _ in range(30):
+                if not alive(pid): break
+                time.sleep(0.1)
+            if alive(pid):
+                try: os.killpg(int(pid), signal.SIGKILL)
+                except Exception: pass
+    with open(os.path.join(rec["state"], "ENDED"), "w") as f:
+        f.write(f"{time.strftime('%H:%M:%S')} {why}\n")
+
+
+def cmd_guard(args):
+    """the guard (started by start): every 3 s the safe line, the live side, the TTL, the artificial failure"""
+    rec = current()
+    if not rec:
+        return
+    st = rec["state"]
+    before = json.load(open(os.path.join(st, "live-before.json")))
+    print(f"{time.strftime('%H:%M:%S')} guard on: copy pid {rec['pid']} port {rec['port']}", flush=True)
+    n = 0
+    while True:
+        time.sleep(3); n += 1
+        if not alive(rec["pid"]):
+            print(f"{time.strftime('%H:%M:%S')} the copy has ended: the guard ends", flush=True)
+            return
+        why = None
+        if os.path.exists(os.path.join(st, "guard-fail")):
+            why = "the check was made to fail on purpose (ck-test fail-guard)"
+        elif time.time() > rec["until"]:
+            why = "its time is up (--ttl)"
+        else:
+            ok, rep = safe_check(quiet=True)
+            if not ok:
+                why = "NO SAFE LINE: " + " | ".join(rep)
+            else:
+                d, h = default_lines()
+                live = live_status_steady()
+                if d != before["defaults"] or h != before["utun99"]:
+                    why = f"the Mac's routes changed under the test ({d} {h})"
+                elif (live or {}).get("pid") != (before.get("live") or {}).get("pid"):
+                    why = "the live server changed (pid) under the test"
+        if why:
+            print(f"{time.strftime('%H:%M:%S')} TEARDOWN: {why}", flush=True)
+            teardown(rec, "guard: " + why)
+            return
+        if n % 20 == 0:
+            print(f"{time.strftime('%H:%M:%S')} guard: safe ({n} checks)", flush=True)
+
+
+def cmd_stop(args):
+    rec = current()
+    if not rec:
+        print("ck-test: no test running"); return
+    st = rec["state"]
+    g = rec.get("guard")
+    if g and alive(g):
+        try: os.killpg(int(g), signal.SIGTERM)
+        except Exception:
+            try: os.kill(int(g), signal.SIGTERM)
+            except Exception: pass
+    teardown(rec, "ck-test stop")
+    left = [x for x in (rec.get("pid"), g) if x and alive(x)]
+    taken = not port_free(rec["port"])
+    after = snapshot()
+    print(f"ck-test: stopped (copy {'STILL RUNNING ' + str(left) if left else 'gone'}, port {rec['port']} {'STILL TAKEN' if taken else 'free'})")
+    try:
+        before = json.load(open(os.path.join(st, "live-before.json")))
+        print(f"the live side, {before['at']} -> {after['at']}:")
+        same = compare(before, after)
+        print("LIVE SIDE IDENTICAL" if same else "LIVE SIDE CHANGED (see above: the copy cannot write there; something else did)")
+        json.dump(after, open(os.path.join(st, "live-after.json"), "w"), indent=1)
+    except Exception as ex:
+        print(f"(no start snapshot: {ex})")
+    keep = os.path.join(BASE, "last-run")
+    shutil.rmtree(keep, ignore_errors=True)
+    os.makedirs(keep)
+    for f in ["aggregate.log", "guard.log", "ENDED", "live-before.json", "live-after.json", "faults.txt", "measure.log"]:
+        if os.path.isfile(os.path.join(st, f)):
+            shutil.copy(os.path.join(st, f), keep)
+    shutil.rmtree(st, ignore_errors=True)
+    try: os.remove(os.path.join(BASE, "current.json"))
+    except Exception: pass
+    _, refused = sh(["/usr/bin/grep", "-c", "TEST COPY REFUSED", os.path.join(keep, "aggregate.log")])
+    print(f"  the copy's refusals (programs it was not allowed to run): {refused.strip() or '0'}; log kept in {keep}")
+
+
+# MARK: faults and lines
+
+def need():
+    rec = current()
+    if not rec or not alive(rec.get("pid", 0)):
+        sys.exit("ck-test: no copy under test is running (ck-test start)")
+    return rec
+
+
+def copy_lines(rec):
+    s = http_json(f"http://127.0.0.1:{rec['port']}/status") or {}
+    return [l["name"] for l in s.get("lines", [])]
+
+
+def resolve(rec, name):
+    names = copy_lines(rec)
+    for n in names:
+        if n == name: return n
+    low = name.lower()
+    hits = [n for n in names if n.lower().startswith(low)] or [n for n in names if low in n.lower()]
+    if len(hits) == 1: return hits[0]
+    sys.exit(f"ck-test: which line is '{name}'? the copy has: {', '.join(names) or 'none'}")
+
+
+def faults(rec):
+    p = os.path.join(rec["state"], "faults.txt")
+    d = {}
+    for line in open(p).read().splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1); d[k] = v
+    return d
+
+
+def write_faults(rec, d):
+    p = os.path.join(rec["state"], "faults.txt")
+    tmp = p + ".tmp"
+    open(tmp, "w").write("".join(f"{k}={v}\n" for k, v in d.items()))
+    os.replace(tmp, p)
+
+
+def set_fault(rec, line, kind, spec):
+    d = faults(rec)
+    parts = [x for x in d.get(line, "").split(",") if x and x.split(":")[0].split("@")[0] != kind]
+    if kind in ("dead", "silent"):
+        parts = [x for x in parts if x not in ("dead", "silent")]
+    parts.append(spec)
+    d[line] = ",".join(parts)
+    write_faults(rec, d)
+    print(f"{line}: {d[line]}")
+
+
+def opt(args, k, default):
+    return args[args.index(k) + 1] if k in args and args.index(k) + 1 < len(args) else default
+
+
+# MARK: measure
+
+def measure(how, streams, secs, url_list):
+    procs = []
+    for i in range(streams):
+        procs.append(subprocess.Popen(["/usr/bin/curl", "-s", "-o", "/dev/null", "-m", str(secs), "-w", "%{size_download}"] + how
+                                      + [url_list[i % len(url_list)]], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True))
+    t0 = time.time()
+    total = 0
+    for p in procs:
+        out, _ = p.communicate()
+        try: total += float(out.strip() or 0)
+        except Exception: pass
+    return total, max(time.time() - t0, 0.1)
+
+
+def cmd_measure(args):
+    streams, secs, runs = int(opt(args, "--streams", 8)), int(opt(args, "--secs", 10)), int(opt(args, "--runs", 1))
+    urls = [opt(args, "--url", None)] if opt(args, "--url", None) else SPEED
+    direct = opt(args, "--direct", None)
+    rec = None if direct else need()
+    dm = os.path.join(HOME, "Developer/DOWNLOAD_MONITOR/dlmon.py")
+    for run in range(runs):
+        tag = f"ck-test-measure-{int(time.time())}"
+        if os.path.isfile(dm):
+            sh(["python3", dm, "report", tag, "0", str(int(streams * secs * 15)), "--name", f"ck-test measure {direct or 'through the copy'} (to /dev/null)"], 5)
+        if direct:
+            m = re.match(r"^(?:socks:)?(\d+)$", direct)
+            how = ["-x", f"socks5h://127.0.0.1:{m.group(1)}"] if m else ["--interface", direct]
+            total, dt = measure(how, streams, secs, urls)
+            line = f"{direct} alone: {total * 8 / dt / 1e6:.1f} Mbit/s ({streams} streams x {secs} s, {total / 1e6:.0f} MB)"
+        else:
+            before = {l["name"]: l["mbDown"] for l in (http_json(f"http://127.0.0.1:{rec['port']}/status") or {}).get("lines", [])}
+            total, dt = measure(["-x", f"socks5h://127.0.0.1:{rec['port']}"], streams, secs, urls)
+            s = http_json(f"http://127.0.0.1:{rec['port']}/status") or {}
+            split = []
+            for l in s.get("lines", []):
+                mb = l["mbDown"] - before.get(l["name"], 0)
+                room = l.get("room") or {}
+                split.append(f"{l['name']} {mb * 8 / dt:.1f} ({mb / max(total / 1e6, 0.001) * 100:.0f} %, room {room.get('capacity', '?')}{'m' if room.get('measured') else ''})")
+            line = f"through the copy: {total * 8 / dt / 1e6:.1f} Mbit/s ({streams} streams x {secs} s, {total / 1e6:.0f} MB): " + " + ".join(split)
+        print(f"{time.strftime('%H:%M:%S')} {line}", flush=True)
+        if rec:
+            open(os.path.join(rec["state"], "measure.log"), "a").write(f"{time.strftime('%H:%M:%S')} {line}\n")
+        if os.path.isfile(dm):
+            sh(["python3", dm, "report", tag, str(int(total / 1e6)), str(int(total / 1e6)), "--done"], 5)
+
+
+def cmd_status(args):
+    rec = current()
+    if not rec:
+        print("ck-test: no test running"); return
+    s = http_json(f"http://127.0.0.1:{rec['port']}/status") or {}
+    print(f"copy pid {rec['pid']} ({'running' if alive(rec['pid']) else 'GONE'}), port {rec['port']}, guard {rec.get('guard')} "
+          f"({'running' if alive(rec.get('guard', 0)) else 'GONE'}), {int((rec['until'] - time.time()) / 60)} min left")
+    for l in s.get("lines", []):
+        print(f"  {l['name']} ({l['device']}): {'alive' if l['alive'] else 'DEAD'}, rate {l['rate']:.1f}, capacity {l['capacity']:.0f}, room {json.dumps(l.get('room'))}, {l['active']} open")
+    print(f"  faults: {json.dumps(faults(rec))}")
+    e = os.path.join(rec["state"], "ENDED")
+    if os.path.exists(e):
+        print("  ENDED: " + open(e).read().strip())
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] in ("-h", "--help", "help"):
+        print(__doc__); return
+    c, rest = a[0], a[1:]
+    if c == "safe":
+        ok, _ = safe_check(require_all="--all" in rest)
+        sys.exit(0 if ok else 1)
+    if c == "start": return cmd_start(rest)
+    if c == "stop": return cmd_stop(rest)
+    if c == "_guard": return cmd_guard(rest)
+    if c == "status": return cmd_status(rest)
+    if c == "measure": return cmd_measure(rest)
+    if c == "snapshot":
+        snap = snapshot()
+        if rest:
+            json.dump(snap, open(rest[0], "w"), indent=1); print(f"written {rest[0]}")
+        else:
+            print(json.dumps(snap, indent=1))
+        return
+    if c == "compare" and len(rest) == 2:
+        same = compare(json.load(open(rest[0])), json.load(open(rest[1])))
+        print("IDENTICAL" if same else "CHANGED"); sys.exit(0 if same else 1)
+    if c == "fail-guard":
+        rec = need(); open(os.path.join(rec["state"], "guard-fail"), "w").write("on purpose\n")
+        print("the guard's next check fails (within 3 s)"); return
+    rec = need()
+    if c == "lines" and rest:
+        names = [x.strip() for x in rest[0].split(",") if x.strip()]
+        json.dump(names, open(os.path.join(rec["state"], "aggregate-selection.json"), "w"))
+        print(f"the copy's ticks: {names} (it finds its lines again within a few seconds)"); return
+    if c == "faults":
+        print(json.dumps(faults(rec), indent=1)); return
+    if c == "restore" and rest:
+        d = faults(rec)
+        if rest[0] == "all": d = {}
+        else: d.pop(resolve(rec, rest[0]), None)
+        write_faults(rec, d); print(f"faults now: {json.dumps(d)}"); return
+    if not rest:
+        sys.exit(__doc__)
+    line = resolve(rec, rest[0])
+    v = rest[1] if len(rest) > 1 else None
+    now = round(time.time(), 2)
+    if c == "drop": set_fault(rec, line, v or "dead", v or "dead")
+    elif c == "delay" and v: set_fault(rec, line, "delay", f"delay:{float(v)}")
+    elif c == "loss" and v: set_fault(rec, line, "loss", f"loss:{float(v)}")
+    elif c == "cap" and v: set_fault(rec, line, "rate", f"rate:{float(v)}")
+    elif c == "flow" and v: set_fault(rec, line, "flow", f"flow:{float(v)}")
+    elif c == "stall" and v: set_fault(rec, line, "stall", f"stall:{float(v)}@{now}")
+    elif c == "kill": set_fault(rec, line, "kill", f"kill@{now}")
+    else: sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    main()

@@ -2,7 +2,7 @@
 import Foundation
 
 // v38 (30.10.2026, Marko: "If permissions are not set, it needs to have text in the top right"): PERMISSIONS
-let CKVersion = 96
+let CKVersion = 97
 
 // The phase the keeper writes when the current connection is dead and no other one works (v5).
 let noOtherPrefix = "NO OTHER CONNECTION"
@@ -12,7 +12,15 @@ let CKAgentLabel = "com.mantra.connectionkeeper"
 enum Paths {
     static let home = FileManager.default.homeDirectoryForCurrentUser
     static let config = home.appendingPathComponent(".config/connection-keeper.json")
-    static let support = home.appendingPathComponent("Library/Application Support/connection-keeper")
+    // request 108: a copy under test (CK_AGG_TEST) has its own folder (CK_AGG_STATE, else a fresh temporary one), never this
+    static let support: URL = {
+        let env = ProcessInfo.processInfo.environment
+        guard env["CK_AGG_TEST"] != nil else { return home.appendingPathComponent("Library/Application Support/connection-keeper") }
+        let dir = env["CK_AGG_STATE"].map { URL(fileURLWithPath: $0) }
+            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("ck-agg-test-\(getpid())")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
     static let state = support.appendingPathComponent("state.json")
     static let command = support.appendingPathComponent("command.json")
     static let lock = support.appendingPathComponent("keeper.lock")

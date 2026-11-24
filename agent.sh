@@ -13,6 +13,8 @@ AGG=com.mantra.connectionkeeper.aggregate
 AGGPLIST="$HOME/Library/LaunchAgents/$AGG.plist"
 AGGBIN="/Applications/Network Aggregate Connection Keeper (Mantra).app/Contents/MacOS/ck-aggregate"
 
+# request 108: DO NOT DISTURB (Tools/ck-dnd) holds every load and unload; a load ends with every line checked by itself
+case "${1:-status}" in load|unload) ./Tools/ck-dnd check || exit 3 ;; esac
 case "${1:-status}" in
   load)
     [ -x "$KEEPER" ] || { echo "not installed: run ./build.sh first"; exit 1; }
@@ -28,7 +30,8 @@ case "${1:-status}" in
     launchctl bootstrap "gui/$(id -u)" "$AGGPLIST"
     sleep 2
     launchctl print "gui/$(id -u)/$AGG" | grep -E '^\s*(state|pid) =' || true
-    tail -2 "$HOME/Library/Logs/connection-keeper-aggregate.log" 2>/dev/null || true ;;
+    tail -2 "$HOME/Library/Logs/connection-keeper-aggregate.log" 2>/dev/null || true
+    ./Tools/ck-test safe --all || echo "WARNING: a line does not answer by itself after the load (see above)" ;;
   unload)
     launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null && echo "stopped" || echo "was not running"
     rm -f "$PLIST"

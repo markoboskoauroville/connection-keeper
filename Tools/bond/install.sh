@@ -14,6 +14,11 @@ cd "$(dirname "$0")"
 KEEP=no; if [ "${1:-}" = --keep-token ]; then KEEP=yes; shift; fi
 BIN=${1:-./ck-bond-server-linux-arm64}
 [ "$(id -u)" = 0 ] || { echo "run it as root (sudo)"; exit 1; }
+# request 108: DO NOT DISTURB (ck-dnd on, from the Mac) holds every deploy of the production relay
+DND="$(getent passwd "${SUDO_USER:-ubuntu}" | cut -d: -f6)/ckbond/do-not-disturb"
+if [ -f "$DND" ] && [ "$(sed -n 's/^until=//p' "$DND")" -gt "$(date +%s)" ] 2>/dev/null; then
+  echo "REFUSED: DO NOT DISTURB is set ($(sed -n 's/^why=//p' "$DND")); ck-dnd off on the Mac first"; exit 3
+fi
 [ -f "$BIN" ] || { echo "no binary at $BIN"; exit 1; }
 [ -f ckbond.service ] || { echo "ckbond.service must be next to install.sh"; exit 1; }
 if [ "$KEEP" = yes ]; then

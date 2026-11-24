@@ -57,9 +57,11 @@ codesign --verify --deep "$APP"
 
 ditto -c -k --keepParent "$APP" "build/$V-connection-keeper-v$V.zip"
 if [ -n "${NO_INSTALL:-}" ]; then echo "built v$V (not installed)"; exit 0; fi
+./Tools/ck-dnd check || exit 3                              # request 108: DO NOT DISTURB holds the install
 if pgrep -xq "Connection Keeper"; then echo "the stripe is running: quit it first, then build again"; exit 1; fi
 rm -rf "/Applications/$NAME.app"
 cp -R "$APP" /Applications/
 ditto -c -k --keepParent "$APP" "build/$V-connection-keeper-v$V.zip"
 mkdir -p ~/.local/bin && ln -sf "/Applications/$NAME.app/Contents/MacOS/ck-net" ~/.local/bin/ck-net
 echo "built v$V: /Applications/$NAME.app and build/$V-connection-keeper-v$V.zip"
+./Tools/ck-test safe --all || echo "WARNING: a line does not answer by itself after the install (see above)"

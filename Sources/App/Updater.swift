@@ -83,6 +83,16 @@ enum Updater {
 
     /// The swap runs in a detached shell after this app quits; the old copy comes back if anything fails.
     static func install(_ newApp: URL) {
+        // Connection Keeper, request 108: DO NOT DISTURB (Tools/ck-dnd) holds every install while a session tests
+        let dnd = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/connection-keeper.do-not-disturb")
+        if let t = try? String(contentsOf: dnd, encoding: .utf8),
+           let until = t.components(separatedBy: "\n").first(where: { $0.hasPrefix("until=") }).flatMap({ Double($0.dropFirst(6)) }),
+           until > Date().timeIntervalSince1970 {
+            let why = t.components(separatedBy: "\n").first(where: { $0.hasPrefix("why=") }).map { String($0.dropFirst(4)) } ?? ""
+            log("update held: DO NOT DISTURB (\(why))")
+            tell("The update waits: DO NOT DISTURB is set (\(why)). It ends by itself, or: ck-dnd off.")
+            return
+        }
         let target = Bundle.main.bundlePath
         let script = cache.appendingPathComponent("install.sh")
         let sh = """

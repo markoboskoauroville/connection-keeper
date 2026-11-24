@@ -26,6 +26,7 @@ final class LineMeter {
     var rate = 0.0, peak = 0.0, probed: Double?, probedAt = Date.distantPast
     var lastBytes = 0, radio: String?, probeIP: String?, probing = false
     var settleAt: Date?                                  // a second look ~30 s after a radio change
+    let room = LineRoom()                                // request 112: the room a new connection can expect (Capacity.swift)
 }
 
 extension Uplink {
@@ -39,8 +40,10 @@ extension Server {
     // v62 (request 83, QC fix 3): + the line's connect time (60 ms → 0.06, 5 ms → 0.005): with the lines idle a new
     // connection (a page, an API call) takes the quick line; under load the throughput term (≥ 0.05 per busy
     // connection on a 40 Mbit/s line) still spreads the work over every line.
+    // request 112: by the room a new connection can expect (Capacity.swift); CK_AGG_LEGACY_LOAD=1 = the v62 formula
     func load(_ u: Uplink, _ now: Date) -> Double {
-        (u.alive ? 0 : 1e9) + (u.meter.rate + 2 * Double(u.busy(now) + 1)) / u.capacity + (u.rttMs ?? 50) / 1000
+        if legacyLoad { return (u.alive ? 0 : 1e9) + (u.meter.rate + 2 * Double(u.busy(now) + 1)) / u.capacity + (u.rttMs ?? 50) / 1000 }
+        return roomScore(u, among: lines, now)
     }
 
     func startBalance() {
@@ -57,6 +60,7 @@ extension Server {
                     m.rate = m.rate * 0.67 + now * 0.33
                     m.peak = max(m.peak * 0.99885, m.rate)          // half-life ~10 min
                 }
+                roomTick(lines, Date())                          // request 112: young, bulk, the full verdict
                 let ls = lines
                 let total = ls.reduce(0) { $0 + $1.meter.rate }
                 lock.unlock()
@@ -72,7 +76,8 @@ extension Server {
                     }
                 } else { nothingOnlyState = "" }
                 if !aggQuiet {                                   // v71: a draining or interim server changes nothing
-                    boostTick(boost, total: total, phones: ls.compactMap { $0.cellular ? $0.phone : nil })
+                    // request 108: a test copy never switches a phone's radio
+                    if !aggTestCopy { boostTick(boost, total: total, phones: ls.compactMap { $0.cellular ? $0.phone : nil }) }
                     if tick % 10 == 0 { for u in ls { checkRadio(u) } }
                 }
                 if tick % 30 == 0 { logBalance(ls) }

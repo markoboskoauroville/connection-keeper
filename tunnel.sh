@@ -13,6 +13,13 @@ PLIST=/Library/LaunchDaemons/$LABEL.plist
 APP="/Applications/Network Aggregate Connection Keeper (Mantra).app"
 LOG=/Library/Logs/connection-keeper-tunnel.log
 
+# request 108: DO NOT DISTURB (Tools/ck-dnd, Marko's flag) holds install and uninstall; both end with every line checked
+TOOLS="$(cd "$(dirname "$0")" && pwd)/Tools"
+case "${1:-status}" in install|uninstall)
+  DNDHOME=$(dscl . -read "/Users/${SUDO_USER:-$USER}" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+  HOME="${DNDHOME:-$HOME}" "$TOOLS/ck-dnd" check || exit 3 ;;
+esac
+linecheck() { sudo -u "${SUDO_USER:-$USER}" "$TOOLS/ck-test" safe --all || echo "WARNING: a line does not answer by itself (see above)"; }
 case "${1:-status}" in
   install)
     [ "$(id -u)" = 0 ] || { echo "run it with sudo: sudo ./tunnel.sh install"; exit 1; }
@@ -29,13 +36,15 @@ case "${1:-status}" in
     for i in 1 2 3 4 5; do launchctl bootstrap system "$PLIST" 2>/dev/null && break; echo "bootstrap: not yet, again in 1 s"; sleep 1; done
     sleep 2
     launchctl print "system/$LABEL" | grep -E '^\s*(state|pid) =' || true
-    tail -3 "$LOG" 2>/dev/null || true ;;
+    tail -3 "$LOG" 2>/dev/null || true
+    sleep 3; linecheck ;;
   uninstall)
     [ "$(id -u)" = 0 ] || { echo "run it with sudo: sudo ./tunnel.sh uninstall"; exit 1; }
     launchctl bootout "system/$LABEL" 2>/dev/null && echo "stopped" || echo "was not running"
     route -q -n delete -net 0.0.0.0/1 -interface utun99 2>/dev/null || true
     route -q -n delete -net 128.0.0.0/1 -interface utun99 2>/dev/null || true
-    rm -rf "$DIR" "$PLIST"; echo "removed" ;;
+    rm -rf "$DIR" "$PLIST"; echo "removed"
+    linecheck ;;
   status)
     launchctl print "system/$LABEL" 2>/dev/null | grep -E '^\s*(state|pid) =' || echo "not installed"
     echo "device: $(cat "$DIR/state" 2>/dev/null || echo "?")"

@@ -12,7 +12,12 @@ final class ShellOut { var data = Data() }
 
 @discardableResult
 func shell(_ path: String, _ args: [String], timeout: TimeInterval = 20) -> (status: Int32, out: String) {
-    autoreleasepool {
+    // request 108: a copy under test (CK_AGG_TEST) runs only reading commands (TestCopy.swift)
+    if let why = TestCopy.refusal(path, args) {
+        FileHandle.standardError.write("TEST COPY REFUSED \(why): \(([path] + args).joined(separator: " ").prefix(120))\n".data(using: .utf8)!)
+        return (126, "refused in a test copy")
+    }
+    return autoreleasepool {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args

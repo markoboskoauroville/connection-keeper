@@ -1,0 +1,36 @@
+#!/bin/bash
+# ck-dnd: DO NOT DISTURB for Connection Keeper (request 108, 24.11.2026). While it is set, the install, restart and deploy
+# procedures (build.sh's install, agent.sh load|unload, tunnel.sh install|uninstall, Tools/bond/install.sh on the VM,
+# the app's own updater) refuse to replace or restart the live app, keeper, ck-aggregate, tunnel or production relay.
+#   ck-dnd on "why" [--hours N]   set it (default 8 h, then it lapses by itself); also on chromium-vm (~/ckbond/do-not-disturb)
+#   ck-dnd off                    clear it (here and on the VM)
+#   ck-dnd status                 say it; exit 0 clear, 3 set
+#   ck-dnd check                  for scripts: silent and exit 0 when clear; the reason and exit 3 when set
+# The flag: ~/.config/connection-keeper.do-not-disturb, two lines: until=<epoch> and why=<text>.
+F="$HOME/.config/connection-keeper.do-not-disturb"
+VM=ubuntu@chromium-vm
+active() {
+  [ -f "$F" ] || return 1
+  local until; until=$(sed -n 's/^until=//p' "$F")
+  [ -n "$until" ] && [ "$until" -gt "$(date +%s)" ]
+}
+case "${1:-status}" in
+  on)
+    WHY="${2:-a session is testing}"; H=8
+    [ "${3:-}" = "--hours" ] && H="${4:-8}"
+    mkdir -p "$(dirname "$F")"
+    printf 'until=%s\nwhy=%s\nby=%s\nsince=%s\n' "$(( $(date +%s) + H * 3600 ))" "$WHY" "${USER}" "$(date '+%d.%m.%Y %H:%M')" > "$F"
+    ssh -o BatchMode=yes -o ConnectTimeout=6 "$VM" "printf 'until=%s\nwhy=%s\n' $(( $(date +%s) + H * 3600 )) '$(echo "$WHY" | tr -d "'")' > ~/ckbond/do-not-disturb" 2>/dev/null \
+      && echo "DO NOT DISTURB on for $H h: $WHY (here and on chromium-vm)" || echo "DO NOT DISTURB on for $H h: $WHY (here; the VM did not answer)" ;;
+  off)
+    rm -f "$F"
+    ssh -o BatchMode=yes -o ConnectTimeout=6 "$VM" 'rm -f ~/ckbond/do-not-disturb' 2>/dev/null
+    echo "DO NOT DISTURB off" ;;
+  status)
+    if active; then echo "DO NOT DISTURB: $(sed -n 's/^why=//p' "$F") (since $(sed -n 's/^since=//p' "$F"), until $(date -r "$(sed -n 's/^until=//p' "$F")" '+%d.%m.%Y %H:%M'))"; exit 3; fi
+    echo "clear"; exit 0 ;;
+  check)
+    if active; then echo "REFUSED: DO NOT DISTURB is set ($(sed -n 's/^why=//p' "$F")); ck-dnd off when the live app may be touched" >&2; exit 3; fi
+    exit 0 ;;
+  *) sed -n '2,10p' "$0"; exit 2 ;;
+esac

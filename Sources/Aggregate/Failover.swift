@@ -99,21 +99,7 @@ enum Resolver {
 
 // MARK: the race and the checks
 
-// The test copy's fault switch (request 55): the names in the file CK_AGG_FAULT are lines that have "died": "dead" fails at
-// once (a cable pulled), "silent" waits out the timeout first (4G gone quiet, the usual death). Never set for the real server.
-func fault(_ u: Uplink) -> String? {
-    guard let f = aggEnv["CK_AGG_FAULT"], let t = try? String(contentsOfFile: f, encoding: .utf8) else { return nil }
-    for line in t.components(separatedBy: "\n") {
-        let p = line.split(separator: "=", maxSplits: 1).map(String.init)
-        if p.count == 2, p[0] == u.name { return p[1].trimmingCharacters(in: .whitespaces) }
-    }
-    return nil
-}
-func faulted(_ u: Uplink, timeout: Int) -> Bool {
-    guard let f = fault(u) else { return false }
-    if f == "silent" { sleep(UInt32(timeout)) }
-    return true
-}
+// The test copy's fault switch (request 55, request 108): fault() and faulted() are in Faults.swift.
 
 final class Race {
     let lock = NSLock(), done = DispatchSemaphore(value: 0)
@@ -127,7 +113,9 @@ extension Server {
         for _ in 0..<100 { lock.lock(); let none = lines.isEmpty; lock.unlock(); if !none { break }; usleep(200_000) }
         lock.lock()
         let now = Date()
-        let order = DownloadRule.reorder(usable(lines).sorted { load($0, now) < load($1, now) }, host: host)   // v47 balance; v81 standby last; request 105: a big host's download line first
+        // v47 balance, request 112 by room (Capacity.swift); v81 standby last; request 105: a big host's download line first
+        let order = legacyLoad ? DownloadRule.reorder(usable(lines).sorted { load($0, now) < load($1, now) }, host: host)
+                               : placementOrder(usable(lines), host: host, now)
         lock.unlock()
         let r = Race()
         var started = 0
@@ -199,8 +187,10 @@ extension Server {
         if fresh || !due { return }
         Thread.detachNewThread { [self] in
             let gone = u.phone == nil && ipv4(of: u.iface) == nil
-            var ok = aggEnv["CK_AGG_FAKE_LINE"] != nil            // CI's fake line (lo0) has no internet to probe: alive
-            if !ok && !gone && !faulted(u, timeout: 1) {
+            var ok = false
+            if aggEnv["CK_AGG_FAKE_LINE"] != nil || aggEnv["CK_AGG_FAKE_LINES"] != nil {
+                ok = !faulted(u, timeout: 1)                   // CI's fake lines (lo0) have no internet to probe: alive unless faulted
+            } else if !gone && !faulted(u, timeout: 1) {
                 // v62: both answer points at once, the first answer counts (one after the other a quiet line took 3 s)
                 let t0 = Date(), g = DispatchGroup(), l = NSLock()
                 var first: Double?

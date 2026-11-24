@@ -139,6 +139,17 @@ enum Lines {
     static func discover(known: [String: String] = [:], anyLine: Bool = false) -> (lines: [Uplink], ignored: [(Uplink, Uplink)]) {
         // v71: CI's hand-over test: one fake line (lo0), so connections to a local test server go through the server
         if let fake = aggEnv["CK_AGG_FAKE_LINE"] { return ([Uplink(iface: fake, name: "test line \(fake)", gateway: nil, gatewayMAC: nil, publicIP: nil)], []) }
+        // request 108 (CI): several fake lines "name:device[:mbps],..." (the ticks choose among them), shaped by CK_AGG_FAULT
+        if let fakes = aggEnv["CK_AGG_FAKE_LINES"] {
+            let ticked = Set(Aggregation.selected)
+            return (fakes.split(separator: ",").enumerated().compactMap { i, e in
+                let p = e.split(separator: ":").map(String.init)
+                guard p.count >= 2, ticked.isEmpty || ticked.contains(p[0]) else { return nil }
+                let u = Uplink(iface: p[1], name: p[0], gateway: nil, gatewayMAC: nil, publicIP: "192.0.2.\(i + 1)")
+                if p.count > 2, let m = Double(p[2]) { u.mbps = m }
+                return u
+            }, [])
+        }
         if !anyLine && NothingOnly.on { return discoverNothingOnly(known: known) }
         let wifi = Net.wifiInterface()
         let ticked = anyLine ? [] : Set(Aggregation.joinable)
@@ -165,7 +176,7 @@ enum Lines {
             // (the cut test at 04:08) Android joined the house Wi-Fi and stayed on it after the data came back; its
             // traffic then left through the TP-Link and the line was dropped as "the same line as AX88179B". Its Wi-Fi
             // goes off here, as WIRES means (the radios are off in WIRES), and it is looked at again.
-            if !Phones.onMobileData(p), let adb = Phones.adb,
+            if !aggTestCopy, !Phones.onMobileData(p), let adb = Phones.adb,
                ((try? String(contentsOf: Paths.support.appendingPathComponent("wires"), encoding: .utf8)) ?? "").hasPrefix("wires") {
                 shell(adb, ["-s", p.serial, "shell", "svc", "wifi", "disable"], timeout: 6)
                 log("\(p.name) was on a Wi-Fi in WIRES: its Wi-Fi switched off, so it goes out on its mobile data")
@@ -215,7 +226,7 @@ enum Lines {
         for p in Phones.list() where NothingOnly.isNothing(p.name) {          // USB transport only (Phones.list)
             if let note = Phones.ensure(p) { log("NOTHING ONLY \(p.name): \(note)") }
             guard Phones.answers(p) else { log("NOTHING ONLY \(p.name): ck-phone does not answer"); continue }
-            if let adb = Phones.adb, !shell(adb, ["-s", p.serial, "shell", "cmd", "wifi", "status"], timeout: 6).out.contains("Wifi is disabled") {
+            if !aggTestCopy, let adb = Phones.adb, !shell(adb, ["-s", p.serial, "shell", "cmd", "wifi", "status"], timeout: 6).out.contains("Wifi is disabled") {
                 shell(adb, ["-s", p.serial, "shell", "cmd", "wifi", "set-wifi-enabled", "disabled"], timeout: 8)
                 log("NOTHING ONLY \(p.name): its Wi-Fi switched off over USB (\(p.serial)), so it goes out on its cell modem")
                 for _ in 0..<12 where !Phones.onMobileData(p) { usleep(500_000) }
@@ -931,15 +942,19 @@ extension Server {
         deadline(c, 0)
         let group = DispatchGroup()
         var up = 0, down = 0, done = false
-        func pump(_ from: Int32, _ to: Int32, _ count: @escaping (Int) -> Void) {
+        let opened = Date().timeIntervalSince1970
+        Faults.register(u.name, c, out, since: opened)              // request 108: a test copy's drops (Faults.swift)
+        func pump(_ from: Int32, _ to: Int32, down isDown: Bool, _ count: @escaping (Int) -> Void) {
             var buf = [UInt8](repeating: 0, count: 65536), total = 0, touched = Date()
+            let fx = Faults.enabled ? FaultShaper(line: u.name, down: isDown, since: opened) : nil
             while true {
                 let n = buf.withUnsafeMutableBytes { recv(from, $0.baseAddress, 65536, 0) }
                 if n <= 0 { break }
-                if !sendAll(to, Array(buf[0..<n])) { break }
+                if let fx { if !fx.forward(to, Array(buf[0..<n])) { break } } else if !sendAll(to, Array(buf[0..<n])) { break }
                 total += n
                 if total >= 1_048_576 || Date().timeIntervalSince(touched) > 1 { count(total); total = 0; touched = Date() }
             }
+            fx?.drain()
             count(total)
             shutdown(to, SHUT_WR)
             // One side has finished; the other gets 30 s to finish too, then the connection is ended (a peer that never
@@ -951,18 +966,19 @@ extension Server {
             }
         }
         group.enter()
-        Thread.detachNewThread { [self] in pump(c, out) { n in self.lock.lock(); up += n; u.bytesUp += n; u.seen[c] = Date(); self.lock.unlock() }; group.leave() }
-        pump(out, c) { n in
-            self.lock.lock(); let before = down; down += n; let after = down; u.bytesDown += n; u.seen[c] = Date(); self.lock.unlock()
+        Thread.detachNewThread { [self] in pump(c, out, down: false) { n in self.lock.lock(); up += n; u.bytesUp += n; u.seen[c] = Date(); self.lock.unlock() }; group.leave() }
+        pump(out, c, down: true) { n in
+            self.lock.lock(); let before = down; down += n; let after = down; u.bytesDown += n; u.seen[c] = Date(); self.roomBytes(u, c, n, Date()); self.lock.unlock()
             DownloadRule.counted(host, before: before, after: after, line: u.name)      // request 105: a big download remembers its host
         }
         group.wait()
         lock.lock(); done = true; lock.unlock()
+        Faults.unregister(c)
         finish(c, out, u, up, down)
     }
 
     func finish(_ c: Int32, _ out: Int32, _ u: Uplink, _ up: Int, _ down: Int) {
-        lock.lock(); u.active -= 1; u.seen[c] = nil; lock.unlock()
+        lock.lock(); u.active -= 1; u.seen[c] = nil; roomEnd(u, c); lock.unlock()
         close(c); close(out)
     }
 
@@ -989,7 +1005,8 @@ extension Server {
         let inUse = Set(usable(lines).map { $0.iface })           // v82 (request 91): who carries, who waits
         let ls: [[String: Any]] = lines.map { u in
             ["role": !u.standby ? "active" : inUse.contains(u.iface) ? "fallback" : "standby", "name": u.name, "device": u.iface, "publicIP": u.publicIP ?? "", "gateway": u.gateway ?? "", "mbps": u.mbps, "rate": u.meter.rate, "capacity": u.capacity, "probed": u.meter.probed ?? 0, "radio": u.meter.radio ?? "",
-             "alive": u.alive, "rttMs": rttValue(u), "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6]
+             "alive": u.alive, "rttMs": rttValue(u), "active": u.active, "connections": u.connections, "mbDown": Double(u.bytesDown) / 1e6, "mbUp": Double(u.bytesUp) / 1e6,
+             "room": roomStatus(u, Date())]                                                 // request 112
         }
         let ig: [[String: String]] = ignored.map { ["name": $0.0.name, "device": $0.0.iface, "sameLineAs": $0.1.name] }
         let d: [String: Any] = ["version": CKVersion, "port": Int(aggPort), "since": ISO8601DateFormatter().string(from: started), "lines": ls, "ignored": ig, "bond": bond, "watchdog": watchdog,
@@ -1120,5 +1137,7 @@ case "bond-init": print(BondConfigFile.initFile())
 case "bond-selftest": bondSelftest(Array(argv.dropFirst()))
 case "sameline-selftest": sameLineSelftest()
 case "download-selftest": downloadSelftest()                // request 105
+case "room-selftest": roomSelftest(Array(argv.dropFirst()))  // request 112
+case "fault-selftest": faultSelftest(Array(argv.dropFirst())) // request 108
 default: print("usage: ck-aggregate serve | uplinks | test [seconds] | test-line <name> [seconds] | on | off | bond-init | bond-selftest"); exit(2)
 }

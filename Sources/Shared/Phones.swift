@@ -62,6 +62,7 @@ enum Phones {
     @discardableResult
     static func ensure(_ p: Phone) -> String? {
         if answers(p) { return nil }
+        if ckTestCopy { return "not started: a test copy never commands a phone (request 108)" }
         guard let adb, let bin = binary else { return "no adb or no ck-phone in the app" }
         func sh(_ cmd: String) -> String { shell(adb, ["-s", p.serial, "shell", cmd], timeout: 15).out.trimmingCharacters(in: .whitespacesAndNewlines) }
         var did: [String] = []
