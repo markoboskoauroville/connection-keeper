@@ -5,7 +5,7 @@
 // click keeps the short FRANKFURT / CROATIA menu). It closes on a click outside, on Escape, or on a second click on the item.
 // Top first: "Open Connection Keeper". Then the quick options, acting at once: FRANKFURT / CROATIA; the lines that are here
 // (or ticked), grouped by family, each with its tick, its ↓ download mark, its live speed and its state word; ALL TICKED with
-// the joined speed and its TEST; aggregation ON / OFF; at the bottom Check now, Open the log, Quit.
+// the joined speed and its TEST; BYPASS (the stripe's own switch); at the bottom Check now, Open the log, Quit.
 // One module: every control calls the stripe's own action (tickPressed, dlPressed, pickFrankfurt, rowTestPressed ...), every
 // word and number is read from the stripe's model (tickEntries, tickState, families, the rows' live speed), so the drop-down
 // is a second view of the same thing, never a copy of the rules. Left out (in the main window only): Wi-Fi networks in range
@@ -35,7 +35,7 @@ final class MenuDrop: NSObject {
     let allSpeed = label(textWidth(speedSample(), monoFont), font: monoFont)
     let allTest = NSButton(title: "TEST", target: nil, action: nil)
     let allResult = label(textWidth("↓888.8 ↑888.8 88:88", monoFont), font: monoFont)
-    let aggOn = NSButton(title: "ON", target: nil, action: nil), aggOff = NSButton(title: "OFF", target: nil, action: nil)
+    let bypass = NSButton(title: "BYPASS", target: nil, action: nil)     // request 109: the stripe's own BYPASS
     let linesBox = NSStackView()
     static let nameW: CGFloat = 150, stateW = textWidth("DL: CROATIA ONLY", monoFont)
 
@@ -136,10 +136,9 @@ final class MenuDrop: NSObject {
         for (b, sel, id) in [(frankfurt, #selector(Stripe.pickFrankfurt), "drop-frankfurt"), (croatia, #selector(Stripe.pickCroatia), "drop-croatia")] {
             word(b); b.target = s; b.action = sel; b.setAccessibilityIdentifier(id)
         }
-        for (b, on) in [(aggOn, true), (aggOff, false)] {
-            word(b); b.target = self; b.action = on ? #selector(aggOnPressed) : #selector(aggOffPressed)
-            b.setAccessibilityIdentifier(on ? "drop-agg-on" : "drop-agg-off")
-        }
+        word(bypass); bypass.target = s; bypass.action = #selector(Stripe.bypassPressed); bypass.setAccessibilityIdentifier("drop-bypass")
+        // request 110: the first entry in a slot for its longer words, so the panel never changes width with it
+        _ = fixWidth(openButton, textWidth("Connection Keeper is open: bring it forward", .monospacedSystemFont(ofSize: 13, weight: .bold)))
         word(allTest, 11)
         allTest.target = s; allTest.action = #selector(Stripe.rowTestPressed(_:))
         allTest.identifier = NSUserInterfaceItemIdentifier(Stripe.allTickedName)
@@ -149,7 +148,7 @@ final class MenuDrop: NSObject {
         allName.stringValue = "ALL TICKED"; allName.textColor = Ink.green
         let allRow = NSStackView(views: [allName, allSpeed, allTest, allResult]); allRow.spacing = 6
         let way = NSStackView(views: [frankfurt, croatia]); way.spacing = 14
-        let agg = NSStackView(views: [section("AGGREGATION"), aggOn, aggOff]); agg.spacing = 10
+        let agg = NSStackView(views: [section("AGGREGATION"), bypass]); agg.spacing = 10
         var bottom: [NSView] = []
         for (t, sel, target) in [("Check now", #selector(Stripe.checkNow), s as AnyObject), ("Open the log", #selector(Stripe.openLog), s as AnyObject),
                                  ("Quit (back to the normal connection)", #selector(NSApplication.terminate(_:)), NSApp as AnyObject)] {
@@ -234,25 +233,12 @@ final class MenuDrop: NSObject {
         allResult.stringValue = tw.0; allResult.textColor = tw.1; allResult.toolTip = tw.2
         allTest.isEnabled = LineSpeedTest.running == nil
         allTest.contentTintColor = allTest.isEnabled ? Ink.text : Ink.grey
-        let aggregating = !s.tickedNames.isEmpty
-        aggOn.contentTintColor = aggregating ? Ink.green : Ink.grey
-        aggOff.contentTintColor = aggregating ? Ink.grey : Ink.green
-        aggOn.toolTip = "ON: the ticked lines joined" + (Aggregation.selected.isEmpty ? "" : " (" + Aggregation.selected.joined(separator: " + ") + ")")
-        aggOff.toolTip = "OFF: no tick, the Mac straight on its own connection"
+        bypass.contentTintColor = s.bypassed ? Ink.amber : Ink.grey
+        bypass.toolTip = s.bypassWord.toolTip
     }
 
     @objc func openPressed() {
         close()
         stripe?.bringStripe()
-    }
-    @objc func aggOnPressed() {
-        guard let s = stripe, s.tickedNames.isEmpty else { return }
-        let last = Aggregation.selected
-        if last.isEmpty { s.show("no line ticked before: tick the lines in the list", Ink.amber, for: 8); return }
-        s.setTicks(last)
-    }
-    @objc func aggOffPressed() {
-        guard let s = stripe, !s.tickedNames.isEmpty else { return }
-        s.setTicks([])
     }
 }

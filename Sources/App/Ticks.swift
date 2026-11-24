@@ -386,7 +386,8 @@ extension Stripe {
     // a download line that is no longer ticked loses its mark (said once)
     func keepDownloadLineTicked() {
         TickQueue.lock.lock(); let busy = TickQueue.running || TickQueue.pending != nil; TickQueue.lock.unlock()
-        guard let d = DownloadLine.line, !tickedNames.contains(d), !busy, outsideTicksWanted == nil else { return }
+        // in BYPASS (no tick, the ticks kept) the mark stays for the way back (request 109)
+        guard Aggregation.aggregateMode, let d = DownloadLine.line, !tickedNames.contains(d), !busy, outsideTicksWanted == nil else { return }
         DownloadLine.set(line: nil)
         appendLog("\(logStamp()) DOWNLOAD LINE \(d) cleared: it is not ticked any more")
         show("\(d) is not ticked any more: no download line", Ink.amber, for: 10)
@@ -404,5 +405,36 @@ extension Stripe {
             let w = (n.object as? String) ?? "toggle"
             if w == "close" { MenuDrop.shared?.close() } else if w == "open" { if MenuDrop.shared == nil { MenuDrop.toggle(self) } } else { MenuDrop.toggle(self) }
         }
+    }
+}
+
+// BYPASS (request 109, Marko 24.11.2026: "Please to aggregate give the bypass button next to this grip for resizing"): one
+// press takes the aggregation out of the path: no tick, so the mode is "one connection": no tunnel, no relay, the Mac
+// straight on its own connection, the app open and the ticks, the ↓ line and the way (FRANKFURT / CROATIA) remembered.
+// It stays lit (amber) while bypassed; a second press brings back the same ticks. ON / OFF stays what it was (OFF stops
+// everything and quits the app); BYPASS is the drop-down's switch too.
+extension Stripe {
+    var bypassed: Bool { tickedNames.isEmpty && !Aggregation.selected.isEmpty }
+
+    @objc func bypassPressed() {
+        if !tickedNames.isEmpty {
+            appendLog("\(logStamp()) BYPASS on: the Mac straight on its own connection; the ticks kept (\(tickedNames.joined(separator: " + ")))")
+            setTicks([])
+            show("BYPASS: the Mac straight on its own connection (the ticks are kept; BYPASS again brings them back)", Ink.amber, for: 12)
+        } else if !Aggregation.selected.isEmpty {
+            appendLog("\(logStamp()) BYPASS off: the ticks back (\(Aggregation.selected.joined(separator: " + ")))")
+            setTicks(Aggregation.selected)
+        } else {
+            show("BYPASS: no ticks to come back to: tick the lines in the list", Ink.amber, for: 8)
+        }
+        showBypass()
+    }
+
+    func showBypass() {
+        let on = bypassed
+        bypassWord.contentTintColor = on ? Ink.amber : Ink.grey
+        bypassWord.setAccessibilityValue(on ? "on" : "off")
+        bypassWord.toolTip = on ? "BYPASS is on: the aggregation is out of the path, the Mac straight on its own connection. Click: the ticked lines again (" + Aggregation.selected.joined(separator: " + ") + ")."
+            : "BYPASS: take the aggregation out of the path (no tunnel, no relay), the app stays open and the ticks are kept"
     }
 }

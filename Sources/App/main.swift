@@ -158,6 +158,7 @@ final class Stripe: NSObject {
     lazy var cloudWord = word("", Ink.green, #selector(cloudPressed), id: "claude-cloud", tip: "Watches Claude Code's connection to Anthropic")
     // v84 (request 93): PING VM opens iTerm2 pinging chromium-vm over Tailscale (PingVM.swift); right-click: tailscale ping
     lazy var pingVMWord = makePingVMWord()
+    lazy var bypassWord = word("BYPASS", Ink.grey, #selector(bypassPressed), id: "bypass", tip: "BYPASS")   // request 109 (Ticks.swift)
     var outsideTicksWanted: [String]?       // v85/v89: the last ticks asked from outside, applied after 1.5 s quiet
     var outsideTicksGen = 0
     var tickFlash: [String: (word: String, until: Date)] = [:]   // v89: a row unticked by the same-road rule says why
@@ -175,6 +176,7 @@ final class Stripe: NSObject {
     var menuPlaceLogged = false
     var signalTick = 0
     var wifiScan: [String] = []
+    var wifiSeenAt: [String: Date] = [:]          // request 110: when each Wi-Fi network was last in range
     var wifiScanAt = Date.distantPast
     let grip = Grip()                           // v27, request 45: two vertical lines on the right, dragged to resize
     let permissions = NSButton(title: "PERMISSIONS", target: nil, action: nil)   // v38: shown only while one is missing
@@ -434,6 +436,11 @@ final class Stripe: NSObject {
             grip.widthAnchor.constraint(equalToConstant: 10),
             grip.heightAnchor.constraint(equalToConstant: 18),
         ])
+        // request 109: BYPASS at the right end of the top row, beside the grip
+        bypassWord.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(bypassWord)
+        NSLayoutConstraint.activate([bypassWord.trailingAnchor.constraint(equalTo: grip.leadingAnchor, constant: -6),
+                                     bypassWord.centerYAnchor.constraint(equalTo: checkRow.centerYAnchor)])
         panel.setContentSize(column.fittingSize)
 
         if !StripePlace.restore(panel) && panel.setFrameUsingName("ConnectionKeeperStripe") { StripePlace.save(panel) }   // the v12 place, once
@@ -464,7 +471,7 @@ final class Stripe: NSObject {
         loadAgents()
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.scanLines() }
         Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.readRadios() }
-        startSignals(); startHealth(); refreshWifiScan()
+        startSignals(); startHealth(); refreshWifiScan(); startRouteRepair()   // request 111: a line's lost road repaired
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in self?.readRadios() }
         layoutLines()
         scanLines()
@@ -642,6 +649,7 @@ final class Stripe: NSObject {
         reading()
         showDownloads()
         showRoute()
+        showBypass()
         if tick % 5 == 0 { showCloud(); showTailscale() }
         if tick % 2 == 0 { showBond(); showNothingOnly() }
         applyAlert()
@@ -738,13 +746,20 @@ final class Stripe: NSObject {
         tighten()
         applyGap(gap, in: column)
         column.layoutSubtreeIfNeeded()
-        let natural = column.fittingSize
+        var natural = column.fittingSize
+        // request 110 (Marko 24.11.2026: "The whole user interface is pulsating"): measured on v95, the window's width went
+        // 1166 ↔ 1168 every second or two and every element moved by 1 pt with it, with no text changing width: at a scale
+        // other than 1 the layout in scaled coordinates gives a fitting size a fraction of a point different from the last
+        // one, the window follows, the next fitting size flips back. A change smaller than 3 pt is that rounding, never a
+        // row or a word (a row is 24 pt): the window and the drawing keep their size.
+        let old = root.bounds.size
+        if old.width > 0, abs(natural.width - old.width) < 3, abs(natural.height - old.height) < 3 { natural = old }
         // v26 (request 44: "make this user interface resizable"): the stripe is drawn at `scale`; dragging an edge
         // changes the scale, so the words grow or shrink with it and are never cut
         let size = NSSize(width: ceil(natural.width * scale), height: ceil(natural.height * scale))
         if root.bounds.size != natural { rescale(root, natural) }
         let now = panel.contentRect(forFrameRect: panel.frame).size      // v73: the window has a title bar
-        if abs(size.width - now.width) < 1 && abs(size.height - now.height) < 1 { return }
+        if abs(size.width - now.width) < 3 && abs(size.height - now.height) < 3 { return }
         // v81 (request 89: "when I put it down in my window, by itself it's just raising up"): a frame change of a window
         // in the Dock brings it back out (AppKit deminiaturizes it). fit() runs every second and on every status word, so
         // the window came back up by itself. Down in the Dock it keeps its frame; the size is applied when he brings it back.
@@ -1282,6 +1297,9 @@ func loadAgents() {
 }
 
 let app = NSApplication.shared
+// request 110/111 (24.11.2026): App Nap stopped the stripe's timers and held back the distributed notifications (ticks,
+// rescan, the download line) for minutes while the display slept; a network monitor must keep running
+let ckNoNap = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep, reason: "Connection Keeper watches the lines")
 if !OnOff.atStart(login: CommandLine.arguments.contains("--login") || (ProcessInfo.processInfo.systemUptime < 600 && !CommandLine.arguments.contains("--selftest"))) { exit(0) }   // v39: OFF stays off at login
 app.setActivationPolicy(.regular)                  // v73 (request 86): a Dock icon, ⌘-Tab, a main menu
 let stripe = Stripe()

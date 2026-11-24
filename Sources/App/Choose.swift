@@ -46,7 +46,15 @@ extension Stripe {
         DispatchQueue.global().async {
             var names = Net.wifiInRange()
             if let w = Net.wifiInterface(), let cur = Net.currentSSID(w) { names.insert(cur) }
-            DispatchQueue.main.async { self.wifiScan = names.sorted() }
+            // request 110: a network seen in the last 10 minutes stays in the list, so a neighbour's network that comes and
+            // goes with each scan does not add and remove a row (the window's height) every 15 s
+            DispatchQueue.main.async {
+                let now = Date()
+                for n in names { self.wifiSeenAt[n] = now }
+                self.wifiSeenAt = self.wifiSeenAt.filter { now.timeIntervalSince($0.value) < 600 }
+                let keep = self.wifiSeenAt.keys.sorted()
+                if keep != self.wifiScan { self.wifiScan = keep }
+            }
         }
     }
 }

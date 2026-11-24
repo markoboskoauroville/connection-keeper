@@ -1,3 +1,13 @@
+**24.11.2026, requests 109-111: BYPASS; the pulse; the lost roads repaired by the app; the helper fixed (needs sudo).**
+BYPASS (Ticks.swift, main.swift: a word anchored beside the grip, amber while on; the drop-down's switch too): setTicks([])
+with the ticks, the ↓ line and bond.json kept; again = setTicks(Aggregation.selected). ON / OFF unchanged (OFF quits).
+Pulse: fit() ignores fitting-size changes under 3 pt (rounding at a scale other than 1, measured 1166 ↔ 1168), Wi-Fi in range
+kept 10 min (wifiSeenAt), the drop-down's first entry in a fixed slot. Roads: Routes.swift (RouteRepair) every 30 s and in
+the health probe: a device with a router but no default route through it → its service off and on (networksetup, no
+password), at most every 2 min; never NO DATA for that reason. Helper: Sources/Tunnel/main.swift v111 deleteRoutes keeps a
+scoped route macOS owns; version file 111; installed only by `sudo ./tunnel.sh install` (Marko's password). Live: nothing of
+this is installed (the hold, 24.11.2026); the route repair sequence was run by hand at 01:37 (AX88179B service off/on).
+
 **24.11.2026, v95 (request 107): the bond scheduler; two lines through Frankfurt add up.**
 Cause, measured live before the change (cable AX88179B + Nothing A142 USB, FRANKFURT, v91 relay / v92 Mac): 8 streams 47
 Mbit/s, one stream 47.5, while the lines alone gave 25-30 and 99-107 (Hetzner fsn1, 10 s). The relay's leg sockets had TCP

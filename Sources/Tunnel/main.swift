@@ -130,9 +130,22 @@ func addRoutes() {
     for h in halves { run("/sbin/route", ["-q", "-n", "add", "-net", h, "-interface", device]) }
 }
 
+// v111 (request 111, 24.11.2026: three installs left en17 and en0 with no default route of their own): the scoped route
+// added at "up" is ours only while that line is still the main one (it still has the plain default route and macOS gives
+// the main line no scoped one). When the order changed meanwhile, macOS has its own `-ifscope <line> default` there now,
+// and deleting it took the line's only road. So at "down" a scoped route is deleted only while its line still holds the
+// plain default route; otherwise it is left to macOS.
 func deleteRoutes() {
     for h in halves { run("/sbin/route", ["-q", "-n", "delete", "-net", h, "-interface", device]) }
-    for i in scoped { run("/sbin/route", ["-q", "-n", "delete", "-ifscope", i, "default"]) }
+    let table = run("/usr/sbin/netstat", ["-rn", "-f", "inet"]).out.components(separatedBy: "\n").filter { $0.hasPrefix("default") }
+    for i in scoped {
+        let stillMain = table.contains { l in
+            let f = l.split(separator: " ").map(String.init)
+            return f.count >= 4 && f.last == i && !f[2].contains("I")
+        }
+        if stillMain { run("/sbin/route", ["-q", "-n", "delete", "-ifscope", i, "default"]) }
+        else { log("\(i): its scoped default route kept (macOS owns it now; deleting it would leave \(i) without a road)") }
+    }
     scoped = []
 }
 
@@ -186,8 +199,8 @@ for s in [SIGTERM, SIGINT] {
     _ = Unmanaged.passRetained(src)   // kept for the life of the process
 }
 
-log("ck-tunnel v43 started, flag \(flag), strict file \(strictFlag)")
-try? "43\n".write(toFile: dir + "/version", atomically: true, encoding: .utf8)
+log("ck-tunnel v111 started, flag \(flag), strict file \(strictFlag)")
+try? "111\n".write(toFile: dir + "/version", atomically: true, encoding: .utf8)
 deleteRoutes()                         // a crash may have left them
 writeState("off")
 var misses = 0

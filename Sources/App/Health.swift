@@ -38,6 +38,11 @@ extension Stripe {
                 }
             }
             group.wait()
+            // request 111: a line whose probe failed because it has no default route of its own is not NO DATA: its road is
+            // repaired (Routes.swift) and its failure is not counted
+            let roadless = Set(RouteRepair.missing(results.filter { !$0.value }.map(\.key)))
+            for i in roadless { results[i] = nil }
+            if !roadless.isEmpty { for l in RouteRepair.checkAndRepair(Array(roadless)) { appendLog("\(logStamp()) \(l)") } }
             DispatchQueue.main.async { self.probing = false; self.absorbProbes(results) }
         }
     }

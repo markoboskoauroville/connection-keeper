@@ -499,3 +499,22 @@ The item is image-only, so the pipes are drawn into the image, with room (pad) o
   sockets to the destination meant "waiting for the internet", not "the bond is full".
 - install.sh resolves a relative binary path after it changes into its own folder: always give the absolute path, and check
   the start line's version after a deploy (the first try put v91 back in, hitless, and said "handed over").
+
+## 24.11.2026 (requests 109-111): the lost roads, BYPASS, the pulse
+- **The lines lost their default routes at three installs** (v90, v92, v93→v95 updater). Every quit and start of the app
+  takes the tunnel down and up; the root helper (v43) adds `-ifscope <main line> default` at up and deletes it at down,
+  also when macOS has meanwhile made that route its own (the service order changed). The line is then up, pingable on its
+  gateway, but `curl --interface` fails at once; the stripe's HTTPS probe called it NO DATA and moved it to the end of the
+  service order, which kept it without a road. Repair without root, proven 24.11.2026 01:37: `networksetup
+  -setnetworkserviceenabled AX88179B off` then `on`: configd rebuilt the scoped default routes of en17 AND en0. Reordering
+  the services did not bring them back while Tailscale (utun1) was the main route; the tunnel cycle only re-adds the main
+  line's. The app now checks the table every 30 s and repairs a road-less line itself (Routes.swift), and the probe never
+  marks such a line NO DATA. The helper's own fix (delete only while the line still holds the plain default route) is in
+  Sources/Tunnel/main.swift v111; it needs `sudo ./tunnel.sh install` once.
+- **App Nap froze the stripe overnight**: with the display asleep the app's timers stopped and the distributed notifications
+  (ticks, rescan, download line) were not delivered for minutes (seen 24.11.2026 ~01:30 on v93). Now the app holds
+  `ProcessInfo.beginActivity(.userInitiatedAllowingIdleSystemSleep)` from its start (the Mac may still sleep).
+- **The pulse was rounding, not text**: at a window scale other than 1 the fitting size in scaled coordinates flipped by a
+  fraction of a point each refresh and the window width followed (1166 ↔ 1168), shifting every element by 1 pt; every text
+  field already had a fixed slot. fit() now ignores changes under 3 pt (a row is 24 pt). The Wi-Fi networks in range are
+  kept 10 minutes after their last scan, so a neighbour's network no longer adds and removes a row.
