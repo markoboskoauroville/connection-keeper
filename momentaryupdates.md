@@ -959,3 +959,9 @@ What it means (the coordinator's brief, 01:45): the Mac's own traffic stays on a
 > If you are disconnecting and experimenting now we have offline, how can you work?
 
 **Status:** saved first. Routes put back 24.11.2026 ~01:37 (service AX88179B off and on: configd rebuilt the scoped default routes of en17 and en0); no live installs until the coordinator says.
+
+## 24.11.2026, request 112 (CROATIA: two lines must add up; place each connection by the room it can expect)
+
+> (the coordinator's brief, 02:05, after the night's measurements) CROATIA is where two lines can add up today, and it does not yet: with cable + hotspot ticked, 8 parallel streams gave 76-105 (mean 89), the same as the hotspot alone, 74 % of the bytes on the hotspot; a single stream got 83 or 33 depending on where it landed. Place each new connection by measured free capacity per line, not by connection counts.
+
+**Status:** building in v97 with request 108 (test mode), which it is measured in.

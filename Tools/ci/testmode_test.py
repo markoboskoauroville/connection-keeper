@@ -168,6 +168,7 @@ rec = json.load(open(os.path.expanduser("~/Library/Caches/ck-test/current.json")
 ck("fail-guard"); t0 = time.time()
 while time.time() - t0 < 20 and status() is not None: time.sleep(0.3)
 gone = status() is None
+time.sleep(0.5)
 ended = open(os.path.join(rec["state"], "ENDED")).read() if os.path.exists(os.path.join(rec["state"], "ENDED")) else ""
 check(gone and "on purpose" in ended and "NO SAFE LINE" in ended, f"fail-guard: the copy gone after {time.time() - t0:.1f} s; ENDED: {ended.strip()}")
 r = ck("stop")

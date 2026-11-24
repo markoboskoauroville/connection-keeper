@@ -371,6 +371,8 @@ def cmd_start(args):
 
 
 def teardown(rec, why):
+    with open(os.path.join(rec["state"], "ENDED"), "a") as f:          # said first, then done
+        f.write(f"{time.strftime('%H:%M:%S')} {why}\n")
     for key in ["pid"]:
         pid = rec.get(key)
         if pid and alive(pid):
@@ -385,8 +387,6 @@ def teardown(rec, why):
             if alive(pid):
                 try: os.killpg(int(pid), signal.SIGKILL)
                 except Exception: pass
-    with open(os.path.join(rec["state"], "ENDED"), "w") as f:
-        f.write(f"{time.strftime('%H:%M:%S')} {why}\n")
 
 
 def cmd_guard(args):
