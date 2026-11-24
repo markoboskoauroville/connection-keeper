@@ -942,19 +942,19 @@ What it means (the coordinator's brief, 01:45): the Mac's own traffic stays on a
 
 **Status:** saved first; not started (the bond scheduler job handed back first: the relay VM's ~50 Mbit/s ceiling changes what a real-line test can show).
 
-## 24.11.2026, request 108 (BYPASS beside the resize grip)
+## 24.11.2026, request 109 (BYPASS beside the resize grip)
 
 > Please to aggregate give the bypass button next to this grip for resizing
 
 **Status:** saved first.
 
-## 24.11.2026, request 109 (the whole interface pulsates while numbers change)
+## 24.11.2026, request 110 (the whole interface pulsates while numbers change)
 
 > notice when still there is some movement in the app as some numbers are changing. The whole user interface is pulsating.
 
 **Status:** saved first.
 
-## 24.11.2026, request 110 (the lines lost their routes at an install: never again)
+## 24.11.2026, request 111 (the lines lost their routes at an install: never again)
 
 > If you are disconnecting and experimenting now we have offline, how can you work?
 
