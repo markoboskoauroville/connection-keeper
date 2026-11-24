@@ -95,10 +95,11 @@ got = float(r.stdout.split("Mbit/s")[0].split()[-1]) if "Mbit/s" in r.stdout els
 check(13 <= got <= 27, f"cap A 20 Mbit/s: measured {got:.1f}")
 
 # the pair: A 20 + B 60, 8 streams
-ck("lines", "A,B"); ck("cap", "B", "60")
+ck("lines", "A,B")
 for _ in range(20):
     if line("A") and line("B"): break
     time.sleep(0.5)
+ck("cap", "B", "60")
 time.sleep(1)
 r = ck("measure", "--url", f"http://127.0.0.1:{WEB}/big.bin", "--streams", "8", "--secs", "8")
 got = float(r.stdout.split("Mbit/s")[0].split()[-1]) if "Mbit/s" in r.stdout else 0
@@ -117,14 +118,17 @@ size, _, took = res.get("v", (0, 0, 99))
 check(not th.is_alive() and size < (64 << 20) and time.time() - tk < 5, f"kill A: the download was cut ({size >> 20} of 64 MB, {time.time() - tk:.1f} s after the kill)")
 ck("restore", "A")
 
-# stall: only B at 60, 10 MB normally ~1.4 s, with a 2 s stall from now
+# stall: only B, capped at 40 (10 MB ~2 s), then a 3 s stall from now: the same download >= 2 s longer, intact
 ck("lines", "B")
 time.sleep(4)
+ck("cap", "B", "40")
+time.sleep(0.5)
 _, _, base = curl("ten.bin")
-ck("stall", "B", "2")
+ck("stall", "B", "3")
+time.sleep(0.4)                                   # the copy reads its fault file every 0.2 s
 size, _, took = curl("ten.bin")
 ok = size == (10 << 20) and hashlib.sha256(open(os.path.join(T, "got.bin"), "rb").read()).hexdigest() == SHA10
-check(ok and took >= base + 1.5, f"stall B 2 s: 10 MB in {took:.1f} s (without: {base:.1f} s), intact: {ok}")
+check(ok and took >= base + 2.0, f"stall B 3 s: 10 MB in {took:.1f} s (without: {base:.1f} s), intact: {ok}")
 ck("restore", "B")
 
 # delay: only A, 300 ms

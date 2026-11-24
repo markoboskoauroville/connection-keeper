@@ -479,6 +479,10 @@ def resolve(rec, name):
     low = name.lower()
     hits = [n for n in names if n.lower().startswith(low)] or [n for n in names if low in n.lower()]
     if len(hits) == 1: return hits[0]
+    try:                                           # a line just ticked, not found again yet: its exact tick name
+        ticks = json.load(open(os.path.join(rec["state"], "aggregate-selection.json")))
+        if name in ticks: return name
+    except Exception: pass
     sys.exit(f"ck-test: which line is '{name}'? the copy has: {', '.join(names) or 'none'}")
 
 

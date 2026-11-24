@@ -88,15 +88,15 @@ jobs:
           exit $ok
       - name: Keeper ladder test (v91; no Wi-Fi power cycle while a second line carries or on a phone hotspot)
         run: ./Tools/ci/keeper_test.sh "build/$APP.app/Contents/MacOS/connection-keeperd"
+      - name: The room balancer (request 112; 30 + 90 Mbit/s emulated, 8 long streams, one stream; the v62 choice printed for comparison)
+        run: |
+          perl -e 'alarm 120; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" room-selftest --legacy
+          perl -e 'alarm 120; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" room-selftest
       - name: Test mode (request 108; the copy under test writes nothing shared, runs no changing command, plays drops; ck-test end to end)
         run: |
           T=$(mktemp -d)
           CK_AGG_TEST=1 CK_AGG_STATE="$T/st" perl -e 'alarm 60; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" fault-selftest
           perl -e 'alarm 400; exec @ARGV' python3 Tools/ci/testmode_test.py "build/$APP.app/Contents/MacOS/ck-aggregate" "$T/web"
-      - name: The room balancer (request 112; 30 + 90 Mbit/s emulated, 8 long streams, one stream; the v62 choice printed for comparison)
-        run: |
-          perl -e 'alarm 120; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" room-selftest --legacy
-          perl -e 'alarm 120; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" room-selftest
       - name: Same-line rule (v91; a phone and its own hotspot are one line)
         run: perl -e 'alarm 30; exec @ARGV' "build/$APP.app/Contents/MacOS/ck-aggregate" sameline-selftest
       - name: Download line rule (request 105; a big transfer to a host sends its new connections to the download line)
