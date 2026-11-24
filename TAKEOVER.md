@@ -1,3 +1,12 @@
+**24.11.2026 03:00, STATE AT THE CLOSE OF SESSION mac4_23-11 (read this first).** Installed on the Mac: v95. Released, NOT installed:
+v96 (BYPASS, pulsating fix, route self-repair, App Nap); the updater offers it at start. The fixed tunnel helper waits for Marko's
+`sudo ./tunnel.sh install`. Branch **test-mode** (pushed, NOT on main, its worker was stopped mid-work on Marko's word): the TEST
+MODE (request 108, Tools/ck-test) and the CROATIA balancer by free capacity (request 112); its branch build was green, its TAKEOVER
+on the branch says how far it got; finish it, land it on main by rebase, delete the branch. Rule from Marko after the 01:29 outage:
+"Do not cut the branch you are sitting on": experiments only in test mode, the live app touched by one install, ended with
+`curl --interface` on every present line. The relay VM receives only about 50 Mbit/s: FRANKFURT cannot beat about 48 until that is solved.
+Sources/Aggregate/Ports.swift in this checkout carries another session's uncommitted change: leave it.
+
 **24.11.2026, requests 109-111: BYPASS; the pulse; the lost roads repaired by the app; the helper fixed (needs sudo).**
 BYPASS (Ticks.swift, main.swift: a word anchored beside the grip, amber while on; the drop-down's switch too): setTicks([])
 with the ticks, the ↓ line and bond.json kept; again = setTicks(Aggregation.selected). ON / OFF unchanged (OFF quits).
