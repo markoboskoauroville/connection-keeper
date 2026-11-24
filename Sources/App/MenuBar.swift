@@ -68,7 +68,7 @@ extension Stripe {
             b.target = self
             b.action = #selector(menuBarClicked)
             b.sendAction(on: [.leftMouseUp, .rightMouseUp])     // v80: a right click opens FRANKFURT / CROATIA
-            b.toolTip = "Network Aggregate Connection Keeper\nInternet speed now: upload on top, download below (as iStat Menus).\nThe dot: green connected, red disconnected. Click: show or hide the stripe."
+            b.toolTip = "Network Aggregate Connection Keeper\nInternet speed now: upload on top, download below (as iStat Menus).\nThe dot: green connected, red disconnected. Click: the drop-down controller (Open Connection Keeper on top). Right click: FRANKFURT / CROATIA."
         }
     }
 
@@ -145,14 +145,15 @@ extension Stripe {
             if let b = menuItem?.button { m.popUp(positioning: nil, at: NSPoint(x: 0, y: b.bounds.height + 4), in: b) }
             return
         }
-        let screen = menuItem?.button?.window?.screen ?? NSScreen.main
-        let here = panel.isVisible && panel.screen == screen && panel.occlusionState.contains(.visible) && !MenuBarPrefs.stripeHidden
-        if here {
-            MenuBarPrefs.stripeHidden = true
-            panel.orderOut(nil)
-            appendLog("\(logStamp()) MENU BAR click: stripe hidden")
-            return
-        }
+        // request 106 (Marko 24.11.2026: "something similar as iSTAT drop-down menu, so not opening the interface itself"):
+        // a left click opens or closes the drop-down controller (MenuDrop.swift); its first entry opens the window
+        MenuDrop.toggle(self)
+    }
+
+    // The window in front on the display whose menu bar was clicked (the drop-down's "Open Connection Keeper").
+    func bringStripe() {
+        let m = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { $0.frame.contains(m) } ?? menuItem?.button?.window?.screen ?? NSScreen.main
         MenuBarPrefs.stripeHidden = false
         if panel.isMiniaturized { panel.deminiaturize(nil) }         // v81: his click brings it out of the Dock
         if let f = minimizedFrame { minimizedFrame = nil; panel.setFrame(f, display: true) }
@@ -165,7 +166,8 @@ extension Stripe {
         panel.collectionBehavior.insert(.moveToActiveSpace)          // v48: to his desktop on this click only
         panel.orderFrontRegardless()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.applyOnTop() }
-        appendLog("\(logStamp()) MENU BAR click: stripe in front on \(screen?.localizedName ?? "?")")
+        NSApp.activate(ignoringOtherApps: true)
+        appendLog("\(logStamp()) MENU BAR drop-down: stripe in front on \(screen?.localizedName ?? "?")")
     }
 }
 

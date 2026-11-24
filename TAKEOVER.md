@@ -1,3 +1,13 @@
+**24.11.2026, request 106: the menu-bar drop-down controller (MenuDrop.swift).** A left click on the menu-bar item opens a
+dark rounded panel under the item on the display that was clicked (NSEvent.mouseLocation; level statusBar+2, above the hover
+card): "Open Connection Keeper" first (bringStripe(): the window in front on that display; reads "... is open: bring it
+forward" when it is), WAY FRANKFURT / CROATIA, LINES (here or ticked, family order, rail, tick, ↓ mark, live speed copied from the
+stripe's row, state word from tickState), ALL TICKED (speed, TEST, last result), AGGREGATION ON / OFF (OFF = setTicks([]); ON =
+the last ticks in aggregate-selection.json), Check now, Open the log, Quit. Every control calls the stripe's own action; refreshed
+every second while open; closes on a click outside (global + local monitors), Esc, or a second click on the item. Right click
+keeps FRANKFURT / CROATIA. Outside: `ConnectionKeeperDropDown` open|close|toggle. Left out (window only): Wi-Fi networks in range,
+lines seen before, meters, ping, per-line TEST, 4G/5G, settings. The hover card kit file is unchanged.
+
 **24.11.2026, request 105: the DEFAULT DOWNLOAD LINE (the ↓ mark).** A ↓ beside each row's tick (LineRow.dl, Ticks.swift
 showDownloadMark / setDownloadLine): one line at most; marking also ticks it (same-road rule); ↓ on the marked row clears it;
 a marked row that leaves the ticks loses the mark with a note. State: download-line.json {"line", "thresholdMB"} beside

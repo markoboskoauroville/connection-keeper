@@ -398,5 +398,11 @@ extension Stripe {
             let name = ((n.object as? String) ?? "").trimmingCharacters(in: .whitespaces)
             self?.setDownloadLine(name.isEmpty ? nil : name, how: "from outside")
         }
+        // request 106: the drop-down from outside too (a test, Queen): object "open", "close" or "toggle"
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("ConnectionKeeperDropDown"), object: nil, queue: .main) { [weak self] n in
+            guard let self else { return }
+            let w = (n.object as? String) ?? "toggle"
+            if w == "close" { MenuDrop.shared?.close() } else if w == "open" { if MenuDrop.shared == nil { MenuDrop.toggle(self) } } else { MenuDrop.toggle(self) }
+        }
     }
 }
