@@ -1,3 +1,43 @@
+## TEST MODE FIRST (request 108, 24.11.2026): experiments never touch the live app
+
+Marko, 24.11.2026 01:45: "make a special test mode when you can go through Wi-Fi, normal Mac connection, and test all the
+drops without dropping yourself from the internet. Do not cut the branch you are sitting on, please." Twice that night a
+worker's install or experiment cut the Mac off. So: **every experiment runs in test mode; the live app (its ticks, way,
+tunnel, routes, keeper, ck-aggregate on 8857) and the production relay are touched only by an install, and only while
+`ck-dnd status` says clear.** A future session types:
+
+```
+ck-dnd on "what I am doing"          # holds every install / restart / deploy (8 h, also on chromium-vm); ck-dnd off after
+ck-test safe                         # the Mac's own route + curl --interface on each line: must say SAFE
+ck-test start --lines "AX88179B,Nothing A142 (USB)"     # a copy on 127.0.0.1:18857, CROATIA; --bond = its own relay group
+ck-test measure --streams 8 --secs 10 --runs 3          # through the copy; the split per line from its own counters
+ck-test measure --direct en17        # one line alone, outside the copy (--direct 8860 = the Nothing's SOCKS)
+ck-test drop AX88179B [dead|silent]  # also: delay <line> <ms>, loss <line> <pct>, cap <line> <mbps>, flow <line> <mbps>,
+ck-test kill Nothing                 #       stall <line> <s>, kill <line>, restore <line>|all, faults, lines "A,B", status
+ck-test stop                         # copy + guard gone, port free, the live side compared with its start: LIVE SIDE IDENTICAL
+ck-test safe --all                   # after ANY install: every present line answers by itself and has its default route
+```
+
+What makes it safe, mechanically (Sources/Shared/TestCopy.swift, Sources/Aggregate/Faults.swift, Tools/ck-test, Tools/ck-dnd):
+1. The Mac's own traffic never enters the copy: nothing is changed in routes, utun99, the system proxy, the live app; only
+   what is sent to the copy's port on purpose (`curl -x socks5h://127.0.0.1:18857`) goes through it.
+2. The copy is a separate process with its own port and folder (~/Library/Caches/ck-test/state-18857). Under CK_AGG_TEST
+   Paths.support IS that folder, so every file it writes is its own; shell() refuses every program that changes the Mac or
+   a phone (networksetup -set/-order, route add/delete, ifconfig changes, launchctl, adb push/forward/shell svc/cmd ... set,
+   pkill, osascript ...), logged "TEST COPY REFUSED"; Phones.ensure never starts or pushes ck-phone; the 5G boost never
+   runs; and ck-test runs it under sandbox-exec with every write to the live folder, the port registry, LaunchAgents,
+   Preferences, /Library and /Applications denied in the kernel. --bond copies bond.json (0600, token never printed): the
+   copy gets its own random client id = its own group on the production relay; nothing of the live group or the relay
+   process changes. (A second relay instance on another port was not built: no other public port is known open on the
+   VM and opening one needs root and the VCN; the own group needs neither.)
+3. Drops are played inside the copy on its own connections (CK_AGG_FAULT, written by ck-test): dead, silent, delay, loss,
+   rate cap per line, flow cap per connection, stall N s, kill mid-stream, restore. The real lines are never touched.
+4. The guard (`ck-test _guard`, started by start): every 3 s the safe-line check; the routes and the utun99 halves and the
+   live server's pid must be what they were at start; the TTL (default 60 min). Any failure: the copy is torn down at once
+   and ENDED says why. start refuses without a safe line.
+5. DO NOT DISTURB: build.sh's install, agent.sh load|unload, tunnel.sh install|uninstall, Tools/bond/install.sh on the VM
+   and the app's own updater refuse while `ck-dnd` is on; each install ends with `ck-test safe --all`.
+
 **24.11.2026, requests 109-111: BYPASS; the pulse; the lost roads repaired by the app; the helper fixed (needs sudo).**
 BYPASS (Ticks.swift, main.swift: a word anchored beside the grip, amber while on; the drop-down's switch too): setTicks([])
 with the ticks, the ↓ line and bond.json kept; again = setTicks(Aggregation.selected). ON / OFF unchanged (OFF quits).
